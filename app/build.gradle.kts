@@ -66,4 +66,7 @@ dependencies {
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.android.gms:play-services-auth:21.0.0")
     implementation("com.google.firebase:firebase-firestore-ktx")
+
+    // Календарска компонента
+    implementation("com.kizitonwose.calendar:compose:2.4.1")
 }
