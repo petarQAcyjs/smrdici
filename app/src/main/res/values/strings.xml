@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Smrdici</string>
+    <string name="home">Почетна</string>
+    <string name="budget">Буџет</string>
+    <string name="calendar">Календар</string>
+    <string name="lists">Листе</string>
 </resources>

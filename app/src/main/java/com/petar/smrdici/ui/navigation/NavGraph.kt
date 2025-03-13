@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.petar.smrdici.ui.components.MainLayout
 import com.petar.smrdici.ui.screens.auth.LoginScreen
 import com.petar.smrdici.ui.screens.budget.BudgetScreen
 import com.petar.smrdici.ui.screens.calendar.CalendarScreen
@@ -19,17 +20,29 @@ fun NavGraph(navController: NavHostController) {
         composable(route = Screen.Login.route) {
             LoginScreen(navController = navController)
         }
+        
         composable(route = Screen.Home.route) {
-            HomeScreen(navController = navController)
+            MainLayout(navController = navController) {
+                HomeScreen(navController = navController)
+            }
         }
+        
         composable(route = Screen.Budget.route) {
-            BudgetScreen(navController = navController)
+            MainLayout(navController = navController) {
+                BudgetScreen(navController = navController)
+            }
         }
+        
         composable(route = Screen.Calendar.route) {
-            CalendarScreen(navController = navController)
+            MainLayout(navController = navController) {
+                CalendarScreen(navController = navController)
+            }
         }
+        
         composable(route = Screen.Lists.route) {
-            ListsScreen(navController = navController)
+            MainLayout(navController = navController) {
+                ListsScreen(navController = navController)
+            }
         }
     }
 } 

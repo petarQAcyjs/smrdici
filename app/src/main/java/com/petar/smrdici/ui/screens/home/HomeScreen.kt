@@ -1,11 +1,11 @@
 package com.petar.smrdici.ui.screens.home
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -16,8 +16,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.navigation.Screen
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -29,49 +29,37 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Prikaz informacija o korisniku
+        TopAppBar(
+            title = { Text("Почетна") }
+        )
+        
+        // Приказ информација о кориснику
         if (authState is AuthState.Authenticated) {
             val user = (authState as AuthState.Authenticated).user
-            Text(text = "Dobrodošli, ${user.displayName ?: user.email}")
+            Text(
+                text = "Добродошли, ${user.displayName ?: user.email}",
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
         }
         
-        Text(text = "Porodična Aplikacija", modifier = Modifier.padding(vertical = 16.dp))
+        Text(
+            text = "Породична Апликација",
+            modifier = Modifier.padding(vertical = 16.dp)
+        )
         
-        Button(
-            onClick = { navController.navigate(Screen.Budget.route) },
-            modifier = Modifier.padding(vertical = 8.dp)
-        ) {
-            Text("Budžet")
-        }
-        
-        Button(
-            onClick = { navController.navigate(Screen.Calendar.route) },
-            modifier = Modifier.padding(vertical = 8.dp)
-        ) {
-            Text("Kalendar")
-        }
-        
-        Button(
-            onClick = { navController.navigate(Screen.Lists.route) },
-            modifier = Modifier.padding(vertical = 8.dp)
-        ) {
-            Text("Liste")
-        }
-        
-        // Dugme za odjavu
-        Button(
+        // Дугме за одјаву остаје
+        androidx.compose.material3.Button(
             onClick = {
                 authViewModel.signOut()
-                navController.navigate(Screen.Login.route) {
-                    popUpTo(Screen.Home.route) { inclusive = true }
+                navController.navigate(com.petar.smrdici.ui.navigation.Screen.Login.route) {
+                    popUpTo(com.petar.smrdici.ui.navigation.Screen.Home.route) { inclusive = true }
                 }
             },
             modifier = Modifier.padding(vertical = 16.dp)
         ) {
-            Text("Odjavi se")
+            Text("Одјави се")
         }
     }
 } 
