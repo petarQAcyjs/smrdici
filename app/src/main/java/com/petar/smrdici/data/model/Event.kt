@@ -5,17 +5,19 @@ import com.google.firebase.firestore.DocumentId
 import java.util.Date
 
 data class Event(
-    @DocumentId val id: String = "",
+    var id: String? = null,
     val title: String = "",
-    val description: String = "",
-    val startTime: Timestamp = Timestamp.now(),
+    val description: String? = null,
+    val startTime: Timestamp? = null,
     val endTime: Timestamp? = null,
     val allDay: Boolean = false,
     val location: String = "",
     val color: String = "#4285F4", // Подразумевана плава боја
     val createdBy: String = "",
     val familyId: String = "",
-    val participants: List<String> = emptyList()
+    val participants: List<String> = emptyList(),
+    val calendarId: String? = null,
+    val createdAt: Timestamp? = null
 )
 
 enum class EventColor(val colorHex: String, val displayName: String) {

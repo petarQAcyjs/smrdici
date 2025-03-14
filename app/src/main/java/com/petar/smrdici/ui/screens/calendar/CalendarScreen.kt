@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.screens.calendar
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +11,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
@@ -19,55 +22,78 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventColor
-import java.text.SimpleDateFormat
-import java.util.*
+import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.ui.navigation.Screen
+import java.text.SimpleDateFormat
+import java.util.*
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun CalendarScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
-    calendarViewModel: CalendarViewModel = viewModel()
+    calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModel.Factory(LocalContext.current))
 ) {
     val authState by authViewModel.authState.collectAsState()
-    val user = if (authState is com.petar.smrdici.ui.auth.AuthState.Authenticated) {
-        (authState as com.petar.smrdici.ui.auth.AuthState.Authenticated).user
+    val uiState by calendarViewModel.uiState.collectAsState()
+    val user = if (authState is AuthState.Authenticated) {
+        (authState as AuthState.Authenticated).user
     } else null
     
-    val uiState by calendarViewModel.uiState.collectAsState()
-    val selectedDate by calendarViewModel.selectedDate.collectAsState()
-    val formState by calendarViewModel.eventFormState.collectAsState()
+    var selectedDate by remember { mutableStateOf(Date()) }
     var showAddEventDialog by remember { mutableStateOf(false) }
+    var selectedEvent by remember { mutableStateOf<Event?>(null) }
+    var showEventDetailsDialog by remember { mutableStateOf(false) }
     
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        AppHeader(
-            title = "Календар",
-            user = user,
-            navController = navController,
-            showBackButton = true
-        )
-        
+    // Учитавамо догађаје при промени датума
+    LaunchedEffect(selectedDate) {
+        calendarViewModel.loadEventsForDate(selectedDate)
+    }
+    
+    // Главни контејнер
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Једноставан календарски приказ
-            SimpleCalendarView(
-                selectedDate = selectedDate,
-                onDateSelected = { calendarViewModel.selectDate(it) }
-            )
+            // Додајемо дугме за повратак назад
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { navController.navigateUp() }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Назад"
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                Text(
+                    text = "Календар",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+            }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            // Календарски приказ
+            CalendarView(
+                selectedDate = selectedDate,
+                onDateSelected = { selectedDate = it },
+                events = if (uiState is CalendarUiState.Success) (uiState as CalendarUiState.Success).events else emptyList()
+            )
             
             // Приказ догађаја за изабрани датум
             when (uiState) {
@@ -79,204 +105,285 @@ fun CalendarScreen(
                         CircularProgressIndicator()
                     }
                 }
-                
+                is CalendarUiState.Success -> {
+                    val events = (uiState as CalendarUiState.Success).events
+                    EventsList(
+                        events = events,
+                        onEventClick = { event ->
+                            selectedEvent = event
+                            showEventDetailsDialog = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(16.dp)
+                    )
+                }
                 is CalendarUiState.Error -> {
-                    val errorState = uiState as CalendarUiState.Error
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = errorState.message,
+                            text = (uiState as CalendarUiState.Error).message,
                             color = MaterialTheme.colorScheme.error
                         )
                     }
                 }
-                
-                is CalendarUiState.Success -> {
-                    val successState = uiState as CalendarUiState.Success
-                    
-                    if (successState.events.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Нема догађаја за изабрани датум",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(successState.events) { event ->
-                                EventItem(
-                                    event = event,
-                                    onDelete = { calendarViewModel.deleteEvent(event.id) }
-                                )
-                            }
-                        }
-                    }
-                }
             }
-            
-            // Дугме за додавање новог догађаја
-            FloatingActionButton(
-                onClick = { showAddEventDialog = true },
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Додај догађај"
-                )
-            }
+        }
+        
+        // Плутајуће дугме за додавање догађаја - премештено изван Column и EventsList
+        FloatingActionButton(
+            onClick = {
+                showAddEventDialog = true
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Додај догађај"
+            )
         }
     }
     
-    // Дијалог за додавање новог догађаја
+    // Дијалог за додавање догађаја
     if (showAddEventDialog) {
-        var showDatePicker by remember { mutableStateOf(false) }
-        var showTimePicker by remember { mutableStateOf(false) }
-        var timePickerMode by remember { mutableStateOf(TimePickerMode.START) }
-        
         AddEventDialog(
-            formState = formState,
-            onFormChanged = { updatedForm -> calendarViewModel.updateEventForm { updatedForm } },
-            onAddEvent = {
-                calendarViewModel.addEvent()
-                showAddEventDialog = false
-            },
             onDismiss = { showAddEventDialog = false },
-            onDateClick = { showDatePicker = true },
-            onTimeClick = { mode ->
-                timePickerMode = mode
-                showTimePicker = true
+            onEventAdded = {
+                showAddEventDialog = false
+                // Користимо loadEventsForDate уместо loadEvents
+                calendarViewModel.loadEventsForDate(selectedDate)
             },
-            showDatePicker = showDatePicker,
-            showTimePicker = showTimePicker,
-            timePickerMode = timePickerMode,
-            onDatePickerDismiss = { showDatePicker = false },
-            onTimePickerDismiss = { showTimePicker = false }
+            calendarViewModel = calendarViewModel
+        )
+    }
+    
+    // Дијалог за приказ детаља догађаја
+    if (showEventDetailsDialog && selectedEvent != null) {
+        EventDetailsDialog(
+            event = selectedEvent!!,
+            onDismiss = { showEventDetailsDialog = false },
+            onDelete = {
+                calendarViewModel.deleteEvent(selectedEvent!!.id!!)
+                showEventDetailsDialog = false
+            }
         )
     }
 }
 
 @Composable
-fun SimpleCalendarView(
+fun CalendarView(
     selectedDate: Date,
-    onDateSelected: (Date) -> Unit
+    onDateSelected: (Date) -> Unit,
+    events: List<Event>
 ) {
-    val calendar = Calendar.getInstance()
+    val calendar = remember { Calendar.getInstance() }
     calendar.time = selectedDate
     
     val currentMonth = calendar.get(Calendar.MONTH)
     val currentYear = calendar.get(Calendar.YEAR)
-    val currentDay = calendar.get(Calendar.DAY_OF_MONTH)
     
-    // Приказ месеца и године
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = {
-            calendar.add(Calendar.MONTH, -1)
-            onDateSelected(calendar.time)
-        }) {
-            Text("<")
-        }
-        
-        Text(
-            text = SimpleDateFormat("MMMM yyyy", Locale("sr")).format(selectedDate),
-            style = MaterialTheme.typography.titleMedium
-        )
-        
-        IconButton(onClick = {
-            calendar.add(Calendar.MONTH, 1)
-            onDateSelected(calendar.time)
-        }) {
-            Text(">")
-        }
-    }
-    
-    Spacer(modifier = Modifier.height(8.dp))
-    
-    // Приказ дана у недељи
-    Row(modifier = Modifier.fillMaxWidth()) {
-        val daysOfWeek = listOf("Пон", "Уто", "Сре", "Чет", "Пет", "Суб", "Нед")
-        daysOfWeek.forEach { day ->
-            Text(
-                text = day,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-    
-    Spacer(modifier = Modifier.height(4.dp))
-    
-    // Добијање првог дана у месецу
-    val firstDayCalendar = Calendar.getInstance()
-    firstDayCalendar.set(currentYear, currentMonth, 1)
-    val firstDayOfWeek = firstDayCalendar.get(Calendar.DAY_OF_WEEK)
-    
-    // Прилагођавање за почетак недеље од понедељка (у Java Calendar, недеља је 1)
-    val offset = if (firstDayOfWeek == Calendar.SUNDAY) 6 else firstDayOfWeek - 2
-    
-    // Добијање броја дана у месецу
     val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
     
-    // Приказ дана у месецу
-    val rows = (offset + daysInMonth + 6) / 7 // Број редова потребних за приказ месеца
+    val firstDayOfMonth = Calendar.getInstance().apply {
+        set(currentYear, currentMonth, 1)
+    }
+    val firstDayOfWeek = firstDayOfMonth.get(Calendar.DAY_OF_WEEK)
     
-    Column {
+    val monthFormat = SimpleDateFormat("MMMM yyyy", Locale("sr"))
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        // Заглавље календара
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = {
+                    calendar.add(Calendar.MONTH, -1)
+                    onDateSelected(calendar.time)
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Претходни месец"
+                )
+            }
+            
+            Text(
+                text = monthFormat.format(calendar.time).capitalize(),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            
+            IconButton(
+                onClick = {
+                    calendar.add(Calendar.MONTH, 1)
+                    onDateSelected(calendar.time)
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowForward,
+                    contentDescription = "Следећи месец"
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Дани у недељи
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            val daysOfWeek = listOf("Пон", "Уто", "Сре", "Чет", "Пет", "Суб", "Нед")
+            daysOfWeek.forEach { day ->
+                Text(
+                    text = day,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Календарска мрежа
+        val rows = (daysInMonth + firstDayOfWeek - 2) / 7 + 1
+        
         for (row in 0 until rows) {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 for (col in 0 until 7) {
-                    val day = row * 7 + col - offset + 1
+                    val day = row * 7 + col - (firstDayOfWeek - 2)
                     
                     if (day in 1..daysInMonth) {
-                        val dayCalendar = Calendar.getInstance()
-                        dayCalendar.set(currentYear, currentMonth, day)
+                        val date = Calendar.getInstance().apply {
+                            set(currentYear, currentMonth, day)
+                        }.time
                         
-                        val isSelected = day == currentDay
+                        val isSelected = Calendar.getInstance().apply {
+                            time = selectedDate
+                        }.get(Calendar.DAY_OF_MONTH) == day &&
+                                Calendar.getInstance().apply {
+                                    time = selectedDate
+                                }.get(Calendar.MONTH) == currentMonth &&
+                                Calendar.getInstance().apply {
+                                    time = selectedDate
+                                }.get(Calendar.YEAR) == currentYear
                         
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .aspectRatio(1f)
-                                .padding(2.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isSelected) MaterialTheme.colorScheme.primary
-                                    else Color.Transparent
-                                )
-                                .clickable {
-                                    calendar.set(Calendar.DAY_OF_MONTH, day)
-                                    onDateSelected(calendar.time)
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = day.toString(),
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                                       else MaterialTheme.colorScheme.onSurface
-                            )
+                        val hasEvents = events.any { event ->
+                            val eventDate = event.startTime?.toDate()
+                            if (eventDate != null) {
+                                val eventCal = Calendar.getInstance().apply { time = eventDate }
+                                eventCal.get(Calendar.YEAR) == currentYear &&
+                                        eventCal.get(Calendar.MONTH) == currentMonth &&
+                                        eventCal.get(Calendar.DAY_OF_MONTH) == day
+                            } else {
+                                false
+                            }
                         }
+                        
+                        CalendarDay(
+                            day = day,
+                            isSelected = isSelected,
+                            hasEvents = hasEvents,
+                            onClick = { onDateSelected(date) }
+                        )
                     } else {
-                        // Празан простор за дане који не припадају тренутном месецу
+                        // Празан простор за дане који нису у тренутном месецу
                         Box(
                             modifier = Modifier
-                                .weight(1f)
-                                .aspectRatio(1f)
+                                .size(40.dp)
                         )
                     }
                 }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+fun CalendarDay(
+    day: Int,
+    isSelected: Boolean,
+    hasEvents: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(
+                if (isSelected) MaterialTheme.colorScheme.primary
+                else Color.Transparent
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = day.toString(),
+            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+        )
+        
+        if (hasEvents) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.primary
+                    )
+                    .align(Alignment.BottomCenter)
+            )
+        }
+    }
+}
+
+@Composable
+fun EventsList(
+    events: List<Event>,
+    onEventClick: (Event) -> Unit,
+    modifier: Modifier
+) {
+    LazyColumn(
+        modifier = modifier
+    ) {
+        item {
+            Text(
+                text = "Догађаји",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+        }
+        
+        if (events.isEmpty()) {
+            item {
+                Text(
+                    text = "Нема догађаја за изабрани дан",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        } else {
+            items(events) { event ->
+                EventItem(event = event, onClick = { onEventClick(event) })
             }
         }
     }
@@ -285,13 +392,16 @@ fun SimpleCalendarView(
 @Composable
 fun EventItem(
     event: Event,
-    onDelete: () -> Unit
+    onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        shape = RoundedCornerShape(8.dp)
+            .padding(vertical = 8.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
         Row(
             modifier = Modifier
@@ -303,15 +413,12 @@ fun EventItem(
             Box(
                 modifier = Modifier
                     .size(16.dp)
-                    .background(
-                        color = Color(android.graphics.Color.parseColor(event.color)),
-                        shape = CircleShape
-                    )
+                    .clip(CircleShape)
+                    .background(Color(android.graphics.Color.parseColor(event.color)))
             )
             
             Spacer(modifier = Modifier.width(16.dp))
             
-            // Детаљи догађаја
             Column(
                 modifier = Modifier.weight(1f)
             ) {
@@ -321,53 +428,38 @@ fun EventItem(
                     fontWeight = FontWeight.Bold
                 )
                 
-                if (event.description.isNotBlank()) {
+                event.description?.let { description ->
                     Text(
-                        text = event.description,
+                        text = description,
                         style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
-                }
-                
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-                    val timeText = if (event.allDay) {
-                        "Цео дан"
-                    } else {
-                        val startTime = timeFormat.format(event.startTime.toDate())
-                        val endTime = event.endTime?.let { timeFormat.format(it.toDate()) }
-                        if (endTime != null) "$startTime - $endTime" else startTime
-                    }
-                    
-                    Text(
-                        text = timeText,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    
-                    if (event.location.isNotBlank()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = event.location,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
                 }
             }
             
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Обриши догађај"
-                )
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            // Време догађаја
+            Column(
+                horizontalAlignment = Alignment.End
+            ) {
+                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                
+                event.startTime?.toDate()?.let { startDate ->
+                    Text(
+                        text = timeFormat.format(startDate),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                event.endTime?.toDate()?.let { endDate ->
+                    Text(
+                        text = timeFormat.format(endDate),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
     }
@@ -376,19 +468,17 @@ fun EventItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEventDialog(
-    formState: EventFormState,
-    onFormChanged: (EventFormState) -> Unit,
-    onAddEvent: () -> Unit,
     onDismiss: () -> Unit,
-    onDateClick: () -> Unit,
-    onTimeClick: (TimePickerMode) -> Unit,
-    showDatePicker: Boolean,
-    showTimePicker: Boolean,
-    timePickerMode: TimePickerMode,
-    onDatePickerDismiss: () -> Unit,
-    onTimePickerDismiss: () -> Unit
+    onEventAdded: () -> Unit,
+    calendarViewModel: CalendarViewModel
 ) {
+    val formState by calendarViewModel.eventFormState.collectAsState()
     val colors = EventColor.values()
+    
+    // Додајемо стање за приказ бирача времена
+    var showStartTimePicker by remember { mutableStateOf(false) }
+    var showEndTimePicker by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -398,7 +488,7 @@ fun AddEventDialog(
                 // Наслов догађаја
                 OutlinedTextField(
                     value = formState.title,
-                    onValueChange = { onFormChanged(formState.copy(title = it)) },
+                    onValueChange = { newTitle -> calendarViewModel.updateEventForm { it.copy(title = newTitle) } },
                     label = { Text("Наслов") },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -408,7 +498,7 @@ fun AddEventDialog(
                 // Опис
                 OutlinedTextField(
                     value = formState.description,
-                    onValueChange = { onFormChanged(formState.copy(description = it)) },
+                    onValueChange = { newDescription -> calendarViewModel.updateEventForm { it.copy(description = newDescription) } },
                     label = { Text("Опис") },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -418,7 +508,7 @@ fun AddEventDialog(
                 // Локација
                 OutlinedTextField(
                     value = formState.location,
-                    onValueChange = { onFormChanged(formState.copy(location = it)) },
+                    onValueChange = { newLocation -> calendarViewModel.updateEventForm { it.copy(location = newLocation) } },
                     label = { Text("Локација") },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -432,7 +522,9 @@ fun AddEventDialog(
                 ) {
                     Text("Датум:")
                     Spacer(modifier = Modifier.weight(1f))
-                    Button(onClick = onDateClick) {
+                    Button(
+                        onClick = { showDatePicker = true }
+                    ) {
                         Text(SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(formState.date))
                     }
                 }
@@ -444,11 +536,11 @@ fun AddEventDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Цео дан")
+                    Text("Цео дан:")
                     Spacer(modifier = Modifier.weight(1f))
                     Switch(
                         checked = formState.allDay,
-                        onCheckedChange = { onFormChanged(formState.copy(allDay = it)) }
+                        onCheckedChange = { isAllDay -> calendarViewModel.updateEventForm { it.copy(allDay = isAllDay) } }
                     )
                 }
                 
@@ -463,7 +555,7 @@ fun AddEventDialog(
                         Text("Почетак:")
                         Spacer(modifier = Modifier.weight(1f))
                         Button(
-                            onClick = { onTimeClick(TimePickerMode.START) }
+                            onClick = { showStartTimePicker = true }
                         ) {
                             Text(
                                 String.format(
@@ -485,7 +577,7 @@ fun AddEventDialog(
                         Text("Завршетак:")
                         Spacer(modifier = Modifier.weight(1f))
                         Button(
-                            onClick = { onTimeClick(TimePickerMode.END) }
+                            onClick = { showEndTimePicker = true }
                         ) {
                             Text(
                                 if (formState.endHour != null && formState.endMinute != null) {
@@ -517,7 +609,7 @@ fun AddEventDialog(
                                 .size(32.dp)
                                 .clip(CircleShape)
                                 .background(Color(android.graphics.Color.parseColor(eventColor.colorHex)))
-                                .clickable { onFormChanged(formState.copy(color = eventColor.colorHex)) }
+                                .clickable { calendarViewModel.updateEventForm { it.copy(color = eventColor.colorHex) } }
                                 .then(
                                     if (formState.color == eventColor.colorHex) {
                                         Modifier.border(
@@ -534,8 +626,11 @@ fun AddEventDialog(
         },
         confirmButton = {
             Button(
-                onClick = onAddEvent,
-                enabled = formState.isValid
+                onClick = {
+                    calendarViewModel.addEvent()
+                    onEventAdded()
+                },
+                enabled = formState.title.isNotBlank()
             ) {
                 Text("Додај")
             }
@@ -547,94 +642,149 @@ fun AddEventDialog(
         }
     )
     
-    // Дијалог за избор датума
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = formState.date.time
-        )
-        
-        DatePickerDialog(
-            onDismissRequest = onDatePickerDismiss,
+    // Приказ бирача времена почетка
+    if (showStartTimePicker) {
+        TimePickerDialog(
+            onDismissRequest = { showStartTimePicker = false },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val newDate = Date(millis)
-                            onFormChanged(formState.copy(date = newDate))
-                        }
-                        onDatePickerDismiss()
-                    }
+                Button(
+                    onClick = { showStartTimePicker = false }
                 ) {
                     Text("ОК")
                 }
             },
             dismissButton = {
                 TextButton(
-                    onClick = onDatePickerDismiss
+                    onClick = { showStartTimePicker = false }
                 ) {
                     Text("Откажи")
                 }
             }
         ) {
-            DatePicker(state = datePickerState)
+            // Овде би требало да буде компонента за избор времена
+            // За сада ћемо користити једноставне бираче
+            Column {
+                Text("Изаберите време почетка", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    // Сат
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Сат")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        for (hour in 0..23) {
+                            Text(
+                                text = String.format("%02d", hour),
+                                modifier = Modifier
+                                    .clickable {
+                                        calendarViewModel.updateEventForm {
+                                            it.copy(startHour = hour)
+                                        }
+                                    }
+                                    .padding(8.dp),
+                                fontWeight = if (hour == formState.startHour) FontWeight.Bold else FontWeight.Normal,
+                                color = if (hour == formState.startHour) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    
+                    // Минут
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Минут")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        for (minute in 0..59 step 5) {
+                            Text(
+                                text = String.format("%02d", minute),
+                                modifier = Modifier
+                                    .clickable {
+                                        calendarViewModel.updateEventForm {
+                                            it.copy(startMinute = minute)
+                                        }
+                                    }
+                                    .padding(8.dp),
+                                fontWeight = if (minute == formState.startMinute) FontWeight.Bold else FontWeight.Normal,
+                                color = if (minute == formState.startMinute) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
     
-    // Дијалог за избор времена
-    if (showTimePicker) {
-        val hour = when (timePickerMode) {
-            TimePickerMode.START -> formState.startHour
-            TimePickerMode.END -> formState.endHour ?: formState.startHour
-        }
-        
-        val minute = when (timePickerMode) {
-            TimePickerMode.START -> formState.startMinute
-            TimePickerMode.END -> formState.endMinute ?: formState.startMinute
-        }
-        
-        val timePickerState = rememberTimePickerState(
-            initialHour = hour,
-            initialMinute = minute
-        )
-        
+    // Приказ бирача времена завршетка
+    if (showEndTimePicker) {
         TimePickerDialog(
-            onDismissRequest = onTimePickerDismiss,
+            onDismissRequest = { showEndTimePicker = false },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        when (timePickerMode) {
-                            TimePickerMode.START -> {
-                                onFormChanged(
-                                    formState.copy(
-                                        startHour = timePickerState.hour,
-                                        startMinute = timePickerState.minute
-                                    )
-                                )
-                            }
-                            TimePickerMode.END -> {
-                                onFormChanged(
-                                    formState.copy(
-                                        endHour = timePickerState.hour,
-                                        endMinute = timePickerState.minute
-                                    )
-                                )
-                            }
-                        }
-                        onTimePickerDismiss()
-                    }
+                Button(
+                    onClick = { showEndTimePicker = false }
                 ) {
                     Text("ОК")
                 }
             },
             dismissButton = {
                 TextButton(
-                    onClick = onTimePickerDismiss
+                    onClick = { showEndTimePicker = false }
                 ) {
                     Text("Откажи")
                 }
             }
         ) {
-            TimePicker(state = timePickerState)
+            // Овде би требало да буде компонента за избор времена
+            // За сада ћемо користити једноставне бираче
+            Column {
+                Text("Изаберите време завршетка", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    // Сат
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Сат")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        for (hour in 0..23) {
+                            Text(
+                                text = String.format("%02d", hour),
+                                modifier = Modifier
+                                    .clickable {
+                                        calendarViewModel.updateEventForm {
+                                            it.copy(endHour = hour)
+                                        }
+                                    }
+                                    .padding(8.dp),
+                                fontWeight = if (hour == formState.endHour) FontWeight.Bold else FontWeight.Normal,
+                                color = if (hour == formState.endHour) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    
+                    // Минут
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Минут")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        for (minute in 0..59 step 5) {
+                            Text(
+                                text = String.format("%02d", minute),
+                                modifier = Modifier
+                                    .clickable {
+                                        calendarViewModel.updateEventForm {
+                                            it.copy(endMinute = minute)
+                                        }
+                                    }
+                                    .padding(8.dp),
+                                fontWeight = if (minute == formState.endMinute) FontWeight.Bold else FontWeight.Normal,
+                                color = if (minute == formState.endMinute) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -655,5 +805,45 @@ fun TimePickerDialog(
         text = { content() },
         confirmButton = confirmButton,
         dismissButton = dismissButton
+    )
+}
+
+// Помоћна функција за капитализацију првог слова
+fun String.capitalize(): String {
+    return this.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() } 
+}
+
+@Composable
+fun EventDetailsDialog(
+    event: Event,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Детаљи догађаја") },
+        text = {
+            Column {
+                Text("Наслов: ${event.title}")
+                Text("Опис: ${event.description}")
+                Text("Локација: ${event.location}")
+                Text("Почетак: ${event.startTime?.toDate()?.let { SimpleDateFormat("HH:mm", Locale.getDefault()).format(it) }}")
+                Text("Завршетак: ${event.endTime?.toDate()?.let { SimpleDateFormat("HH:mm", Locale.getDefault()).format(it) }}")
+                Text("Цео дан: ${event.allDay}")
+                Text("Боја: ${event.color}")
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDelete
+            ) {
+                Text("Обриши")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Затвори")
+            }
+        }
     )
 } 

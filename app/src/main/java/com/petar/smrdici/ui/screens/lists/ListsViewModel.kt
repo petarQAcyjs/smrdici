@@ -1,6 +1,8 @@
 package com.petar.smrdici.ui.screens.lists
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.petar.smrdici.data.model.ShoppingItem
@@ -12,8 +14,8 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-class ListsViewModel : ViewModel() {
-    private val repository = ShoppingListRepository()
+class ListsViewModel(private val context: Context) : ViewModel() {
+    private val repository = ShoppingListRepository(context)
     
     private val _uiState = MutableStateFlow<ListsUiState>(ListsUiState.Loading)
     val uiState: StateFlow<ListsUiState> = _uiState
@@ -170,6 +172,17 @@ class ListsViewModel : ViewModel() {
                 .onFailure { e ->
                     _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању ставке")
                 }
+        }
+    }
+    
+    // Додајемо Factory класу за креирање ListsViewModel са Context параметром
+    class Factory(private val context: Context) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(ListsViewModel::class.java)) {
+                return ListsViewModel(context) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
 }

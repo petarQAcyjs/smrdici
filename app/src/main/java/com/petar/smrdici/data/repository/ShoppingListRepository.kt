@@ -1,5 +1,7 @@
 package com.petar.smrdici.data.repository
 
+import android.content.Context
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -11,10 +13,11 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
-class ShoppingListRepository {
-    private val db = FirebaseFirestore.getInstance()
-    private val listsCollection = db.collection("shopping_lists")
-    private val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+class ShoppingListRepository(private val context: Context) {
+    private val firestore = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
+    private val listsCollection = firestore.collection("shopping_lists")
+    private val currentUserId = auth.currentUser?.uid ?: ""
     
     // Добијање свих листа за куповину за тренутног корисника
     fun getShoppingListsForCurrentUser(): Flow<List<ShoppingList>> = callbackFlow {

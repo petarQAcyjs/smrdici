@@ -1,9 +1,11 @@
 package com.petar.smrdici.ui.screens.home
 
+import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -13,8 +15,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -31,7 +35,7 @@ import java.util.*
 fun HomeScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
-    homeViewModel: HomeViewModel = viewModel()
+    homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(LocalContext.current))
 ) {
     val authState by authViewModel.authState.collectAsState()
     val todayEvents by homeViewModel.todayEvents.collectAsState()
@@ -57,6 +61,12 @@ fun HomeScreen(
             // Приказ данашњих активности
             TodayActivitiesCard(
                 events = todayEvents,
+                onSeeAllClick = { navController.navigate(Screen.Calendar.route) },
+                onEventClick = { event ->
+                    // Овде можемо додати навигацију на детаље догађаја или неку другу акцију
+                    // За сада само навигирамо на календар
+                    navController.navigate(Screen.Calendar.route)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(250.dp)
@@ -137,45 +147,61 @@ fun NavigationCard(
 @Composable
 fun TodayActivitiesCard(
     events: List<Event>,
+    onSeeAllClick: () -> Unit,
+    onEventClick: (Event) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp)),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 3.dp
-        )
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(32.dp)
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            // Данашњи датум
-            val today = Calendar.getInstance().time
-            val dateFormat = SimpleDateFormat("EEE d MMM", Locale("sr"))
             Text(
-                text = dateFormat.format(today),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.padding(bottom = 24.dp)
+                text = "Данашње активности",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
             
-            if (events.isEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Филтрирамо прошле догађаје
+            val currentTime = Calendar.getInstance().timeInMillis / 1000 // Тренутно време у секундама
+            val filteredEvents = events.filter { event ->
+                // Задржавамо догађаје који су у току или у будућности
+                event.endTime?.seconds ?: Long.MAX_VALUE >= currentTime
+            }
+            
+            if (filteredEvents.isEmpty()) {
                 Text(
                     text = "Нема активности за данас",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(vertical = 8.dp)
                 )
             } else {
-                // Приказ догађаја
-                events.forEach { event ->
-                    EventRow(event = event)
-                    Spacer(modifier = Modifier.height(16.dp))
+                // Приказујемо до 3 догађаја
+                val eventsToShow = filteredEvents.take(3)
+                eventsToShow.forEach { event ->
+                    EventItemCompact(
+                        event = event,
+                        onClick = { onEventClick(event) }
+                    )
+                }
+                
+                // Ако има више од 3 догађаја, додајемо индикатор
+                if (filteredEvents.size > 3) {
+                    Text(
+                        text = "Још ${filteredEvents.size - 3} догађаја...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             }
         }
@@ -183,43 +209,55 @@ fun TodayActivitiesCard(
 }
 
 @Composable
-fun EventRow(event: Event) {
+fun EventItemCompact(
+    event: Event,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Обојена трака за категорију догађаја
+        // Индикатор боје догађаја
         Box(
             modifier = Modifier
-                .width(6.dp)
-                .height(32.dp)
-                .background(
-                    color = Color(android.graphics.Color.parseColor(event.color)),
-                    shape = RoundedCornerShape(3.dp)
-                )
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(Color(android.graphics.Color.parseColor(event.color)))
         )
         
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         
-        // Назив догађаја
-        Text(
-            text = event.title,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
+        Column(
             modifier = Modifier.weight(1f)
-        )
-        
-        // Време догађаја
-        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val startTime = timeFormat.format(event.startTime)
-        val endTime = timeFormat.format(event.endTime)
-        Text(
-            text = "$startTime - $endTime",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-        )
+        ) {
+            Text(
+                text = event.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            
+            // Приказујемо време догађаја
+            event.startTime?.let { startTime ->
+                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                val timeText = if (event.allDay) {
+                    "Цео дан"
+                } else {
+                    val endTimeText = event.endTime?.let { " - ${timeFormat.format(it.toDate())}" } ?: ""
+                    "${timeFormat.format(startTime.toDate())}$endTimeText"
+                }
+                
+                Text(
+                    text = timeText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        }
     }
 } 

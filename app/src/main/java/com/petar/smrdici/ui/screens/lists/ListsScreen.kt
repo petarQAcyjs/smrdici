@@ -26,21 +26,22 @@ import java.text.SimpleDateFormat
 import java.util.*
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun ListsScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
-    viewModel: ListsViewModel = viewModel()
+    listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory(LocalContext.current))
 ) {
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is com.petar.smrdici.ui.auth.AuthState.Authenticated) {
         (authState as com.petar.smrdici.ui.auth.AuthState.Authenticated).user
     } else null
     
-    val uiState by viewModel.uiState.collectAsState()
-    val selectedList by viewModel.selectedList.collectAsState()
-    val listFormState by viewModel.listFormState.collectAsState()
+    val uiState by listsViewModel.uiState.collectAsState()
+    val selectedList by listsViewModel.selectedList.collectAsState()
+    val listFormState by listsViewModel.listFormState.collectAsState()
     var showAddListDialog by remember { mutableStateOf(false) }
     
     Column(
@@ -93,8 +94,8 @@ fun ListsScreen(
                         items(successState.lists) { list ->
                             ShoppingListItem(
                                 list = list,
-                                onClick = { viewModel.selectList(list) },
-                                onDelete = { viewModel.deleteShoppingList(list.id) }
+                                onClick = { listsViewModel.selectList(list) },
+                                onDelete = { listsViewModel.deleteShoppingList(list.id) }
                             )
                         }
                     }
@@ -125,7 +126,7 @@ fun ListsScreen(
                 Column {
                     OutlinedTextField(
                         value = listFormState.title,
-                        onValueChange = { viewModel.updateListForm { it.copy(title = it.title) } },
+                        onValueChange = { listsViewModel.updateListForm { it.copy(title = it.title) } },
                         label = { Text("Назив листе") },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -134,7 +135,7 @@ fun ListsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.addShoppingList()
+                        listsViewModel.addShoppingList()
                         showAddListDialog = false
                     },
                     enabled = listFormState.isValid

@@ -1,9 +1,14 @@
 package com.petar.smrdici.ui.screens.calendar
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Event
+import com.petar.smrdici.data.model.EventColor
 import com.petar.smrdici.data.repository.EventRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,9 +16,12 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
+import android.util.Log
 
-class CalendarViewModel : ViewModel() {
-    private val repository = EventRepository()
+class CalendarViewModel(private val context: Context) : ViewModel() {
+    private val eventRepository = EventRepository(context)
+    private val firestore = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
     
     private val _uiState = MutableStateFlow<CalendarUiState>(CalendarUiState.Loading)
     val uiState: StateFlow<CalendarUiState> = _uiState
@@ -34,7 +42,7 @@ class CalendarViewModel : ViewModel() {
     
     private fun loadEvents() {
         viewModelScope.launch {
-            repository.getEventsForCurrentUser()
+            eventRepository.getEventsForCurrentUser()
                 .catch { e ->
                     _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при учитавању догађаја")
                 }
@@ -88,7 +96,7 @@ class CalendarViewModel : ViewModel() {
                 color = form.color
             )
             
-            repository.addEvent(event)
+            eventRepository.addEvent(event)
                 .onSuccess {
                     // Ресетујемо форму
                     _eventFormState.value = EventFormState()
@@ -99,13 +107,62 @@ class CalendarViewModel : ViewModel() {
         }
     }
     
-    // Брисање догађаја
+    // Функција за брисање догађаја
     fun deleteEvent(eventId: String) {
         viewModelScope.launch {
-            repository.deleteEvent(eventId)
+            eventRepository.deleteEvent(eventId)
+                .onSuccess {
+                    // Успешно обрисан догађај
+                    _uiState.value = CalendarUiState.Success(
+                        (_uiState.value as? CalendarUiState.Success)?.events?.filter { it.id != eventId } ?: emptyList()
+                    )
+                }
                 .onFailure { e ->
                     _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при брисању догађаја")
                 }
+        }
+    }
+    
+    // Додајемо нову функцију за учитавање догађаја за одређени датум
+    fun loadEventsForDate(date: Date) {
+        viewModelScope.launch {
+            _uiState.value = CalendarUiState.Loading
+            
+            try {
+                // Постављамо временски опсег за изабрани датум (од поноћи до 23:59:59)
+                val calendar = Calendar.getInstance()
+                calendar.time = date
+                calendar.set(Calendar.HOUR_OF_DAY, 0)
+                calendar.set(Calendar.MINUTE, 0)
+                calendar.set(Calendar.SECOND, 0)
+                val startOfDay = calendar.time
+                
+                calendar.set(Calendar.HOUR_OF_DAY, 23)
+                calendar.set(Calendar.MINUTE, 59)
+                calendar.set(Calendar.SECOND, 59)
+                val endOfDay = calendar.time
+                
+                // Користимо постојећу функцију из репозиторијума
+                eventRepository.getEventsForPeriod(startOfDay, endOfDay)
+                    .collect { events -> // Користимо collect уместо first
+                        _events.value = events
+                        _uiState.value = CalendarUiState.Success(events)
+                    }
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
+                _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при учитавању догађаја")
+            }
+        }
+    }
+    
+    // Додајемо Factory класу за креирање CalendarViewModel са Context параметром
+    class Factory(private val context: Context) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(CalendarViewModel::class.java)) {
+                return CalendarViewModel(context) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
 }

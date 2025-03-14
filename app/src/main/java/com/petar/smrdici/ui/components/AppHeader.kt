@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseUser
@@ -22,53 +23,56 @@ fun AppHeader(
     title: String,
     user: FirebaseUser?,
     navController: NavController,
-    showBackButton: Boolean = false,
-    onBackClick: () -> Unit = { navController.popBackStack() }
+    showBackButton: Boolean = true
 ) {
-    TopAppBar(
-        title = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        navigationIcon = {
-            if (showBackButton) {
-                IconButton(onClick = onBackClick) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Назад"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Дугме за повратак назад
+        if (showBackButton && navController.previousBackStackEntry != null) {
+            IconButton(
+                onClick = { navController.navigateUp() }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Назад"
+                )
+            }
+        }
+        
+        // Наслов
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.weight(1f)
+        )
+        
+        // Аватар корисника
+        user?.let {
+            Surface(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .clickable {
+                        navController.navigate(Screen.Profile.route)
+                    },
+                color = MaterialTheme.colorScheme.primary
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = user.displayName?.firstOrNull()?.toString() ?: 
+                              user.email?.firstOrNull()?.toString() ?: "?",
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 }
             }
-        },
-        actions = {
-            // Профилна слика у горњем десном углу
-            if (user != null) {
-                Surface(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .clickable {
-                            navController.navigate(Screen.Profile.route)
-                        },
-                    color = MaterialTheme.colorScheme.primary
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = user.displayName?.firstOrNull()?.toString() ?: 
-                                  user.email?.firstOrNull()?.toString() ?: "?",
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.width(12.dp))
-            }
-        },
-        modifier = Modifier.height(48.dp)
-    )
+            
+            Spacer(modifier = Modifier.width(12.dp))
+        }
+    }
 } 
