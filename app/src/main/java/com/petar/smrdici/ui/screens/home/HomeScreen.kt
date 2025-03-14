@@ -57,12 +57,16 @@ fun HomeScreen(
             // Приказ данашњих активности
             TodayActivitiesCard(
                 events = todayEvents,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(250.dp)
+                    .padding(bottom = 24.dp)
             )
             
             // Картице за навигацију
             Column(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 // Листе
                 NavigationCard(
@@ -98,22 +102,25 @@ fun NavigationCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
+            .height(150.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 3.dp
         )
     ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+                .fillMaxSize()
+                .padding(horizontal = 32.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
@@ -121,7 +128,7 @@ fun NavigationCard(
             Image(
                 painter = painterResource(id = iconResId),
                 contentDescription = title,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(80.dp)
             )
         }
     }
@@ -134,37 +141,41 @@ fun TodayActivitiesCard(
 ) {
     Card(
         modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
+            .clip(RoundedCornerShape(20.dp)),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 3.dp
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp)
         ) {
             // Данашњи датум
             val today = Calendar.getInstance().time
             val dateFormat = SimpleDateFormat("EEE d MMM", Locale("sr"))
             Text(
                 text = dateFormat.format(today),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(bottom = 24.dp)
             )
             
             if (events.isEmpty()) {
                 Text(
                     text = "Нема активности за данас",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
             } else {
                 // Приказ догађаја
                 events.forEach { event ->
                     EventRow(event = event)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
@@ -173,59 +184,42 @@ fun TodayActivitiesCard(
 
 @Composable
 fun EventRow(event: Event) {
-    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val startTime = timeFormat.format(event.startTime.toDate())
-    val endTime = event.endTime?.let { timeFormat.format(it.toDate()) }
-    val timeText = if (event.allDay) {
-        "Цео дан"
-    } else {
-        if (endTime != null) "$startTime - $endTime" else startTime
-    }
-    
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Време догађаја
-        Text(
-            text = timeText,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.width(80.dp)
-        )
-        
-        // Индикатор боје
+        // Обојена трака за категорију догађаја
         Box(
             modifier = Modifier
-                .size(width = 4.dp, height = 36.dp)
+                .width(6.dp)
+                .height(32.dp)
                 .background(
                     color = Color(android.graphics.Color.parseColor(event.color)),
-                    shape = RoundedCornerShape(2.dp)
+                    shape = RoundedCornerShape(3.dp)
                 )
         )
         
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(16.dp))
         
-        // Наслов догађаја
-        Column(
+        // Назив догађаја
+        Text(
+            text = event.title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                text = event.title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            
-            if (event.location.isNotBlank()) {
-                Text(
-                    text = event.location,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
-            }
-        }
+        )
+        
+        // Време догађаја
+        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val startTime = timeFormat.format(event.startTime)
+        val endTime = timeFormat.format(event.endTime)
+        Text(
+            text = "$startTime - $endTime",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+        )
     }
 } 
