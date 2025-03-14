@@ -1,6 +1,8 @@
 package com.petar.smrdici.ui.screens.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -11,13 +13,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.navigation.Screen
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -53,8 +58,72 @@ fun HomeScreen(
         // Приказ данашњих активности
         TodayActivitiesCard(
             events = todayEvents,
-            modifier = Modifier.padding(vertical = 16.dp)
+            modifier = Modifier.padding(bottom = 16.dp)
         )
+        
+        // Картице за навигацију
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // Листе
+            NavigationCard(
+                title = "Листе",
+                iconResId = R.drawable.ic_list,
+                onClick = { navController.navigate(Screen.Lists.route) }
+            )
+            
+            // Календар
+            NavigationCard(
+                title = "Календар",
+                iconResId = R.drawable.ic_calendar,
+                onClick = { navController.navigate(Screen.Calendar.route) }
+            )
+            
+            // Буџет
+            NavigationCard(
+                title = "Буџет",
+                iconResId = R.drawable.ic_budget,
+                onClick = { navController.navigate(Screen.Budget.route) }
+            )
+        }
+    }
+}
+
+@Composable
+fun NavigationCard(
+    title: String,
+    iconResId: Int,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            
+            Image(
+                painter = painterResource(id = iconResId),
+                contentDescription = title,
+                modifier = Modifier.size(48.dp)
+            )
+        }
     }
 }
 

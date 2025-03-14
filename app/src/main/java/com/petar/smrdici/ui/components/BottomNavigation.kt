@@ -21,9 +21,6 @@ fun BottomNavigation(navController: NavController) {
     
     val items = listOf(
         BottomNavItem.Home,
-        BottomNavItem.Budget,
-        BottomNavItem.Calendar,
-        BottomNavItem.Lists,
         BottomNavItem.Profile
     )
     
@@ -73,27 +70,6 @@ sealed class BottomNavItem(
         titleResId = R.string.home,
         selectedIcon = Icons.Filled.Home,
         unselectedIcon = Icons.Outlined.Home
-    )
-    
-    object Budget : BottomNavItem(
-        screen = Screen.Budget,
-        titleResId = R.string.budget,
-        selectedIcon = Icons.Filled.AccountBox,
-        unselectedIcon = Icons.Outlined.AccountBox
-    )
-    
-    object Calendar : BottomNavItem(
-        screen = Screen.Calendar,
-        titleResId = R.string.calendar,
-        selectedIcon = Icons.Filled.DateRange,
-        unselectedIcon = Icons.Outlined.DateRange
-    )
-    
-    object Lists : BottomNavItem(
-        screen = Screen.Lists,
-        titleResId = R.string.lists,
-        selectedIcon = Icons.Filled.List,
-        unselectedIcon = Icons.Outlined.List
     )
     
     object Profile : BottomNavItem(
