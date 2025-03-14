@@ -24,38 +24,41 @@ import com.petar.smrdici.data.model.ShoppingItem
 import com.petar.smrdici.data.model.ShoppingList
 import java.text.SimpleDateFormat
 import java.util.*
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListsScreen(
     navController: NavController,
+    authViewModel: AuthViewModel = viewModel(),
     viewModel: ListsViewModel = viewModel()
 ) {
+    val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is com.petar.smrdici.ui.auth.AuthState.Authenticated) {
+        (authState as com.petar.smrdici.ui.auth.AuthState.Authenticated).user
+    } else null
+    
     val uiState by viewModel.uiState.collectAsState()
     val selectedList by viewModel.selectedList.collectAsState()
     val listFormState by viewModel.listFormState.collectAsState()
-    val itemFormState by viewModel.itemFormState.collectAsState()
-    
     var showAddListDialog by remember { mutableStateOf(false) }
-    var showAddItemDialog by remember { mutableStateOf(false) }
     
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
-        // Приказ листа или детаља изабране листе
-        if (selectedList == null) {
-            // Приказ свих листа
-            TopAppBar(
-                title = { Text("Листе за куповину") },
-                actions = {
-                    IconButton(onClick = { showAddListDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Додај листу")
-                    }
-                }
-            )
-            
+        AppHeader(
+            title = "Листе за куповину",
+            user = user,
+            navController = navController,
+            showBackButton = true
+        )
+        
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            // Листа за куповину
             when (uiState) {
                 is ListsUiState.Loading -> {
                     Box(
@@ -82,87 +85,68 @@ fun ListsScreen(
                 is ListsUiState.Success -> {
                     val successState = uiState as ListsUiState.Success
                     
-                    if (successState.lists.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Нема листа за куповину. Додајте нову листу.")
-                        }
-                    } else {
-                        LazyColumn {
-                            items(successState.lists) { list ->
-                                ShoppingListItem(
-                                    list = list,
-                                    onClick = { viewModel.selectList(list) },
-                                    onDelete = { viewModel.deleteShoppingList(list.id) }
-                                )
-                            }
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
+                        items(successState.lists) { list ->
+                            ShoppingListItem(
+                                list = list,
+                                onClick = { viewModel.selectList(list) },
+                                onDelete = { viewModel.deleteShoppingList(list.id) }
+                            )
                         }
                     }
                 }
             }
-        } else {
-            // Приказ детаља изабране листе
-            TopAppBar(
-                title = { Text(selectedList!!.title) },
-                navigationIcon = {
-                    IconButton(onClick = { viewModel.clearSelectedList() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showAddItemDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Додај ставку")
-                    }
-                }
-            )
             
-            // Приказ ставки листе
-            if (selectedList!!.items.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Нема ставки у листи. Додајте нову ставку.")
-                }
-            } else {
-                LazyColumn {
-                    items(selectedList!!.items) { item ->
-                        ShoppingItemRow(
-                            item = item,
-                            onToggle = { viewModel.toggleItemStatus(item.id) },
-                            onDelete = { viewModel.removeItemFromList(item.id) }
-                        )
-                    }
-                }
+            // Дугме за додавање нове листе
+            FloatingActionButton(
+                onClick = { showAddListDialog = true },
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Додај листу"
+                )
             }
         }
     }
     
     // Дијалог за додавање нове листе
     if (showAddListDialog) {
-        AddListDialog(
-            formState = listFormState,
-            onFormChanged = { updatedForm -> viewModel.updateListForm { updatedForm } },
-            onAddList = {
-                viewModel.addShoppingList()
-                showAddListDialog = false
+        AlertDialog(
+            onDismissRequest = { showAddListDialog = false },
+            title = { Text("Нова листа за куповину") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = listFormState.title,
+                        onValueChange = { viewModel.updateListForm { it.copy(title = it.title) } },
+                        label = { Text("Назив листе") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
-            onDismiss = { showAddListDialog = false }
-        )
-    }
-    
-    // Дијалог за додавање нове ставке
-    if (showAddItemDialog) {
-        AddItemDialog(
-            formState = itemFormState,
-            onFormChanged = { updatedForm -> viewModel.updateItemForm { updatedForm } },
-            onAddItem = {
-                viewModel.addItemToList()
-                showAddItemDialog = false
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.addShoppingList()
+                        showAddListDialog = false
+                    },
+                    enabled = listFormState.isValid
+                ) {
+                    Text("Додај")
+                }
             },
-            onDismiss = { showAddItemDialog = false }
+            dismissButton = {
+                TextButton(onClick = { showAddListDialog = false }) {
+                    Text("Откажи")
+                }
+            }
         )
     }
 }
@@ -177,14 +161,12 @@ fun ShoppingListItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp)
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
@@ -192,31 +174,19 @@ fun ShoppingListItem(
             ) {
                 Text(
                     text = list.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleMedium
                 )
                 
-                Spacer(modifier = Modifier.height(4.dp))
-                
                 Text(
-                    text = "Ставки: ${list.items.size}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                Text(
-                    text = "Креирано: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(list.createdAt.toDate())}",
+                    text = "${list.items.size} ставки",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
             
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Обриши листу",
-                    tint = MaterialTheme.colorScheme.error
-                )
+            TextButton(
+                onClick = onDelete
+            ) {
+                Text("Обриши")
             }
         }
     }

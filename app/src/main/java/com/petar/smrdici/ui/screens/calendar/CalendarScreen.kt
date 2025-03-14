@@ -27,115 +27,140 @@ import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventColor
 import java.text.SimpleDateFormat
 import java.util.*
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
     navController: NavController,
-    viewModel: CalendarViewModel = viewModel()
+    authViewModel: AuthViewModel = viewModel(),
+    calendarViewModel: CalendarViewModel = viewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val selectedDate by viewModel.selectedDate.collectAsState()
-    val formState by viewModel.eventFormState.collectAsState()
+    val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is com.petar.smrdici.ui.auth.AuthState.Authenticated) {
+        (authState as com.petar.smrdici.ui.auth.AuthState.Authenticated).user
+    } else null
+    
+    val uiState by calendarViewModel.uiState.collectAsState()
+    val selectedDate by calendarViewModel.selectedDate.collectAsState()
+    val formState by calendarViewModel.eventFormState.collectAsState()
     var showAddEventDialog by remember { mutableStateOf(false) }
     
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
-        TopAppBar(
-            title = { Text("Породични Календар") },
-            actions = {
-                IconButton(onClick = { showAddEventDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Додај догађај")
-                }
-            }
+        AppHeader(
+            title = "Календар",
+            user = user,
+            navController = navController,
+            showBackButton = true
         )
         
-        // Једноставан календарски приказ
-        SimpleCalendarView(
-            selectedDate = selectedDate,
-            onDateSelected = { viewModel.selectDate(it) }
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Приказ догађаја за изабрани датум
-        when (uiState) {
-            is CalendarUiState.Loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            // Једноставан календарски приказ
+            SimpleCalendarView(
+                selectedDate = selectedDate,
+                onDateSelected = { calendarViewModel.selectDate(it) }
+            )
             
-            is CalendarUiState.Error -> {
-                val errorState = uiState as CalendarUiState.Error
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = errorState.message,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
+            Spacer(modifier = Modifier.height(16.dp))
             
-            is CalendarUiState.Success -> {
-                val successState = uiState as CalendarUiState.Success
-                val eventsForSelectedDate = successState.events.filter { event ->
-                    val eventDate = event.startTime.toDate()
-                    val calendar1 = Calendar.getInstance().apply { time = eventDate }
-                    val calendar2 = Calendar.getInstance().apply { time = selectedDate }
-                    
-                    calendar1.get(Calendar.YEAR) == calendar2.get(Calendar.YEAR) &&
-                    calendar1.get(Calendar.MONTH) == calendar2.get(Calendar.MONTH) &&
-                    calendar1.get(Calendar.DAY_OF_MONTH) == calendar2.get(Calendar.DAY_OF_MONTH)
-                }
-                
-                if (eventsForSelectedDate.isEmpty()) {
+            // Приказ догађаја за изабрани датум
+            when (uiState) {
+                is CalendarUiState.Loading -> {
                     Box(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Нема догађаја за изабрани датум")
+                        CircularProgressIndicator()
                     }
-                } else {
-                    Text(
-                        text = "Догађаји за ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(selectedDate)}",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                    
-                    LazyColumn(
-                        modifier = Modifier.weight(1f)
+                }
+                
+                is CalendarUiState.Error -> {
+                    val errorState = uiState as CalendarUiState.Error
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        items(eventsForSelectedDate) { event ->
-                            EventItem(
-                                event = event,
-                                onDelete = { viewModel.deleteEvent(event.id) }
+                        Text(
+                            text = errorState.message,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+                
+                is CalendarUiState.Success -> {
+                    val successState = uiState as CalendarUiState.Success
+                    
+                    if (successState.events.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Нема догађаја за изабрани датум",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(successState.events) { event ->
+                                EventItem(
+                                    event = event,
+                                    onDelete = { calendarViewModel.deleteEvent(event.id) }
+                                )
+                            }
                         }
                     }
                 }
+            }
+            
+            // Дугме за додавање новог догађаја
+            FloatingActionButton(
+                onClick = { showAddEventDialog = true },
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Додај догађај"
+                )
             }
         }
     }
     
     // Дијалог за додавање новог догађаја
     if (showAddEventDialog) {
+        var showDatePicker by remember { mutableStateOf(false) }
+        var showTimePicker by remember { mutableStateOf(false) }
+        var timePickerMode by remember { mutableStateOf(TimePickerMode.START) }
+        
         AddEventDialog(
             formState = formState,
-            onFormChanged = { updatedForm -> viewModel.updateEventForm { updatedForm } },
+            onFormChanged = { updatedForm -> calendarViewModel.updateEventForm { updatedForm } },
             onAddEvent = {
-                viewModel.addEvent()
+                calendarViewModel.addEvent()
                 showAddEventDialog = false
             },
-            onDismiss = { showAddEventDialog = false }
+            onDismiss = { showAddEventDialog = false },
+            onDateClick = { showDatePicker = true },
+            onTimeClick = { mode ->
+                timePickerMode = mode
+                showTimePicker = true
+            },
+            showDatePicker = showDatePicker,
+            showTimePicker = showTimePicker,
+            timePickerMode = timePickerMode,
+            onDatePickerDismiss = { showDatePicker = false },
+            onTimePickerDismiss = { showTimePicker = false }
         )
     }
 }
@@ -354,12 +379,15 @@ fun AddEventDialog(
     formState: EventFormState,
     onFormChanged: (EventFormState) -> Unit,
     onAddEvent: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onDateClick: () -> Unit,
+    onTimeClick: (TimePickerMode) -> Unit,
+    showDatePicker: Boolean,
+    showTimePicker: Boolean,
+    timePickerMode: TimePickerMode,
+    onDatePickerDismiss: () -> Unit,
+    onTimePickerDismiss: () -> Unit
 ) {
-    var showDatePicker by remember { mutableStateOf(false) }
-    var showTimePicker by remember { mutableStateOf(false) }
-    var timePickerMode by remember { mutableStateOf(TimePickerMode.START) }
-    
     val colors = EventColor.values()
     
     AlertDialog(
@@ -404,7 +432,7 @@ fun AddEventDialog(
                 ) {
                     Text("Датум:")
                     Spacer(modifier = Modifier.weight(1f))
-                    Button(onClick = { showDatePicker = true }) {
+                    Button(onClick = onDateClick) {
                         Text(SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(formState.date))
                     }
                 }
@@ -435,10 +463,7 @@ fun AddEventDialog(
                         Text("Почетак:")
                         Spacer(modifier = Modifier.weight(1f))
                         Button(
-                            onClick = {
-                                timePickerMode = TimePickerMode.START
-                                showTimePicker = true
-                            }
+                            onClick = { onTimeClick(TimePickerMode.START) }
                         ) {
                             Text(
                                 String.format(
@@ -460,10 +485,7 @@ fun AddEventDialog(
                         Text("Завршетак:")
                         Spacer(modifier = Modifier.weight(1f))
                         Button(
-                            onClick = {
-                                timePickerMode = TimePickerMode.END
-                                showTimePicker = true
-                            }
+                            onClick = { onTimeClick(TimePickerMode.END) }
                         ) {
                             Text(
                                 if (formState.endHour != null && formState.endMinute != null) {
@@ -532,7 +554,7 @@ fun AddEventDialog(
         )
         
         DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
+            onDismissRequest = onDatePickerDismiss,
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -540,7 +562,7 @@ fun AddEventDialog(
                             val newDate = Date(millis)
                             onFormChanged(formState.copy(date = newDate))
                         }
-                        showDatePicker = false
+                        onDatePickerDismiss()
                     }
                 ) {
                     Text("ОК")
@@ -548,7 +570,7 @@ fun AddEventDialog(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showDatePicker = false }
+                    onClick = onDatePickerDismiss
                 ) {
                     Text("Откажи")
                 }
@@ -576,7 +598,7 @@ fun AddEventDialog(
         )
         
         TimePickerDialog(
-            onDismissRequest = { showTimePicker = false },
+            onDismissRequest = onTimePickerDismiss,
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -598,7 +620,7 @@ fun AddEventDialog(
                                 )
                             }
                         }
-                        showTimePicker = false
+                        onTimePickerDismiss()
                     }
                 ) {
                     Text("ОК")
@@ -606,7 +628,7 @@ fun AddEventDialog(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showTimePicker = false }
+                    onClick = onTimePickerDismiss
                 ) {
                     Text("Откажи")
                 }

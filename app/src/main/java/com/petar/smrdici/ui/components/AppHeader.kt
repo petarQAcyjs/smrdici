@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -21,7 +22,9 @@ import com.petar.smrdici.ui.navigation.Screen
 fun AppHeader(
     title: String,
     user: FirebaseUser?,
-    navController: NavController
+    navController: NavController,
+    showBackButton: Boolean = false,
+    onBackClick: () -> Unit = { navController.popBackStack() }
 ) {
     TopAppBar(
         title = {
@@ -34,11 +37,23 @@ fun AppHeader(
                     fontWeight = FontWeight.Bold
                 )
                 
-                Icon(
-                    imageVector = Icons.Default.ArrowDropDown,
-                    contentDescription = "Dropdown",
-                    modifier = Modifier.size(24.dp)
-                )
+                if (title == "Femici") {
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = "Dropdown",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        },
+        navigationIcon = {
+            if (showBackButton) {
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Назад"
+                    )
+                }
             }
         },
         actions = {

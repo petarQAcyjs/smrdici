@@ -23,93 +23,45 @@ import com.petar.smrdici.data.model.TransactionType
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BudgetScreen(
     navController: NavController,
-    viewModel: BudgetViewModel = viewModel()
+    authViewModel: AuthViewModel = viewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val formState by viewModel.transactionFormState.collectAsState()
-    var showAddTransactionDialog by remember { mutableStateOf(false) }
+    val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is com.petar.smrdici.ui.auth.AuthState.Authenticated) {
+        (authState as com.petar.smrdici.ui.auth.AuthState.Authenticated).user
+    } else null
     
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
-        TopAppBar(
-            title = { Text("Породични Буџет") },
-            actions = {
-                IconButton(onClick = { showAddTransactionDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Додај трансакцију")
-                }
-            }
+        AppHeader(
+            title = "Буџет",
+            user = user,
+            navController = navController,
+            showBackButton = true
         )
         
-        when (uiState) {
-            is BudgetUiState.Loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-            
-            is BudgetUiState.Error -> {
-                val errorState = uiState as BudgetUiState.Error
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = errorState.message,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-            
-            is BudgetUiState.Success -> {
-                val successState = uiState as BudgetUiState.Success
-                
-                // Приказ сумарних података
-                BudgetSummary(
-                    totalIncome = successState.totalIncome,
-                    totalExpense = successState.totalExpense,
-                    balance = successState.balance
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Листа трансакција
-                LazyColumn {
-                    items(successState.transactions) { transaction ->
-                        TransactionItem(
-                            transaction = transaction,
-                            onDelete = { viewModel.deleteTransaction(transaction.id) }
-                        )
-                    }
-                }
-            }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Буџет екран у изради",
+                style = MaterialTheme.typography.headlineMedium
+            )
         }
-    }
-    
-    // Дијалог за додавање нове трансакције
-    if (showAddTransactionDialog) {
-        AddTransactionDialog(
-            formState = formState,
-            onFormChanged = { updatedForm -> viewModel.updateTransactionForm { updatedForm } },
-            onAddTransaction = {
-                viewModel.addTransaction()
-                showAddTransactionDialog = false
-            },
-            onDismiss = { showAddTransactionDialog = false }
-        )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BudgetSummary(
     totalIncome: Double,
