@@ -1,21 +1,24 @@
 package com.petar.smrdici.ui.screens.lists
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
-import com.petar.smrdici.data.model.ShoppingItem
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.ShoppingList
-import com.petar.smrdici.data.repository.ShoppingListRepository
+import com.petar.smrdici.data.model.ShoppingItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
-import java.util.UUID
+import java.util.*
 
 class ListsViewModel(private val context: Context) : ViewModel() {
-    private val repository = ShoppingListRepository(context)
+    private val firestore = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
     
     private val _uiState = MutableStateFlow<ListsUiState>(ListsUiState.Loading)
     val uiState: StateFlow<ListsUiState> = _uiState
@@ -32,18 +35,72 @@ class ListsViewModel(private val context: Context) : ViewModel() {
     val itemFormState: StateFlow<ItemFormState> = _itemFormState
     
     init {
-        loadShoppingLists()
+        loadLists()
     }
     
-    private fun loadShoppingLists() {
+    fun loadLists() {
         viewModelScope.launch {
-            repository.getShoppingListsForCurrentUser()
-                .catch { e ->
-                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при учитавању листа")
-                }
-                .collect { lists ->
-                    _uiState.value = ListsUiState.Success(lists)
-                }
+            try {
+                val userId = auth.currentUser?.uid ?: return@launch
+                
+                _uiState.value = ListsUiState.Loading
+                
+                firestore.collection("shopping_lists")
+                    .whereEqualTo("createdBy", userId)
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        val lists = snapshot.documents.mapNotNull { doc ->
+                            try {
+                                val list = doc.toObject(ShoppingList::class.java)
+                                list?.id = doc.id
+                                list
+                            } catch (e: Exception) {
+                                Log.e("ListsViewModel", "Грешка при обради листе", e)
+                                null
+                            }
+                        }
+                        
+                        _uiState.value = ListsUiState.Success(lists)
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("ListsViewModel", "Грешка при учитавању листа", e)
+                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при учитавању листа")
+                    }
+            } catch (e: Exception) {
+                Log.e("ListsViewModel", "Општа грешка", e)
+                _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
+            }
+        }
+    }
+    
+    fun addList(title: String) {
+        viewModelScope.launch {
+            try {
+                val userId = auth.currentUser?.uid ?: return@launch
+                
+                val newList = ShoppingList(
+                    title = title,
+                    createdBy = userId,
+                    createdAt = Timestamp.now(),
+                    isCompleted = false,
+                    items = emptyList()
+                )
+                
+                firestore.collection("shopping_lists")
+                    .add(newList)
+                    .addOnSuccessListener { documentReference ->
+                        Log.d("ListsViewModel", "Листа додата са ID: ${documentReference.id}")
+                        loadLists() // Поново учитавамо листе
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("ListsViewModel", "Грешка при додавању листе", e)
+                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању листе")
+                    }
+            } catch (e: Exception) {
+                Log.e("ListsViewModel", "Општа грешка", e)
+                _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
+            }
         }
     }
     
@@ -81,11 +138,14 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                 createdAt = Timestamp.now()
             )
             
-            repository.addShoppingList(newList)
-                .onSuccess {
-                    _listFormState.value = ListFormState()
+            firestore.collection("shopping_lists")
+                .add(newList)
+                .addOnSuccessListener { documentReference ->
+                    Log.d("ListsViewModel", "Листа додата са ID: ${documentReference.id}")
+                    loadLists() // Поново учитавамо листе
                 }
-                .onFailure { e ->
+                .addOnFailureListener { e ->
+                    Log.e("ListsViewModel", "Грешка при додавању листе", e)
                     _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању листе")
                 }
         }
@@ -94,8 +154,11 @@ class ListsViewModel(private val context: Context) : ViewModel() {
     // Брисање листе
     fun deleteShoppingList(listId: String) {
         viewModelScope.launch {
-            repository.deleteShoppingList(listId)
-                .onFailure { e ->
+            firestore.collection("shopping_lists").document(listId).delete()
+                .addOnSuccessListener {
+                    loadLists()
+                }
+                .addOnFailureListener { e ->
                     _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању листе")
                 }
         }
@@ -111,66 +174,49 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                 return@launch
             }
             
+            // Креирамо нову ставку
             val newItem = ShoppingItem(
                 id = UUID.randomUUID().toString(),
                 name = form.name,
                 quantity = form.quantity,
-                addedAt = Timestamp.now()
+                isCompleted = false,
+                note = ""
             )
             
+            // Додајемо нову ставку у листу постојећих ставки
             val updatedItems = currentList.items + newItem
-            val updatedList = currentList.copy(items = updatedItems)
             
-            repository.updateShoppingList(updatedList)
-                .onSuccess {
+            // Креирамо ажурирану листу
+            val updatedList = currentList.copy(
+                items = updatedItems
+            )
+            
+            // Ажурирамо листу у Firestore-у
+            firestore.collection("shopping_lists").document(currentList.id ?: "")
+                .set(updatedList)
+                .addOnSuccessListener {
                     _selectedList.value = updatedList
                     _itemFormState.value = ItemFormState()
                 }
-                .onFailure { e ->
+                .addOnFailureListener { e ->
                     _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању ставке")
                 }
         }
     }
     
-    // Ажурирање статуса ставке (завршено/незавршено)
-    fun toggleItemStatus(itemId: String) {
+    // Ажурирање статуса листе (завршено/незавршено)
+    fun toggleListStatus(listId: String) {
         viewModelScope.launch {
             val currentList = _selectedList.value ?: return@launch
             
-            val updatedItems = currentList.items.map { item ->
-                if (item.id == itemId) {
-                    item.copy(isCompleted = !item.isCompleted)
-                } else {
-                    item
-                }
-            }
+            val updatedList = currentList.copy(isCompleted = !currentList.isCompleted)
             
-            val updatedList = currentList.copy(items = updatedItems)
-            
-            repository.updateShoppingList(updatedList)
-                .onSuccess {
+            firestore.collection("shopping_lists").document(listId).set(updatedList)
+                .addOnSuccessListener {
                     _selectedList.value = updatedList
                 }
-                .onFailure { e ->
-                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању ставке")
-                }
-        }
-    }
-    
-    // Брисање ставке из листе
-    fun removeItemFromList(itemId: String) {
-        viewModelScope.launch {
-            val currentList = _selectedList.value ?: return@launch
-            
-            val updatedItems = currentList.items.filter { it.id != itemId }
-            val updatedList = currentList.copy(items = updatedItems)
-            
-            repository.updateShoppingList(updatedList)
-                .onSuccess {
-                    _selectedList.value = updatedList
-                }
-                .onFailure { e ->
-                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању ставке")
+                .addOnFailureListener { e ->
+                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању листе")
                 }
         }
     }

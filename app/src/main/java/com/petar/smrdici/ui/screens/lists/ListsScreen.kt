@@ -1,32 +1,40 @@
 package com.petar.smrdici.ui.screens.lists
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.petar.smrdici.R
 import com.petar.smrdici.data.model.ShoppingItem
 import com.petar.smrdici.data.model.ShoppingList
 import java.text.SimpleDateFormat
 import java.util.*
+import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
-import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun ListsScreen(
@@ -35,121 +43,273 @@ fun ListsScreen(
     listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory(LocalContext.current))
 ) {
     val authState by authViewModel.authState.collectAsState()
-    val user = if (authState is com.petar.smrdici.ui.auth.AuthState.Authenticated) {
-        (authState as com.petar.smrdici.ui.auth.AuthState.Authenticated).user
+    val listsUiState by listsViewModel.uiState.collectAsState()
+    val user = if (authState is AuthState.Authenticated) {
+        (authState as AuthState.Authenticated).user
     } else null
     
-    val uiState by listsViewModel.uiState.collectAsState()
-    val selectedList by listsViewModel.selectedList.collectAsState()
-    val listFormState by listsViewModel.listFormState.collectAsState()
     var showAddListDialog by remember { mutableStateOf(false) }
     
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        AppHeader(
-            title = "Листе за куповину",
-            user = user,
-            navController = navController,
-            showBackButton = true
-        )
-        
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Листа за куповину
-            when (uiState) {
-                is ListsUiState.Loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
+            // Заглавље са дугметом за повратак
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { navController.navigateUp() }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Назад"
+                    )
                 }
                 
-                is ListsUiState.Error -> {
-                    val errorState = uiState as ListsUiState.Error
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                Text(
+                    text = "Листе",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+            }
+            
+            // Садржај екрана
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Предефинисане листе (2 у реду)
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text(
-                            text = errorState.message,
-                            color = MaterialTheme.colorScheme.error
+                        // Листа за продавницу
+                        PredefinedListCard(
+                            title = "Spisak za prodavnicu",
+                            iconResId = R.drawable.ic_shopping,
+                            backgroundColor = Color(0xFF30C9C9),
+                            onClick = {
+                                // Навигација на детаље листе за продавницу
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        // Кућни послови
+                        PredefinedListCard(
+                            title = "Kućni poslovi",
+                            iconResId = R.drawable.ic_home,
+                            backgroundColor = Color(0xFF9ED36A),
+                            onClick = {
+                                // Навигација на детаље листе кућних послова
+                            },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
                 
-                is ListsUiState.Success -> {
-                    val successState = uiState as ListsUiState.Success
-                    
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
-                        items(successState.lists) { list ->
-                            ShoppingListItem(
-                                list = list,
-                                onClick = { listsViewModel.selectList(list) },
-                                onDelete = { listsViewModel.deleteShoppingList(list.id) }
+                // Прилагођене листе
+                when (listsUiState) {
+                    is ListsUiState.Loading -> {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
+                    }
+                    is ListsUiState.Success -> {
+                        val customLists = (listsUiState as ListsUiState.Success).lists
+                        items(customLists) { list ->
+                            CustomListItem(
+                                title = list.title,
+                                isCompleted = list.isCompleted,
+                                onClick = {
+                                    // Навигација на детаље прилагођене листе
+                                }
+                            )
+                        }
+                    }
+                    is ListsUiState.Error -> {
+                        item {
+                            Text(
+                                text = (listsUiState as ListsUiState.Error).message,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(16.dp)
                             )
                         }
                     }
                 }
             }
-            
-            // Дугме за додавање нове листе
-            FloatingActionButton(
-                onClick = { showAddListDialog = true },
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Додај листу"
-                )
-            }
+        }
+        
+        // Плутајуће дугме за додавање нове листе
+        FloatingActionButton(
+            onClick = { showAddListDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+            containerColor = MaterialTheme.colorScheme.primary
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Додај нову листу"
+            )
         }
     }
     
     // Дијалог за додавање нове листе
     if (showAddListDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddListDialog = false },
-            title = { Text("Нова листа за куповину") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = listFormState.title,
-                        onValueChange = { listsViewModel.updateListForm { it.copy(title = it.title) } },
-                        label = { Text("Назив листе") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+        AddListDialog(
+            onDismiss = { showAddListDialog = false },
+            onListAdded = {
+                showAddListDialog = false
+                listsViewModel.loadLists()
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        listsViewModel.addShoppingList()
-                        showAddListDialog = false
-                    },
-                    enabled = listFormState.isValid
-                ) {
-                    Text("Додај")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddListDialog = false }) {
-                    Text("Откажи")
-                }
-            }
+            listsViewModel = listsViewModel
         )
     }
+}
+
+@Composable
+fun PredefinedListCard(
+    title: String,
+    iconResId: Int,
+    backgroundColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .height(120.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = title,
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Image(
+                painter = painterResource(id = iconResId),
+                contentDescription = title,
+                modifier = Modifier
+                    .size(48.dp)
+                    .align(Alignment.End),
+                contentScale = ContentScale.Fit
+            )
+        }
+    }
+}
+
+@Composable
+fun CustomListItem(
+    title: String,
+    isCompleted: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Икона за статус (чекирано или не)
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(if (isCompleted) Color(0xFF4CAF50) else Color.LightGray),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isCompleted) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Завршено",
+                        tint = Color.White
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            // Наслов листе
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+    }
+}
+
+@Composable
+fun AddListDialog(
+    onDismiss: () -> Unit,
+    onListAdded: () -> Unit,
+    listsViewModel: ListsViewModel
+) {
+    var title by remember { mutableStateOf("") }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Додај нову листу") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Наслов листе") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (title.isNotBlank()) {
+                        listsViewModel.addList(title)
+                        onListAdded()
+                    }
+                },
+                enabled = title.isNotBlank()
+            ) {
+                Text("Додај")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Откажи")
+            }
+        }
+    )
 }
 
 @Composable
@@ -221,49 +381,12 @@ fun ShoppingItemRow(
         
         IconButton(onClick = onDelete) {
             Icon(
-                Icons.Default.Delete,
+                imageVector = Icons.Default.Delete,
                 contentDescription = "Обриши ставку",
                 tint = MaterialTheme.colorScheme.error
             )
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AddListDialog(
-    formState: ListFormState,
-    onFormChanged: (ListFormState) -> Unit,
-    onAddList: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Додај нову листу") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = formState.title,
-                    onValueChange = { onFormChanged(formState.copy(title = it)) },
-                    label = { Text("Назив листе") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onAddList,
-                enabled = formState.isValid
-            ) {
-                Text("Додај")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Откажи")
-            }
-        }
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
