@@ -39,7 +39,8 @@ fun ProfileScreen(
         AppHeader(
             title = "Профил",
             user = user,
-            navController = navController
+            navController = navController,
+            showBackButton = true
         )
         
         Column(

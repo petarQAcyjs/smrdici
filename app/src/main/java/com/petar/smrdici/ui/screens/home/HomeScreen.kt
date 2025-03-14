@@ -43,7 +43,7 @@ fun HomeScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         AppHeader(
-            title = "Femici",
+            title = "Почетна",
             user = user,
             navController = navController
         )

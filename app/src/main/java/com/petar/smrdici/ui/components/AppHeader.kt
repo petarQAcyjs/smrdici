@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,23 +27,11 @@ fun AppHeader(
 ) {
     TopAppBar(
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                if (title == "Femici") {
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = "Dropdown",
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
         },
         navigationIcon = {
             if (showBackButton) {
@@ -61,7 +48,7 @@ fun AppHeader(
             if (user != null) {
                 Surface(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(32.dp)
                         .clip(CircleShape)
                         .clickable {
                             navController.navigate(Screen.Profile.route)
@@ -79,8 +66,9 @@ fun AppHeader(
                     }
                 }
                 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(12.dp))
             }
-        }
+        },
+        modifier = Modifier.height(48.dp)
     )
 } 
