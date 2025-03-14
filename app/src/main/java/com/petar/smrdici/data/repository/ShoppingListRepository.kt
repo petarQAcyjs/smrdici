@@ -12,15 +12,11 @@ import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 class ShoppingListRepository {
-    private val firestore = FirebaseFirestore.getInstance()
-    private val auth = FirebaseAuth.getInstance()
-    private val listsCollection = firestore.collection("shopping_lists")
+    private val db = FirebaseFirestore.getInstance()
+    private val listsCollection = db.collection("shopping_lists")
+    private val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     
-    // Добијање тренутног корисника
-    private val currentUserId: String
-        get() = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
-    
-    // Добијање свих листа за тренутног корисника
+    // Добијање свих листа за куповину за тренутног корисника
     fun getShoppingListsForCurrentUser(): Flow<List<ShoppingList>> = callbackFlow {
         val listener = listsCollection
             .whereEqualTo("createdBy", currentUserId)
@@ -79,35 +75,29 @@ class ShoppingListRepository {
         awaitClose { listener.remove() }
     }
     
-    // Додавање нове листе
-    suspend fun addShoppingList(list: ShoppingList): Result<ShoppingList> {
-        return try {
-            val listWithUser = list.copy(createdBy = currentUserId)
-            val docRef = listsCollection.add(listWithUser).await()
-            Result.success(listWithUser.copy(id = docRef.id))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    // Додавање нове листе за куповину
+    suspend fun addShoppingList(list: ShoppingList): Result<Unit> = try {
+        val listWithUser = list.copy(createdBy = currentUserId)
+        listsCollection.add(listWithUser).await()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
     }
     
-    // Ажурирање листе
-    suspend fun updateShoppingList(list: ShoppingList): Result<ShoppingList> {
-        return try {
-            listsCollection.document(list.id).set(list).await()
-            Result.success(list)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    // Ажурирање постојеће листе за куповину
+    suspend fun updateShoppingList(list: ShoppingList): Result<Unit> = try {
+        listsCollection.document(list.id).set(list).await()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
     }
     
-    // Брисање листе
-    suspend fun deleteShoppingList(listId: String): Result<Unit> {
-        return try {
-            listsCollection.document(listId).delete().await()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    // Брисање листе за куповину
+    suspend fun deleteShoppingList(listId: String): Result<Unit> = try {
+        listsCollection.document(listId).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
     }
     
     // Додавање ставке у листу

@@ -2,6 +2,7 @@ package com.petar.smrdici.ui.screens.lists
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.Timestamp
 import com.petar.smrdici.data.model.ShoppingItem
 import com.petar.smrdici.data.model.ShoppingList
 import com.petar.smrdici.data.repository.ShoppingListRepository
@@ -73,13 +74,13 @@ class ListsViewModel : ViewModel() {
                 return@launch
             }
             
-            val list = ShoppingList(
-                title = form.title
+            val newList = ShoppingList(
+                title = form.title,
+                createdAt = Timestamp.now()
             )
             
-            repository.addShoppingList(list)
+            repository.addShoppingList(newList)
                 .onSuccess {
-                    // Ресетујемо форму
                     _listFormState.value = ListFormState()
                 }
                 .onFailure { e ->
@@ -92,11 +93,6 @@ class ListsViewModel : ViewModel() {
     fun deleteShoppingList(listId: String) {
         viewModelScope.launch {
             repository.deleteShoppingList(listId)
-                .onSuccess {
-                    if (_selectedList.value?.id == listId) {
-                        _selectedList.value = null
-                    }
-                }
                 .onFailure { e ->
                     _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању листе")
                 }
@@ -107,23 +103,25 @@ class ListsViewModel : ViewModel() {
     fun addItemToList() {
         viewModelScope.launch {
             val form = _itemFormState.value
-            val selectedList = _selectedList.value
+            val currentList = _selectedList.value
             
-            if (!form.isValid || selectedList == null) {
+            if (!form.isValid || currentList == null) {
                 return@launch
             }
             
-            val item = ShoppingItem(
+            val newItem = ShoppingItem(
                 id = UUID.randomUUID().toString(),
                 name = form.name,
-                quantity = form.quantity
+                quantity = form.quantity,
+                addedAt = Timestamp.now()
             )
             
-            repository.addItemToList(selectedList.id, item)
-                .onSuccess { updatedList ->
-                    // Ажурирамо изабрану листу
+            val updatedItems = currentList.items + newItem
+            val updatedList = currentList.copy(items = updatedItems)
+            
+            repository.updateShoppingList(updatedList)
+                .onSuccess {
                     _selectedList.value = updatedList
-                    // Ресетујемо форму
                     _itemFormState.value = ItemFormState()
                 }
                 .onFailure { e ->
@@ -135,13 +133,20 @@ class ListsViewModel : ViewModel() {
     // Ажурирање статуса ставке (завршено/незавршено)
     fun toggleItemStatus(itemId: String) {
         viewModelScope.launch {
-            val selectedList = _selectedList.value ?: return@launch
+            val currentList = _selectedList.value ?: return@launch
             
-            val item = selectedList.items.find { it.id == itemId } ?: return@launch
-            val updatedItem = item.copy(isCompleted = !item.isCompleted)
+            val updatedItems = currentList.items.map { item ->
+                if (item.id == itemId) {
+                    item.copy(isCompleted = !item.isCompleted)
+                } else {
+                    item
+                }
+            }
             
-            repository.updateItemInList(selectedList.id, updatedItem)
-                .onSuccess { updatedList ->
+            val updatedList = currentList.copy(items = updatedItems)
+            
+            repository.updateShoppingList(updatedList)
+                .onSuccess {
                     _selectedList.value = updatedList
                 }
                 .onFailure { e ->
@@ -153,10 +158,13 @@ class ListsViewModel : ViewModel() {
     // Брисање ставке из листе
     fun removeItemFromList(itemId: String) {
         viewModelScope.launch {
-            val selectedList = _selectedList.value ?: return@launch
+            val currentList = _selectedList.value ?: return@launch
             
-            repository.removeItemFromList(selectedList.id, itemId)
-                .onSuccess { updatedList ->
+            val updatedItems = currentList.items.filter { it.id != itemId }
+            val updatedList = currentList.copy(items = updatedItems)
+            
+            repository.updateShoppingList(updatedList)
+                .onSuccess {
                     _selectedList.value = updatedList
                 }
                 .onFailure { e ->
