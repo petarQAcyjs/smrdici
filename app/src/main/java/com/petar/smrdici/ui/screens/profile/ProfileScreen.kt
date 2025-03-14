@@ -20,101 +20,108 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel()
 ) {
     val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is AuthState.Authenticated) {
+        (authState as AuthState.Authenticated).user
+    } else null
     
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier.fillMaxSize()
     ) {
-        TopAppBar(
-            title = { Text("Профил") }
+        AppHeader(
+            title = "Профил",
+            user = user,
+            navController = navController
         )
         
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Профилна слика и информације о кориснику
-        if (authState is AuthState.Authenticated) {
-            val user = (authState as AuthState.Authenticated).user
-            
-            // Профилна слика (овде можете додати стварну слику)
-            Surface(
-                modifier = Modifier
-                    .size(120.dp)
-                    .clip(CircleShape),
-                color = MaterialTheme.colorScheme.primary
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = user.displayName?.firstOrNull()?.toString() ?: user.email?.firstOrNull()?.toString() ?: "?",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Име корисника
-            Text(
-                text = user.displayName ?: "Корисник",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-            
-            // Емаил корисника
-            Text(
-                text = user.email ?: "",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
-            
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Spacer(modifier = Modifier.height(32.dp))
             
-            // Опције профила
-            ProfileOption(
-                icon = Icons.Default.Edit,
-                title = "Уреди профил",
-                onClick = { /* Имплементирати уређивање профила */ }
-            )
-            
-            ProfileOption(
-                icon = Icons.Default.Settings,
-                title = "Подешавања",
-                onClick = { /* Имплементирати подешавања */ }
-            )
-            
-            ProfileOption(
-                icon = Icons.Default.ExitToApp,
-                title = "Одјави се",
-                onClick = {
-                    authViewModel.signOut()
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(Screen.Home.route) { inclusive = true }
+            // Профилна слика и информације о кориснику
+            if (user != null) {
+                // Профилна слика (овде можете додати стварну слику)
+                Surface(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .clip(CircleShape),
+                    color = MaterialTheme.colorScheme.primary
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = user.displayName?.firstOrNull()?.toString() ?: user.email?.firstOrNull()?.toString() ?: "?",
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
                     }
                 }
-            )
-        } else {
-            // Ако корисник није пријављен, приказати поруку
-            Text("Нисте пријављени")
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Button(
-                onClick = {
-                    navController.navigate(Screen.Login.route)
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Име корисника
+                Text(
+                    text = user.displayName ?: "Корисник",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                // Емаил корисника
+                Text(
+                    text = user.email ?: "",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                // Опције профила
+                ProfileOption(
+                    icon = Icons.Default.Edit,
+                    title = "Уреди профил",
+                    onClick = { /* Имплементирати уређивање профила */ }
+                )
+                
+                ProfileOption(
+                    icon = Icons.Default.Settings,
+                    title = "Подешавања",
+                    onClick = { /* Имплементирати подешавања */ }
+                )
+                
+                ProfileOption(
+                    icon = Icons.Default.ExitToApp,
+                    title = "Одјави се",
+                    onClick = {
+                        authViewModel.signOut()
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(Screen.Home.route) { inclusive = true }
+                        }
+                    }
+                )
+            } else {
+                // Ако корисник није пријављен, приказати поруку
+                Text("Нисте пријављени")
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Button(
+                    onClick = {
+                        navController.navigate(Screen.Login.route)
+                    }
+                ) {
+                    Text("Пријави се")
                 }
-            ) {
-                Text("Пријави се")
             }
         }
     }

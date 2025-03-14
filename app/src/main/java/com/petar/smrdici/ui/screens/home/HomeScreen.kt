@@ -22,11 +22,11 @@ import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -35,56 +35,56 @@ fun HomeScreen(
 ) {
     val authState by authViewModel.authState.collectAsState()
     val todayEvents by homeViewModel.todayEvents.collectAsState()
+    val user = if (authState is AuthState.Authenticated) {
+        (authState as AuthState.Authenticated).user
+    } else null
     
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier.fillMaxSize()
     ) {
-        TopAppBar(
-            title = { Text("Почетна") }
+        AppHeader(
+            title = "Femici",
+            user = user,
+            navController = navController
         )
         
-        // Приказ информација о кориснику
-        if (authState is AuthState.Authenticated) {
-            val user = (authState as AuthState.Authenticated).user
-            Text(
-                text = "Добродошли, ${user.displayName ?: user.email}",
-                modifier = Modifier.padding(vertical = 16.dp)
-            )
-        }
-        
-        // Приказ данашњих активности
-        TodayActivitiesCard(
-            events = todayEvents,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        
-        // Картице за навигацију
         Column(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Листе
-            NavigationCard(
-                title = "Листе",
-                iconResId = R.drawable.ic_list,
-                onClick = { navController.navigate(Screen.Lists.route) }
+            // Приказ данашњих активности
+            TodayActivitiesCard(
+                events = todayEvents,
+                modifier = Modifier.padding(bottom = 16.dp)
             )
             
-            // Календар
-            NavigationCard(
-                title = "Календар",
-                iconResId = R.drawable.ic_calendar,
-                onClick = { navController.navigate(Screen.Calendar.route) }
-            )
-            
-            // Буџет
-            NavigationCard(
-                title = "Буџет",
-                iconResId = R.drawable.ic_budget,
-                onClick = { navController.navigate(Screen.Budget.route) }
-            )
+            // Картице за навигацију
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Листе
+                NavigationCard(
+                    title = "Листе",
+                    iconResId = R.drawable.ic_list,
+                    onClick = { navController.navigate(Screen.Lists.route) }
+                )
+                
+                // Календар
+                NavigationCard(
+                    title = "Календар",
+                    iconResId = R.drawable.ic_calendar,
+                    onClick = { navController.navigate(Screen.Calendar.route) }
+                )
+                
+                // Буџет
+                NavigationCard(
+                    title = "Буџет",
+                    iconResId = R.drawable.ic_budget,
+                    onClick = { navController.navigate(Screen.Budget.route) }
+                )
+            }
         }
     }
 }
