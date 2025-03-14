@@ -55,19 +55,6 @@ fun HomeScreen(
             events = todayEvents,
             modifier = Modifier.padding(vertical = 16.dp)
         )
-        
-        // Дугме за одјаву
-        Button(
-            onClick = {
-                authViewModel.signOut()
-                navController.navigate(com.petar.smrdici.ui.navigation.Screen.Login.route) {
-                    popUpTo(com.petar.smrdici.ui.navigation.Screen.Home.route) { inclusive = true }
-                }
-            },
-            modifier = Modifier.padding(vertical = 16.dp)
-        ) {
-            Text("Одјави се")
-        }
     }
 }
 

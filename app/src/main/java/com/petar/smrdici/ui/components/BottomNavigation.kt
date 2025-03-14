@@ -2,18 +2,9 @@ package com.petar.smrdici.ui.components
 
 import android.util.Log
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.AccountBox
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.List
-import androidx.compose.material.icons.outlined.AccountBox
-import androidx.compose.material.icons.outlined.DateRange
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.res.stringResource
@@ -32,39 +23,38 @@ fun BottomNavigation(navController: NavController) {
         BottomNavItem.Home,
         BottomNavItem.Budget,
         BottomNavItem.Calendar,
-        BottomNavItem.Lists
+        BottomNavItem.Lists,
+        BottomNavItem.Profile
     )
     
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = navBackStackEntry?.destination
+    val currentRoute = navBackStackEntry?.destination?.route
     
     NavigationBar {
         items.forEach { item ->
-            val selected = currentDestination?.hierarchy?.any { it.route == item.screen.route } == true
-            
             NavigationBarItem(
-                icon = { 
+                icon = {
                     Icon(
-                        imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
+                        imageVector = if (currentRoute == item.screen.route) {
+                            item.selectedIcon
+                        } else {
+                            item.unselectedIcon
+                        },
                         contentDescription = item.titleResId?.let { stringResource(it) }
                     )
                 },
-                label = { 
-                    item.titleResId?.let { 
-                        Text(stringResource(it)) 
-                    } ?: Text(item.screen.route.replaceFirstChar { it.uppercase() })
+                label = {
+                    item.titleResId?.let {
+                        Text(text = stringResource(it))
+                    }
                 },
-                selected = selected,
+                selected = currentRoute == item.screen.route,
                 onClick = {
-                    navController.navigate(item.screen.route) {
-                        // Избегавање вишеструких копија исте дестинације на стеку
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
+                    if (currentRoute != item.screen.route) {
+                        navController.navigate(item.screen.route) {
+                            popUpTo(navController.graph.startDestinationId)
+                            launchSingleTop = true
                         }
-                        // Избегавање истих дестинација
-                        launchSingleTop = true
-                        // Чување и враћање стања при навигацији
-                        restoreState = true
                     }
                 }
             )
@@ -104,5 +94,12 @@ sealed class BottomNavItem(
         titleResId = R.string.lists,
         selectedIcon = Icons.Filled.List,
         unselectedIcon = Icons.Outlined.List
+    )
+    
+    object Profile : BottomNavItem(
+        screen = Screen.Profile,
+        titleResId = R.string.profile,
+        selectedIcon = Icons.Filled.Person,
+        unselectedIcon = Icons.Outlined.Person
     )
 } 
