@@ -43,25 +43,45 @@ class ListsViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             try {
                 val userId = auth.currentUser?.uid ?: return@launch
+                val familyId = "default" // Подразумевана породица за дељење
                 
                 _uiState.value = ListsUiState.Loading
                 
-                firestore.collection("shopping_lists")
+                // Користимо два упита - један за све листе које је креирао корисник
+                // и један за све листе у породици којој припада корисник
+                val userListsQuery = firestore.collection("shopping_lists")
                     .whereEqualTo("createdBy", userId)
-                    .orderBy("createdAt", Query.Direction.DESCENDING)
-                    .get()
-                    .addOnSuccessListener { snapshot ->
+                
+                val familyListsQuery = firestore.collection("shopping_lists")
+                    .whereEqualTo("familyId", familyId)
+                
+                // Извршавамо први упит за листе корисника
+                userListsQuery.get().addOnSuccessListener { userSnapshot ->
+                    // Затим извршавамо други упит за породичне листе
+                    familyListsQuery.get().addOnSuccessListener { familySnapshot ->
                         viewModelScope.launch {
-                            val lists = snapshot.documents.mapNotNull { doc ->
+                            // Комбинујемо резултате оба упита у једну листу
+                            val allDocs = userSnapshot.documents + familySnapshot.documents
+                            
+                            // Креирамо мапу где је кључ ID документа да избегнемо дупликате
+                            val uniqueListsMap = mutableMapOf<String, ShoppingList>()
+                            
+                            // Обрађујемо све документе и додајемо их у мапу
+                            allDocs.forEach { doc ->
                                 try {
                                     val list = doc.toObject(ShoppingList::class.java)
                                     list?.id = doc.id
-                                    list
+                                    if (list != null) {
+                                        uniqueListsMap[doc.id] = list
+                                    }
                                 } catch (e: Exception) {
                                     Log.e("ListsViewModel", "Грешка при обради листе", e)
-                                    null
                                 }
                             }
+                            
+                            // Конвертујемо мапу у листу и сортирамо по времену креирања (опадајуће)
+                            val lists = uniqueListsMap.values.toList()
+                                .sortedByDescending { it.createdAt.seconds }
                             
                             // Филтрирамо листе да искључимо предефинисане листе из главног приказа
                             val filteredLists = lists.filter { list ->
@@ -70,11 +90,14 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                             
                             _uiState.value = ListsUiState.Success(filteredLists)
                         }
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e("ListsViewModel", "Грешка при учитавању листа", e)
+                    }.addOnFailureListener { e ->
+                        Log.e("ListsViewModel", "Грешка при учитавању породичних листа", e)
                         _uiState.value = ListsUiState.Error(e.message ?: "Грешка при учитавању листа")
                     }
+                }.addOnFailureListener { e ->
+                    Log.e("ListsViewModel", "Грешка при учитавању корисничких листа", e)
+                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при учитавању листа")
+                }
             } catch (e: Exception) {
                 Log.e("ListsViewModel", "Општа грешка", e)
                 _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
@@ -82,32 +105,39 @@ class ListsViewModel(private val context: Context) : ViewModel() {
         }
     }
     
-    fun addList(title: String) {
+    fun addList(title: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
             try {
-                val userId = auth.currentUser?.uid ?: return@launch
-                
+                val userId = auth.currentUser?.uid
+                if (userId == null) {
+                    onError("Корисник није пријављен")
+                    return@launch
+                }
+
+                // Креирамо нову инстанцу листе са подразумеваним familyId за дељење
                 val newList = ShoppingList(
-                    title = title,
+                    title = title.trim(),
                     createdBy = userId,
+                    familyId = "default", // Подразумевана породица
                     createdAt = Timestamp.now(),
-                    isCompleted = false,
-                    items = emptyList()
+                    items = emptyList(),
+                    isCompleted = false
                 )
-                
+
                 firestore.collection("shopping_lists")
                     .add(newList)
                     .addOnSuccessListener { documentReference ->
-                        Log.d("ListsViewModel", "Листа додата са ID: ${documentReference.id}")
-                        loadLists() // Поново учитавамо листе
+                        Log.d("ListsViewModel", "Листа успешно додата: ${documentReference.id}")
+                        onSuccess()
+                        loadLists() // Ажурирамо листе да бисмо приказали нову листу
                     }
                     .addOnFailureListener { e ->
-                        Log.e("ListsViewModel", "Грешка при додавању листе", e)
-                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању листе")
+                        Log.e("ListsViewModel", "Грешка приликом додавања листе", e)
+                        onError(e.message ?: "Непозната грешка при додавању листе")
                     }
             } catch (e: Exception) {
-                Log.e("ListsViewModel", "Општа грешка", e)
-                _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
+                Log.e("ListsViewModel", "Општа грешка при додавању листе", e)
+                onError(e.message ?: "Непозната грешка при додавању листе")
             }
         }
     }
@@ -141,9 +171,16 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                 return@launch
             }
             
+            val userId = auth.currentUser?.uid ?: return@launch
+            val familyId = "default" // Подразумевана породица за дељење
+            
             val newList = ShoppingList(
                 title = form.title,
-                createdAt = Timestamp.now()
+                createdBy = userId,
+                familyId = familyId,
+                createdAt = Timestamp.now(),
+                items = emptyList(),
+                isCompleted = false
             )
             
             firestore.collection("shopping_lists")
@@ -372,15 +409,21 @@ class ListsViewModel(private val context: Context) : ViewModel() {
     }
     
     // Функција за добијање или креирање предефинисане листе
-    fun getOrCreatePredefinedList(title: String, onSuccess: (String) -> Unit) {
+    fun getOrCreatePredefinedList(title: String, onSuccess: (String) -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
             try {
-                val userId = auth.currentUser?.uid ?: return@launch
+                val userId = auth.currentUser?.uid
+                if (userId == null) {
+                    onError("Корисник није пријављен")
+                    return@launch
+                }
+                
+                val familyId = "default" // Подразумевана породица за дељење
                 
                 // Прво проверавамо да ли листа већ постоји
                 firestore.collection("shopping_lists")
                     .whereEqualTo("title", title)
-                    .whereEqualTo("createdBy", userId)
+                    .whereEqualTo("familyId", familyId)
                     .get()
                     .addOnSuccessListener { snapshot ->
                         if (!snapshot.isEmpty) {
@@ -392,31 +435,38 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                             val newList = ShoppingList(
                                 title = title,
                                 createdBy = userId,
+                                familyId = familyId,
                                 createdAt = Timestamp.now(),
-                                isCompleted = false,
-                                items = emptyList()
+                                items = emptyList(),
+                                isCompleted = false
                             )
                             
                             firestore.collection("shopping_lists")
                                 .add(newList)
                                 .addOnSuccessListener { documentReference ->
+                                    Log.d("ListsViewModel", "Предефинисана листа креирана: ${documentReference.id}")
                                     onSuccess(documentReference.id)
                                 }
                                 .addOnFailureListener { e ->
                                     Log.e("ListsViewModel", "Грешка при креирању предефинисане листе", e)
-                                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при креирању листе")
+                                    onError(e.message ?: "Грешка при креирању листе")
                                 }
                         }
                     }
                     .addOnFailureListener { e ->
                         Log.e("ListsViewModel", "Грешка при провери предефинисане листе", e)
-                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при провери листе")
+                        onError(e.message ?: "Грешка при провери листе")
                     }
             } catch (e: Exception) {
                 Log.e("ListsViewModel", "Општа грешка", e)
-                _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
+                onError(e.message ?: "Непозната грешка")
             }
         }
+    }
+    
+    // Функција за директно ажурирање UI стања
+    fun updateUiState(newState: ListsUiState) {
+        _uiState.value = newState
     }
     
     // Додајемо Factory класу за креирање ListsViewModel са Context параметром

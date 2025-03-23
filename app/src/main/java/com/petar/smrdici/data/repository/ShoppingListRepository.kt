@@ -67,10 +67,12 @@ class ShoppingListRepository(private val context: Context) {
     suspend fun addShoppingList(title: String): Boolean {
         return try {
             val userId = auth.currentUser?.uid ?: return false
+            val familyId = "default" // Подразумевана породица за дељење
             
             val newList = ShoppingList(
                 title = title,
                 createdBy = userId,
+                familyId = familyId,
                 createdAt = Timestamp.now(),
                 isCompleted = false,
                 items = emptyList()

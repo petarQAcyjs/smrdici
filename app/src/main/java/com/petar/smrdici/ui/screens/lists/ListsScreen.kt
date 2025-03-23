@@ -125,9 +125,16 @@ fun ListsScreen(
                                 backgroundColor = Color(0xFF30C9C9),
                                 onClick = {
                                     // Креирамо предефинисану листу ако не постоји и навигирамо на њу
-                                    listsViewModel.getOrCreatePredefinedList("Spisak za prodavnicu") { listId ->
-                                        navController.navigate(Screen.ListDetails.createRoute(listId))
-                                    }
+                                    listsViewModel.getOrCreatePredefinedList(
+                                        title = "Spisak za prodavnicu",
+                                        onSuccess = { listId ->
+                                            navController.navigate(Screen.ListDetails.createRoute(listId))
+                                        },
+                                        onError = { errorMsg ->
+                                            // Можемо приказати поруку о грешци или обрадити грешку на други начин
+                                            listsViewModel.updateUiState(ListsUiState.Error(errorMsg))
+                                        }
+                                    )
                                 },
                                 modifier = Modifier.weight(1f)
                             )
@@ -139,9 +146,16 @@ fun ListsScreen(
                                 backgroundColor = Color(0xFF9ED36A),
                                 onClick = {
                                     // Креирамо предефинисану листу ако не постоји и навигирамо на њу
-                                    listsViewModel.getOrCreatePredefinedList("Kućni poslovi") { listId ->
-                                        navController.navigate(Screen.ListDetails.createRoute(listId))
-                                    }
+                                    listsViewModel.getOrCreatePredefinedList(
+                                        title = "Kućni poslovi",
+                                        onSuccess = { listId ->
+                                            navController.navigate(Screen.ListDetails.createRoute(listId))
+                                        },
+                                        onError = { errorMsg ->
+                                            // Можемо приказати поруку о грешци или обрадити грешку на други начин
+                                            listsViewModel.updateUiState(ListsUiState.Error(errorMsg))
+                                        }
+                                    )
                                 },
                                 modifier = Modifier.weight(1f)
                             )
@@ -317,6 +331,7 @@ fun AddListDialog(
     listsViewModel: ListsViewModel
 ) {
     var title by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -329,14 +344,31 @@ fun AddListDialog(
                     label = { Text("Наслов листе") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                
+                // Приказујемо поруку о грешци ако постоји
+                errorMessage?.let {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
                     if (title.isNotBlank()) {
-                        listsViewModel.addList(title)
-                        onListAdded()
+                        listsViewModel.addList(
+                            title = title,
+                            onSuccess = {
+                                onListAdded()
+                            },
+                            onError = { error ->
+                                errorMessage = error
+                            }
+                        )
                     }
                 },
                 enabled = title.isNotBlank()
