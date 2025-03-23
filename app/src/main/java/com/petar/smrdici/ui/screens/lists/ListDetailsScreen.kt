@@ -3,6 +3,8 @@ package com.petar.smrdici.ui.screens.lists
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -10,17 +12,26 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.ShoppingItem
 import com.petar.smrdici.data.model.ShoppingList
+import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun ListDetailsScreen(
     navController: NavController,
@@ -28,12 +39,34 @@ fun ListDetailsScreen(
     listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory(LocalContext.current))
 ) {
     val selectedList by listsViewModel.selectedList.collectAsState()
-    val itemFormState by listsViewModel.itemFormState.collectAsState()
-    var showAddItemDialog by remember { mutableStateOf(false) }
+    var newItemText by remember { mutableStateOf("") }
+    var isAddingNewItem by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    
+    // Додајемо стање за праћење када треба поново фокусирати поље
+    var shouldRefocus by remember { mutableStateOf(false) }
     
     // Учитавање листе при првом рендеровању
     LaunchedEffect(listId) {
         listsViewModel.loadListById(listId)
+    }
+    
+    // Фокусирамо поље за унос када се активира или када треба поново фокусирати
+    LaunchedEffect(isAddingNewItem, shouldRefocus) {
+        if (isAddingNewItem) {
+            try {
+                // Мало одлагање да би се осигурало да је компонента рендерована
+                delay(100)
+                focusRequester.requestFocus()
+                // Ресетујемо стање за поновно фокусирање
+                if (shouldRefocus) {
+                    shouldRefocus = false
+                }
+            } catch (e: Exception) {
+                // Игноришемо грешку ако компонента још није спремна
+            }
+        }
     }
     
     Box(modifier = Modifier.fillMaxSize()) {
@@ -144,7 +177,65 @@ fun ListDetailsScreen(
                             )
                         }
                         
-                        if (list.items.isEmpty()) {
+                        // Поље за унос нове ставке
+                        if (isAddingNewItem) {
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = false,
+                                        onCheckedChange = null
+                                    )
+                                    
+                                    OutlinedTextField(
+                                        value = newItemText,
+                                        onValueChange = { newItemText = it },
+                                        placeholder = { Text("Унесите назив ставке") },
+                                        singleLine = true,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 8.dp)
+                                            .focusRequester(focusRequester),
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                        keyboardActions = KeyboardActions(
+                                            onDone = {
+                                                if (newItemText.isNotBlank()) {
+                                                    listsViewModel.addItemToList(newItemText, 1)
+                                                    newItemText = ""
+                                                    // Постављамо заставицу да треба поново фокусирати поље
+                                                    shouldRefocus = true
+                                                }
+                                            }
+                                        )
+                                    )
+                                    
+                                    IconButton(
+                                        onClick = {
+                                            if (newItemText.isNotBlank()) {
+                                                listsViewModel.addItemToList(newItemText, 1)
+                                                newItemText = ""
+                                                // Постављамо заставицу да треба поново фокусирати поље
+                                                shouldRefocus = true
+                                            } else {
+                                                isAddingNewItem = false
+                                                keyboardController?.hide()
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Додај ставку"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (list.items.isEmpty() && !isAddingNewItem) {
                             item {
                                 Text(
                                     text = "Нема ставки у листи",
@@ -171,7 +262,9 @@ fun ListDetailsScreen(
         
         // Плутајуће дугме за додавање нове ставке
         FloatingActionButton(
-            onClick = { showAddItemDialog = true },
+            onClick = { 
+                isAddingNewItem = true
+            },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp),
@@ -183,17 +276,4 @@ fun ListDetailsScreen(
             )
         }
     }
-    
-    // Дијалог за додавање нове ставке
-    if (showAddItemDialog) {
-        AddItemDialog(
-            formState = itemFormState,
-            onFormChanged = { listsViewModel.updateItemForm { it } },
-            onAddItem = {
-                listsViewModel.addItemToList()
-                showAddItemDialog = false
-            },
-            onDismiss = { showAddItemDialog = false }
-        )
-    }
-} 
+}

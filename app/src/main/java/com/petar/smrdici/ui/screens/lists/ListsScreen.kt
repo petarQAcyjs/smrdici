@@ -381,7 +381,7 @@ fun ShoppingItemRow(
         )
         
         Text(
-            text = "${item.name} (${item.quantity})",
+            text = item.name,
             style = MaterialTheme.typography.bodyLarge,
             textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
             modifier = Modifier

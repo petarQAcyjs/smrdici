@@ -204,6 +204,40 @@ class ListsViewModel(private val context: Context) : ViewModel() {
         }
     }
     
+    // Додајемо нову методу за директно додавање ставке са именом
+    fun addItemToList(name: String, quantity: Int = 1) {
+        viewModelScope.launch {
+            val currentList = _selectedList.value ?: return@launch
+            
+            // Креирамо нову ставку
+            val newItem = ShoppingItem(
+                id = UUID.randomUUID().toString(),
+                name = name,
+                quantity = quantity,  // Увек ће бити 1 ако се не специфицира
+                isCompleted = false,
+                note = ""
+            )
+            
+            // Додајемо нову ставку у листу постојећих ставки
+            val updatedItems = currentList.items + newItem
+            
+            // Креирамо ажурирану листу
+            val updatedList = currentList.copy(
+                items = updatedItems
+            )
+            
+            // Ажурирамо листу у Firestore-у
+            firestore.collection("shopping_lists").document(currentList.id ?: "")
+                .set(updatedList)
+                .addOnSuccessListener {
+                    _selectedList.value = updatedList
+                }
+                .addOnFailureListener { e ->
+                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању ставке")
+                }
+        }
+    }
+    
     // Ажурирање статуса листе (завршено/незавршено)
     fun toggleListStatus(listId: String) {
         viewModelScope.launch {
