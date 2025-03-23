@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,6 +47,9 @@ fun ListDetailsScreen(
     
     // Додајемо стање за праћење када треба поново фокусирати поље
     var shouldRefocus by remember { mutableStateOf(false) }
+    
+    // Додајемо стање за дијалог за потврду брисања
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     
     // Учитавање листе при првом рендеровању
     LaunchedEffect(listId) {
@@ -100,6 +104,17 @@ fun ListDetailsScreen(
                                 contentDescription = "Промени статус",
                                 tint = if (selectedList?.isCompleted == true) 
                                     Color(0xFF4CAF50) else Color.Gray
+                            )
+                        }
+                        
+                        // Дугме за брисање листе
+                        IconButton(
+                            onClick = { showDeleteConfirmDialog = true }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Обриши листу",
+                                tint = MaterialTheme.colorScheme.error
                             )
                         }
                     }
@@ -204,7 +219,7 @@ fun ListDetailsScreen(
                                         keyboardActions = KeyboardActions(
                                             onDone = {
                                                 if (newItemText.isNotBlank()) {
-                                                    listsViewModel.addItemToList(newItemText, 1)
+                                                    listsViewModel.addItemToList(newItemText)
                                                     newItemText = ""
                                                     // Постављамо заставицу да треба поново фокусирати поље
                                                     shouldRefocus = true
@@ -216,7 +231,7 @@ fun ListDetailsScreen(
                                     IconButton(
                                         onClick = {
                                             if (newItemText.isNotBlank()) {
-                                                listsViewModel.addItemToList(newItemText, 1)
+                                                listsViewModel.addItemToList(newItemText)
                                                 newItemText = ""
                                                 // Постављамо заставицу да треба поново фокусирати поље
                                                 shouldRefocus = true
@@ -275,5 +290,45 @@ fun ListDetailsScreen(
                 contentDescription = "Додај нову ставку"
             )
         }
+    }
+    
+    // Дијалог за потврду брисања листе
+    if (showDeleteConfirmDialog) {
+        // Проверавамо да ли је листа предефинисана
+        val isPredefinedList = selectedList?.title == "Spisak za prodavnicu" || selectedList?.title == "Kućni poslovi"
+        
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text(if (isPredefinedList) "Није могуће обрисати" else "Брисање листе") },
+            text = { 
+                Text(
+                    if (isPredefinedList) 
+                        "Предефинисане листе не могу бити обрисане." 
+                    else 
+                        "Да ли сте сигурни да желите да обришете ову листу?"
+                ) 
+            },
+            confirmButton = {
+                if (!isPredefinedList) {
+                    Button(
+                        onClick = {
+                            selectedList?.id?.let { id ->
+                                listsViewModel.deleteShoppingList(id)
+                                navController.navigateUp()
+                            }
+                            showDeleteConfirmDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Обриши")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text(if (isPredefinedList) "У реду" else "Откажи")
+                }
+            }
+        )
     }
 }

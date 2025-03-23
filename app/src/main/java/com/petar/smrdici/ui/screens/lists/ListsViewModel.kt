@@ -61,7 +61,12 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                             }
                         }
                         
-                        _uiState.value = ListsUiState.Success(lists)
+                        // Филтрирамо листе да искључимо предефинисане листе из главног приказа
+                        val filteredLists = lists.filter { list ->
+                            list.title != "Spisak za prodavnicu" && list.title != "Kućni poslovi"
+                        }
+                        
+                        _uiState.value = ListsUiState.Success(filteredLists)
                     }
                     .addOnFailureListener { e ->
                         Log.e("ListsViewModel", "Грешка при учитавању листа", e)
@@ -154,13 +159,36 @@ class ListsViewModel(private val context: Context) : ViewModel() {
     // Брисање листе
     fun deleteShoppingList(listId: String) {
         viewModelScope.launch {
-            firestore.collection("shopping_lists").document(listId).delete()
-                .addOnSuccessListener {
-                    loadLists()
-                }
-                .addOnFailureListener { e ->
-                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању листе")
-                }
+            try {
+                // Прво проверавамо да ли је листа предефинисана
+                firestore.collection("shopping_lists").document(listId)
+                    .get()
+                    .addOnSuccessListener { document ->
+                        val list = document.toObject(ShoppingList::class.java)
+                        if (list != null && (list.title == "Spisak za prodavnicu" || list.title == "Kućni poslovi")) {
+                            // Не дозвољавамо брисање предефинисаних листа
+                            _uiState.value = ListsUiState.Error("Предефинисане листе не могу бити обрисане")
+                            return@addOnSuccessListener
+                        }
+                        
+                        // Ако није предефинисана, бришемо је
+                        firestore.collection("shopping_lists").document(listId).delete()
+                            .addOnSuccessListener {
+                                // Ресетујемо изабрану листу
+                                _selectedList.value = null
+                                // Поново учитавамо листе
+                                loadLists()
+                            }
+                            .addOnFailureListener { e ->
+                                _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању листе")
+                            }
+                    }
+                    .addOnFailureListener { e ->
+                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при провери листе")
+                    }
+            } catch (e: Exception) {
+                _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
+            }
         }
     }
     
