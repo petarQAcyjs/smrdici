@@ -36,6 +36,10 @@ import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @Composable
 fun ListsScreen(
@@ -49,7 +53,24 @@ fun ListsScreen(
         (authState as AuthState.Authenticated).user
     } else null
     
+    // Додајемо корутински опсег за Compose компоненту
+    val coroutineScope = rememberCoroutineScope()
+    
     var showAddListDialog by remember { mutableStateOf(false) }
+    
+    // Стање освежавања
+    var isRefreshing by remember { mutableStateOf(false) }
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
+    
+    // Функција за освежавање листа
+    val refreshLists = {
+        coroutineScope.launch {
+            isRefreshing = true
+            listsViewModel.loadLists()
+            delay(1000) // Минимално трајање анимације освежавања
+            isRefreshing = false
+        }
+    }
     
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -79,85 +100,94 @@ fun ListsScreen(
                 )
             }
             
-            // Садржај екрана
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            // Садржај екрана са подршком за освежавање
+            SwipeRefresh(
+                state = swipeRefreshState,
+                onRefresh = { refreshLists() },
+                modifier = Modifier.fillMaxSize()
             ) {
-                // Предефинисане листе (2 у реду)
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // Листа за продавницу
-                        PredefinedListCard(
-                            title = "Spisak za prodavnicu",
-                            iconResId = R.drawable.ic_shopping,
-                            backgroundColor = Color(0xFF30C9C9),
-                            onClick = {
-                                // Креирамо предефинисану листу ако не постоји и навигирамо на њу
-                                listsViewModel.getOrCreatePredefinedList("Spisak za prodavnicu") { listId ->
-                                    navController.navigate(Screen.ListDetails.createRoute(listId))
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        
-                        // Кућни послови
-                        PredefinedListCard(
-                            title = "Kućni poslovi",
-                            iconResId = R.drawable.ic_home,
-                            backgroundColor = Color(0xFF9ED36A),
-                            onClick = {
-                                // Креирамо предефинисану листу ако не постоји и навигирамо на њу
-                                listsViewModel.getOrCreatePredefinedList("Kućni poslovi") { listId ->
-                                    navController.navigate(Screen.ListDetails.createRoute(listId))
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-                
-                // Прилагођене листе
-                when (listsUiState) {
-                    is ListsUiState.Loading -> {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(200.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator()
-                            }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Предефинисане листе (2 у реду)
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Листа за продавницу
+                            PredefinedListCard(
+                                title = "Spisak za prodavnicu",
+                                iconResId = R.drawable.ic_shopping,
+                                backgroundColor = Color(0xFF30C9C9),
+                                onClick = {
+                                    // Креирамо предефинисану листу ако не постоји и навигирамо на њу
+                                    listsViewModel.getOrCreatePredefinedList("Spisak za prodavnicu") { listId ->
+                                        navController.navigate(Screen.ListDetails.createRoute(listId))
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            
+                            // Кућни послови
+                            PredefinedListCard(
+                                title = "Kućni poslovi",
+                                iconResId = R.drawable.ic_home,
+                                backgroundColor = Color(0xFF9ED36A),
+                                onClick = {
+                                    // Креирамо предефинисану листу ако не постоји и навигирамо на њу
+                                    listsViewModel.getOrCreatePredefinedList("Kućni poslovi") { listId ->
+                                        navController.navigate(Screen.ListDetails.createRoute(listId))
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
-                    is ListsUiState.Success -> {
-                        val customLists = (listsUiState as ListsUiState.Success).lists
-                        items(customLists) { list ->
-                            CustomListItem(
-                                title = list.title,
-                                isCompleted = list.isCompleted,
-                                onClick = {
-                                    // Навигација на детаље листе
-                                    list.id?.let { id ->
-                                        navController.navigate(Screen.ListDetails.createRoute(id))
+                    
+                    // Прилагођене листе
+                    when (listsUiState) {
+                        is ListsUiState.Loading -> {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    // Индикатор учитавања је већ присутан у SwipeRefresh
+                                    if (!isRefreshing) {
+                                        CircularProgressIndicator()
                                     }
                                 }
-                            )
+                            }
                         }
-                    }
-                    is ListsUiState.Error -> {
-                        item {
-                            Text(
-                                text = (listsUiState as ListsUiState.Error).message,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(16.dp)
-                            )
+                        is ListsUiState.Success -> {
+                            val customLists = (listsUiState as ListsUiState.Success).lists
+                            items(customLists) { list ->
+                                CustomListItem(
+                                    title = list.title,
+                                    isCompleted = list.isCompleted,
+                                    onClick = {
+                                        // Навигација на детаље листе
+                                        list.id?.let { id ->
+                                            navController.navigate(Screen.ListDetails.createRoute(id))
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        is ListsUiState.Error -> {
+                            item {
+                                Text(
+                                    text = (listsUiState as ListsUiState.Error).message,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
                         }
                     }
                 }

@@ -69,4 +69,7 @@ dependencies {
 
     // Календарска компонента
     implementation("com.kizitonwose.calendar:compose:2.4.1")
+    
+    // Swipe to refresh
+    implementation("com.google.accompanist:accompanist-swiperefresh:0.27.0")
 }

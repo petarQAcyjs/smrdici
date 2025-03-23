@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.*
+import kotlinx.coroutines.delay
 
 class ListsViewModel(private val context: Context) : ViewModel() {
     private val firestore = FirebaseFirestore.getInstance()
@@ -50,23 +51,25 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                     .orderBy("createdAt", Query.Direction.DESCENDING)
                     .get()
                     .addOnSuccessListener { snapshot ->
-                        val lists = snapshot.documents.mapNotNull { doc ->
-                            try {
-                                val list = doc.toObject(ShoppingList::class.java)
-                                list?.id = doc.id
-                                list
-                            } catch (e: Exception) {
-                                Log.e("ListsViewModel", "Грешка при обради листе", e)
-                                null
+                        viewModelScope.launch {
+                            val lists = snapshot.documents.mapNotNull { doc ->
+                                try {
+                                    val list = doc.toObject(ShoppingList::class.java)
+                                    list?.id = doc.id
+                                    list
+                                } catch (e: Exception) {
+                                    Log.e("ListsViewModel", "Грешка при обради листе", e)
+                                    null
+                                }
                             }
+                            
+                            // Филтрирамо листе да искључимо предефинисане листе из главног приказа
+                            val filteredLists = lists.filter { list ->
+                                list.title != "Spisak za prodavnicu" && list.title != "Kućni poslovi"
+                            }
+                            
+                            _uiState.value = ListsUiState.Success(filteredLists)
                         }
-                        
-                        // Филтрирамо листе да искључимо предефинисане листе из главног приказа
-                        val filteredLists = lists.filter { list ->
-                            list.title != "Spisak za prodavnicu" && list.title != "Kućni poslovi"
-                        }
-                        
-                        _uiState.value = ListsUiState.Success(filteredLists)
                     }
                     .addOnFailureListener { e ->
                         Log.e("ListsViewModel", "Грешка при учитавању листа", e)

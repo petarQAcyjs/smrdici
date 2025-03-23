@@ -31,6 +31,9 @@ import androidx.navigation.NavController
 import com.petar.smrdici.data.model.ShoppingItem
 import com.petar.smrdici.data.model.ShoppingList
 import kotlinx.coroutines.delay
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -45,15 +48,35 @@ fun ListDetailsScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     
+    // Додајемо корутински опсег за Compose компоненту
+    val coroutineScope = rememberCoroutineScope()
+    
     // Додајемо стање за праћење када треба поново фокусирати поље
     var shouldRefocus by remember { mutableStateOf(false) }
     
     // Додајемо стање за дијалог за потврду брисања
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     
+    // Додајемо стање за освежавање
+    var isRefreshing by remember { mutableStateOf(false) }
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
+    
+    // Функција за освежавање листе
+    val refreshList = {
+        coroutineScope.launch {
+            isRefreshing = true
+            listsViewModel.loadListById(listId)
+            delay(1000) // Минимално трајање анимације освежавања
+            isRefreshing = false
+        }
+    }
+    
     // Учитавање листе при првом рендеровању
     LaunchedEffect(listId) {
+        isRefreshing = true
         listsViewModel.loadListById(listId)
+        delay(500) // Кратко одлагање за иницијално учитавање
+        isRefreshing = false
     }
     
     // Фокусирамо поље за унос када се активира или када треба поново фокусирати
@@ -121,156 +144,164 @@ fun ListDetailsScreen(
                 }
             )
             
-            // Информације о листи
-            selectedList?.let { list ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    // Статус листе
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Статус: ",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = if (list.isCompleted) "Завршено" else "У току",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Број ставки
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Број ставки: ",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "${list.items.size}",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                    
-                    Divider(
+            // Информације о листи са подршком за освежавање превлачењем
+            SwipeRefresh(
+                state = swipeRefreshState,
+                onRefresh = { refreshList() },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                selectedList?.let { list ->
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp)
-                    )
-                    
-                    // Листа ставки
-                    Text(
-                        text = "Ставке",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(16.dp)
                     ) {
-                        items(list.items) { item ->
-                            ShoppingItemRow(
-                                item = item,
-                                onToggle = { 
-                                    listsViewModel.toggleItemStatus(list.id ?: "", item.id)
-                                },
-                                onDelete = {
-                                    listsViewModel.deleteItemFromList(list.id ?: "", item.id)
-                                }
+                        // Статус листе
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Статус: ",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (list.isCompleted) "Завршено" else "У току",
+                                style = MaterialTheme.typography.bodyLarge
                             )
                         }
                         
-                        // Поље за унос нове ставке
-                        if (isAddingNewItem) {
-                            item {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = false,
-                                        onCheckedChange = null
-                                    )
-                                    
-                                    OutlinedTextField(
-                                        value = newItemText,
-                                        onValueChange = { newItemText = it },
-                                        placeholder = { Text("Унесите назив ставке") },
-                                        singleLine = true,
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Број ставки
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Број ставки: ",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${list.items.size}",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                        
+                        Divider(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp)
+                        )
+                        
+                        // Листа ставки
+                        Text(
+                            text = "Ставке",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(list.items) { item ->
+                                ShoppingItemRow(
+                                    item = item,
+                                    onToggle = { 
+                                        listsViewModel.toggleItemStatus(list.id ?: "", item.id)
+                                    },
+                                    onDelete = {
+                                        listsViewModel.deleteItemFromList(list.id ?: "", item.id)
+                                    }
+                                )
+                            }
+                            
+                            // Поље за унос нове ставке
+                            if (isAddingNewItem) {
+                                item {
+                                    Row(
                                         modifier = Modifier
-                                            .weight(1f)
-                                            .padding(horizontal = 8.dp)
-                                            .focusRequester(focusRequester),
-                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                        keyboardActions = KeyboardActions(
-                                            onDone = {
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = false,
+                                            onCheckedChange = null
+                                        )
+                                        
+                                        OutlinedTextField(
+                                            value = newItemText,
+                                            onValueChange = { newItemText = it },
+                                            placeholder = { Text("Унесите назив ставке") },
+                                            singleLine = true,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(horizontal = 8.dp)
+                                                .focusRequester(focusRequester),
+                                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                            keyboardActions = KeyboardActions(
+                                                onDone = {
+                                                    if (newItemText.isNotBlank()) {
+                                                        listsViewModel.addItemToList(newItemText)
+                                                        newItemText = ""
+                                                        // Постављамо заставицу да треба поново фокусирати поље
+                                                        shouldRefocus = true
+                                                    }
+                                                }
+                                            )
+                                        )
+                                        
+                                        IconButton(
+                                            onClick = {
                                                 if (newItemText.isNotBlank()) {
                                                     listsViewModel.addItemToList(newItemText)
                                                     newItemText = ""
                                                     // Постављамо заставицу да треба поново фокусирати поље
                                                     shouldRefocus = true
+                                                } else {
+                                                    isAddingNewItem = false
+                                                    keyboardController?.hide()
                                                 }
                                             }
-                                        )
-                                    )
-                                    
-                                    IconButton(
-                                        onClick = {
-                                            if (newItemText.isNotBlank()) {
-                                                listsViewModel.addItemToList(newItemText)
-                                                newItemText = ""
-                                                // Постављамо заставицу да треба поново фокусирати поље
-                                                shouldRefocus = true
-                                            } else {
-                                                isAddingNewItem = false
-                                                keyboardController?.hide()
-                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = "Додај ставку"
+                                            )
                                         }
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = "Додај ставку"
-                                        )
                                     }
                                 }
                             }
-                        }
-                        
-                        if (list.items.isEmpty() && !isAddingNewItem) {
-                            item {
-                                Text(
-                                    text = "Нема ставки у листи",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                    modifier = Modifier.padding(vertical = 16.dp)
-                                )
+                            
+                            if (list.items.isEmpty() && !isAddingNewItem) {
+                                item {
+                                    Text(
+                                        text = "Нема ставки у листи",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(vertical = 16.dp)
+                                    )
+                                }
                             }
                         }
                     }
-                }
-            } ?: run {
-                // Приказ учитавања ако листа још није учитана
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
+                } ?: run {
+                    // Приказ учитавања ако листа још није учитана
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!isRefreshing) {
+                            CircularProgressIndicator()
+                        }
+                    }
                 }
             }
         }
