@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,6 +41,37 @@ import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.material.DismissDirection
+import androidx.compose.material.DismissValue
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.rememberDismissState
+import androidx.compose.ui.input.pointer.pointerInput
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.view.HapticFeedbackConstants
+import androidx.compose.ui.platform.LocalView
+import androidx.core.content.ContextCompat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.offset
 
 @Composable
 fun ListsScreen(
@@ -61,6 +93,15 @@ fun ListsScreen(
     // Стање освежавања
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
+    
+    // Приказ инструкција за превлачење
+    var showSwipeInstruction by remember { mutableStateOf(true) }
+    LaunchedEffect(key1 = showSwipeInstruction) {
+        if (showSwipeInstruction) {
+            delay(5000) // Приказ инструкција 5 секунди
+            showSwipeInstruction = false
+        }
+    }
     
     // Функција за освежавање листа
     val refreshLists = {
@@ -87,7 +128,7 @@ fun ListsScreen(
                     onClick = { navController.navigateUp() }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Назад"
                     )
                 }
@@ -106,6 +147,23 @@ fun ListsScreen(
                 onRefresh = { refreshLists() },
                 modifier = Modifier.fillMaxSize()
             ) {
+                // Инструкције за превлачење
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = showSwipeInstruction && listsUiState is ListsUiState.Success && (listsUiState as ListsUiState.Success).lists.isNotEmpty(),
+                    enter = androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.fadeOut()
+                ) {
+                    Text(
+                        text = "Превуците листе удесно за брисање",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -182,16 +240,18 @@ fun ListsScreen(
                         is ListsUiState.Success -> {
                             val customLists = (listsUiState as ListsUiState.Success).lists
                             items(customLists) { list ->
-                                CustomListItem(
-                                    title = list.title,
-                                    isCompleted = list.isCompleted,
-                                    onClick = {
-                                        // Навигација на детаље листе
-                                        list.id?.let { id ->
-                                            navController.navigate(Screen.ListDetails.createRoute(id))
+                                list.id?.let { listId ->
+                                    SwipeToDeleteListItem(
+                                        title = list.title,
+                                        isCompleted = list.isCompleted,
+                                        onClick = {
+                                            navController.navigate(Screen.ListDetails.createRoute(listId))
+                                        },
+                                        onDelete = {
+                                            listsViewModel.deleteShoppingList(listId)
                                         }
-                                    }
-                                )
+                                    )
+                                }
                             }
                         }
                         is ListsUiState.Error -> {
@@ -425,42 +485,6 @@ fun ShoppingListItem(
     }
 }
 
-@Composable
-fun ShoppingItemRow(
-    item: ShoppingItem,
-    onToggle: () -> Unit,
-    onDelete: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(
-            checked = item.isCompleted,
-            onCheckedChange = { onToggle() }
-        )
-        
-        Text(
-            text = item.name,
-            style = MaterialTheme.typography.bodyLarge,
-            textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 8.dp)
-        )
-        
-        IconButton(onClick = onDelete) {
-            Icon(
-                imageVector = Icons.Default.Delete,
-                contentDescription = "Обриши ставку",
-                tint = MaterialTheme.colorScheme.error
-            )
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddItemDialog(
@@ -511,4 +535,88 @@ fun AddItemDialog(
             }
         }
     )
+}
+
+@Composable
+fun SwipeToDeleteListItem(
+    title: String,
+    isCompleted: Boolean,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var show by remember { mutableStateOf(true) }
+    var offsetX by remember { mutableStateOf(0f) }
+    val view = LocalView.current
+    
+    // Израчунавамо праг за брисање (30% екрана)
+    val density = LocalDensity.current
+    val deleteThreshold = with(density) { 100.dp.toPx() }
+    
+    // Стање за превлачење
+    val draggableState = rememberDraggableState { delta ->
+        offsetX += delta
+        
+        // Ако је прелазимо праг први пут, додајемо хаптичку повратну информацију
+        if (offsetX > 50f && offsetX < 60f) {
+            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
+    }
+    
+    // Када је елемент потпуно одбачен, позовите onDelete
+    LaunchedEffect(offsetX) {
+        if (offsetX > deleteThreshold) {
+            show = false
+            delay(300) // Мала пауза за анимацију
+            onDelete()
+        }
+    }
+    
+    androidx.compose.animation.AnimatedVisibility(
+        visible = show,
+        exit = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }) + fadeOut()
+    ) {
+        Box {
+            // Позадина која се приказује при превлачењу
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(MaterialTheme.colorScheme.error)
+                    .padding(start = 16.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Обриши",
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Обриши листу",
+                        color = Color.White
+                    )
+                }
+            }
+            
+            // Садржај који се може превлачити
+            CustomListItem(
+                title = title,
+                isCompleted = isCompleted,
+                onClick = onClick,
+                modifier = modifier
+                    .draggable(
+                        state = draggableState,
+                        orientation = Orientation.Horizontal,
+                        onDragStopped = {
+                            // Ако не пређемо праг, враћамо елемент назад
+                            if (offsetX <= deleteThreshold) {
+                                offsetX = 0f
+                            }
+                        }
+                    )
+                    .offset { IntOffset(offsetX.roundToInt(), 0) }
+            )
+        }
+    }
 } 

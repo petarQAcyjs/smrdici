@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -34,6 +36,37 @@ import kotlinx.coroutines.delay
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.launch
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.material.DismissDirection
+import androidx.compose.material.DismissValue
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.FractionalThreshold
+import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.rememberDismissState
+import android.view.HapticFeedbackConstants
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -60,6 +93,15 @@ fun ListDetailsScreen(
     // Додајемо стање за освежавање
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
+    
+    // Приказ инструкција за превлачење
+    var showSwipeInstruction by remember { mutableStateOf(true) }
+    LaunchedEffect(key1 = showSwipeInstruction) {
+        if (showSwipeInstruction) {
+            delay(5000) // Приказ инструкција 5 секунди
+            showSwipeInstruction = false
+        }
+    }
     
     // Функција за освежавање листе
     val refreshList = {
@@ -111,7 +153,7 @@ fun ListDetailsScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Назад"
                         )
                     }
@@ -204,6 +246,23 @@ fun ListDetailsScreen(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         
+                        // Инструкције за превлачење
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = showSwipeInstruction && list.items.isNotEmpty(),
+                            enter = androidx.compose.animation.fadeIn(),
+                            exit = androidx.compose.animation.fadeOut()
+                        ) {
+                            Text(
+                                text = "Превуците ставке удесно за брисање",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        
                         LazyColumn(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -211,11 +270,11 @@ fun ListDetailsScreen(
                             items(list.items) { item ->
                                 ShoppingItemRow(
                                     item = item,
-                                    onToggle = { 
-                                        listsViewModel.toggleItemStatus(list.id ?: "", item.id)
+                                    onDelete = { itemToDelete -> 
+                                        listsViewModel.deleteItemFromList(list.id ?: "", itemToDelete.id)
                                     },
-                                    onDelete = {
-                                        listsViewModel.deleteItemFromList(list.id ?: "", item.id)
+                                    onCheckedChange = { itemToToggle, isChecked ->
+                                        listsViewModel.toggleItemStatus(list.id ?: "", itemToToggle.id)
                                     }
                                 )
                             }
@@ -361,5 +420,113 @@ fun ListDetailsScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+fun ShoppingItemRow(
+    item: ShoppingItem,
+    onDelete: (ShoppingItem) -> Unit,
+    onCheckedChange: (ShoppingItem, Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var show by remember { mutableStateOf(true) }
+    var offsetX by remember { mutableStateOf(0f) }
+    val view = LocalView.current
+    
+    // Израчунавамо праг за брисање
+    val density = LocalDensity.current
+    val deleteThreshold = with(density) { 100.dp.toPx() }
+    
+    // Стање за превлачење
+    val draggableState = rememberDraggableState { delta ->
+        offsetX += delta
+        
+        // Ако је прелазимо праг први пут, додајемо хаптичку повратну информацију
+        if (offsetX > 50f && offsetX < 60f) {
+            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
+    }
+    
+    // Када је елемент потпуно одбачен, позовите onDelete
+    LaunchedEffect(offsetX) {
+        if (offsetX > deleteThreshold) {
+            show = false
+            delay(300) // Мала пауза за анимацију
+            onDelete(item)
+        }
+    }
+    
+    androidx.compose.animation.AnimatedVisibility(
+        visible = show,
+        exit = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }) + fadeOut()
+    ) {
+        Box {
+            // Позадина која се приказује при превлачењу
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(MaterialTheme.colorScheme.error)
+                    .padding(start = 16.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Обриши",
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Обриши ставку",
+                        color = Color.White
+                    )
+                }
+            }
+            
+            // Садржај који се може превлачити
+            Row(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .draggable(
+                        state = draggableState,
+                        orientation = Orientation.Horizontal,
+                        onDragStopped = {
+                            // Ако не пређемо праг, враћамо елемент назад
+                            if (offsetX <= deleteThreshold) {
+                                offsetX = 0f
+                            }
+                        }
+                    )
+                    .offset { IntOffset(offsetX.roundToInt(), 0) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val styleText = if (item.isCompleted) {
+                    MaterialTheme.typography.bodyLarge.copy(
+                        textDecoration = TextDecoration.LineThrough
+                    )
+                } else {
+                    MaterialTheme.typography.bodyLarge
+                }
+
+                Checkbox(
+                    checked = item.isCompleted,
+                    onCheckedChange = { isChecked -> onCheckedChange(item, isChecked) },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = MaterialTheme.colorScheme.primary,
+                        uncheckedColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                Text(
+                    text = item.name,
+                    style = styleText,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
     }
 }
