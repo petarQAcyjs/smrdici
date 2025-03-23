@@ -7,6 +7,9 @@ sealed class Screen(val route: String) {
     object Budget : Screen("budget")
     object Calendar : Screen("calendar")
     object Lists : Screen("lists")
+    object ListDetails : Screen("list_details/{listId}") {
+        fun createRoute(listId: String) = "list_details/$listId"
+    }
     object Profile : Screen("profile")
     object AddEvent : Screen("add_event")
 } 

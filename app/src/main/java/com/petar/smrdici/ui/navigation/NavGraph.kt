@@ -4,11 +4,14 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import com.petar.smrdici.ui.components.MainLayout
 import com.petar.smrdici.ui.screens.auth.LoginScreen
 import com.petar.smrdici.ui.screens.budget.BudgetScreen
 import com.petar.smrdici.ui.screens.calendar.CalendarScreen
 import com.petar.smrdici.ui.screens.home.HomeScreen
+import com.petar.smrdici.ui.screens.lists.ListDetailsScreen
 import com.petar.smrdici.ui.screens.lists.ListsScreen
 import com.petar.smrdici.ui.screens.profile.ProfileScreen
 import com.petar.smrdici.ui.screens.calendar.AddEventScreen
@@ -58,6 +61,19 @@ fun NavGraph(
         
         composable(route = Screen.AddEvent.route) {
             AddEventScreen(navController = navController)
+        }
+        
+        composable(
+            route = Screen.ListDetails.route,
+            arguments = listOf(
+                navArgument("listId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val listId = backStackEntry.arguments?.getString("listId") ?: ""
+            ListDetailsScreen(
+                navController = navController,
+                listId = listId
+            )
         }
     }
 } 

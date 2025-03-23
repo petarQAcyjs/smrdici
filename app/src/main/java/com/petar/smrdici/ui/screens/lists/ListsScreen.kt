@@ -35,6 +35,7 @@ import java.util.*
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.ui.navigation.Screen
 
 @Composable
 fun ListsScreen(
@@ -97,7 +98,10 @@ fun ListsScreen(
                             iconResId = R.drawable.ic_shopping,
                             backgroundColor = Color(0xFF30C9C9),
                             onClick = {
-                                // Навигација на детаље листе за продавницу
+                                // Креирамо предефинисану листу ако не постоји и навигирамо на њу
+                                listsViewModel.getOrCreatePredefinedList("Spisak za prodavnicu") { listId ->
+                                    navController.navigate(Screen.ListDetails.createRoute(listId))
+                                }
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -108,7 +112,10 @@ fun ListsScreen(
                             iconResId = R.drawable.ic_home,
                             backgroundColor = Color(0xFF9ED36A),
                             onClick = {
-                                // Навигација на детаље листе кућних послова
+                                // Креирамо предефинисану листу ако не постоји и навигирамо на њу
+                                listsViewModel.getOrCreatePredefinedList("Kućni poslovi") { listId ->
+                                    navController.navigate(Screen.ListDetails.createRoute(listId))
+                                }
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -136,7 +143,10 @@ fun ListsScreen(
                                 title = list.title,
                                 isCompleted = list.isCompleted,
                                 onClick = {
-                                    // Навигација на детаље прилагођене листе
+                                    // Навигација на детаље листе
+                                    list.id?.let { id ->
+                                        navController.navigate(Screen.ListDetails.createRoute(id))
+                                    }
                                 }
                             )
                         }
