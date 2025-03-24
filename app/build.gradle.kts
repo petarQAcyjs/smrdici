@@ -27,6 +27,10 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            // Искључујемо визуализацију граница за дебаговање
+            buildConfigField("Boolean", "DEBUG_VISUALIZATION", "false")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -37,6 +41,11 @@ android {
     }
     buildFeatures {
         compose = true
+        // Искључујемо визуализације граница за дебаговање
+        buildConfig = true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.6"
     }
 }
 

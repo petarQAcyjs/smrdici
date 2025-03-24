@@ -11,6 +11,8 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -177,7 +179,7 @@ fun ProfileScreen(
                                 )
                             } else {
                                 Icon(
-                                    imageVector = Icons.Default.ArrowForward,
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                 )
@@ -218,7 +220,7 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             
                             Icon(
-                                imageVector = Icons.Default.ArrowForward,
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
@@ -235,7 +237,7 @@ fun ProfileScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ExitToApp,
+                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                                 contentDescription = "Тема",
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -258,7 +260,7 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             
                             Icon(
-                                imageVector = Icons.Default.ArrowForward,
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )

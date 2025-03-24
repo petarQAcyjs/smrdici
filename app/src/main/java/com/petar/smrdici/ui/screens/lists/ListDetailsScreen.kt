@@ -40,12 +40,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.material.DismissDirection
-import androidx.compose.material.DismissValue
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.FractionalThreshold
-import androidx.compose.material.SwipeToDismiss
-import androidx.compose.material.rememberDismissState
 import android.view.HapticFeedbackConstants
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.animation.core.animateFloatAsState
@@ -54,12 +48,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.animation.fadeIn
@@ -67,6 +55,17 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -94,14 +93,11 @@ fun ListDetailsScreen(
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
     
-    // Приказ инструкција за превлачење
-    var showSwipeInstruction by remember { mutableStateOf(true) }
-    LaunchedEffect(key1 = showSwipeInstruction) {
-        if (showSwipeInstruction) {
-            delay(5000) // Приказ инструкција 5 секунди
-            showSwipeInstruction = false
-        }
-    }
+    // Додајемо стање за Snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Чувамо последњу обрисану ставку за повраћај
+    var lastDeletedItem by remember { mutableStateOf<ShoppingItem?>(null) }
     
     // Функција за освежавање листе
     val refreshList = {
@@ -138,18 +134,12 @@ fun ListDetailsScreen(
         }
     }
     
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Заглавље са дугметом за повратак
+    // Основни изглед екрана
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
             TopAppBar(
-                title = { 
-                    Text(
-                        text = selectedList?.title ?: "Листа",
-                        style = MaterialTheme.typography.headlineMedium
-                    ) 
-                },
+                title = { Text(text = selectedList?.title ?: "Детаљи листе") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(
@@ -159,267 +149,153 @@ fun ListDetailsScreen(
                     }
                 },
                 actions = {
-                    // Дугме за промену статуса листе (завршено/незавршено)
-                    selectedList?.id?.let { id ->
-                        IconButton(
-                            onClick = { listsViewModel.toggleListStatus(id) }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Промени статус",
-                                tint = if (selectedList?.isCompleted == true) 
-                                    Color(0xFF4CAF50) else Color.Gray
-                            )
+                    IconButton(
+                        onClick = {
+                            selectedList?.id?.let { id ->
+                                showDeleteConfirmDialog = true
+                            }
                         }
-                        
-                        // Дугме за брисање листе
-                        IconButton(
-                            onClick = { showDeleteConfirmDialog = true }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Обриши листу",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Обриши листу"
+                        )
                     }
                 }
             )
-            
-            // Информације о листи са подршком за освежавање превлачењем
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            // Приказ листе са подршком за освежавање
             SwipeRefresh(
                 state = swipeRefreshState,
                 onRefresh = { refreshList() },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
-                selectedList?.let { list ->
-                    Column(
+                // Садржај листе
+                when (val listState = selectedList) {
+                    null -> {
+                        // Приказ индикатора учитавања
+                        if (!isRefreshing) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
+                    }
+                    else -> {
+                        // Приказивање ставки користећи LazyColumn
+                        listState.items?.let { items ->
+                            ShoppingItemsList(
+                                items = items,
+                                listId = listId,
+                                onCheckedChange = { item, isChecked ->
+                                    listsViewModel.updateItemCompletionStatus(listId, item.id!!, isChecked)
+                                },
+                                onDeleteItem = { item ->
+                                    listsViewModel.deleteItem(listId, item.id!!)
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } ?: EmptyState(message = "Грешка при учитавању ставки.")
+                    }
+                }
+            }
+            
+            // Доњи део са пољем за унос
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                // Поље за унос и дугме за додавање
+                if (isAddingNewItem) {
+                    // Приказивање поља за унос
+                    OutlinedTextField(
+                        value = newItemText,
+                        onValueChange = { newItemText = it },
+                        label = { Text("Унесите ставку") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        // Статус листе
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Статус: ",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (list.isCompleted) "Завршено" else "У току",
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        // Број ставки
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Број ставки: ",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${list.items.size}",
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
-                        
-                        Divider(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp)
-                        )
-                        
-                        // Листа ставки
-                        Text(
-                            text = "Ставке",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        
-                        // Инструкције за превлачење
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = showSwipeInstruction && list.items.isNotEmpty(),
-                            enter = androidx.compose.animation.fadeIn(),
-                            exit = androidx.compose.animation.fadeOut()
-                        ) {
-                            Text(
-                                text = "Превуците ставке удесно за брисање",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        
-                        LazyColumn(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(list.items) { item ->
-                                ShoppingItemRow(
-                                    item = item,
-                                    onDelete = { itemToDelete -> 
-                                        listsViewModel.deleteItemFromList(list.id ?: "", itemToDelete.id)
-                                    },
-                                    onCheckedChange = { itemToToggle, isChecked ->
-                                        listsViewModel.toggleItemStatus(list.id ?: "", itemToToggle.id)
-                                    }
-                                )
-                            }
-                            
-                            // Поље за унос нове ставке
-                            if (isAddingNewItem) {
-                                item {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Checkbox(
-                                            checked = false,
-                                            onCheckedChange = null
-                                        )
-                                        
-                                        OutlinedTextField(
-                                            value = newItemText,
-                                            onValueChange = { newItemText = it },
-                                            placeholder = { Text("Унесите назив ставке") },
-                                            singleLine = true,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .padding(horizontal = 8.dp)
-                                                .focusRequester(focusRequester),
-                                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                            keyboardActions = KeyboardActions(
-                                                onDone = {
-                                                    if (newItemText.isNotBlank()) {
-                                                        listsViewModel.addItemToList(newItemText)
-                                                        newItemText = ""
-                                                        // Постављамо заставицу да треба поново фокусирати поље
-                                                        shouldRefocus = true
-                                                    }
-                                                }
-                                            )
-                                        )
-                                        
-                                        IconButton(
-                                            onClick = {
-                                                if (newItemText.isNotBlank()) {
-                                                    listsViewModel.addItemToList(newItemText)
-                                                    newItemText = ""
-                                                    // Постављамо заставицу да треба поново фокусирати поље
-                                                    shouldRefocus = true
-                                                } else {
-                                                    isAddingNewItem = false
-                                                    keyboardController?.hide()
-                                                }
-                                            }
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Add,
-                                                contentDescription = "Додај ставку"
-                                            )
-                                        }
-                                    }
+                            .focusRequester(focusRequester)
+                            .onKeyEvent { keyEvent ->
+                                // Ако је притиснуто Enter, додајемо ставку
+                                if (keyEvent.key == Key.Enter && newItemText.isNotBlank()) {
+                                    listsViewModel.addItemToList(listId, newItemText.trim())
+                                    newItemText = ""
+                                    isAddingNewItem = false
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (newItemText.isNotBlank()) {
+                                    listsViewModel.addItemToList(listId, newItemText.trim())
+                                    newItemText = ""
+                                    isAddingNewItem = false
+                                    keyboardController?.hide()
                                 }
                             }
-                            
-                            if (list.items.isEmpty() && !isAddingNewItem) {
-                                item {
-                                    Text(
-                                        text = "Нема ставки у листи",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                        modifier = Modifier.padding(vertical = 16.dp)
-                                    )
+                        ),
+                        trailingIcon = {
+                            IconButton(
+                                onClick = {
+                                    if (newItemText.isNotBlank()) {
+                                        listsViewModel.addItemToList(listId, newItemText.trim())
+                                        newItemText = ""
+                                        // Останите у режиму додавања са фокусом на пољу за унос
+                                        shouldRefocus = true
+                                    } else {
+                                        isAddingNewItem = false
+                                    }
                                 }
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Додај ставку")
                             }
                         }
-                    }
-                } ?: run {
-                    // Приказ учитавања ако листа још није учитана
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
+                    )
+                } else {
+                    // Приказивање дугмета за додавање нове ставке
+                    Button(
+                        onClick = { isAddingNewItem = true },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        if (!isRefreshing) {
-                            CircularProgressIndicator()
-                        }
+                        Icon(Icons.Default.Add, contentDescription = "Додај нову ставку")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Додај нову ставку")
                     }
                 }
             }
         }
         
-        // Плутајуће дугме за додавање нове ставке
-        FloatingActionButton(
-            onClick = { 
-                isAddingNewItem = true
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-            containerColor = MaterialTheme.colorScheme.primary
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Додај нову ставку"
+        // Дијалог за потврду брисања листе
+        if (showDeleteConfirmDialog) {
+            DeleteConfirmationDialog(
+                onConfirm = {
+                    selectedList?.id?.let { id ->
+                        listsViewModel.deleteShoppingList(id)
+                        navController.navigateUp()
+                    }
+                    showDeleteConfirmDialog = false
+                },
+                onDismiss = {
+                    showDeleteConfirmDialog = false
+                }
             )
         }
-    }
-    
-    // Дијалог за потврду брисања листе
-    if (showDeleteConfirmDialog) {
-        // Проверавамо да ли је листа предефинисана
-        val isPredefinedList = selectedList?.title == "Spisak za prodavnicu" || selectedList?.title == "Kućni poslovi"
-        
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirmDialog = false },
-            title = { Text(if (isPredefinedList) "Није могуће обрисати" else "Брисање листе") },
-            text = { 
-                Text(
-                    if (isPredefinedList) 
-                        "Предефинисане листе не могу бити обрисане." 
-                    else 
-                        "Да ли сте сигурни да желите да обришете ову листу?"
-                ) 
-            },
-            confirmButton = {
-                if (!isPredefinedList) {
-                    Button(
-                        onClick = {
-                            selectedList?.id?.let { id ->
-                                listsViewModel.deleteShoppingList(id)
-                                navController.navigateUp()
-                            }
-                            showDeleteConfirmDialog = false
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Обриши")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirmDialog = false }) {
-                    Text(if (isPredefinedList) "У реду" else "Откажи")
-                }
-            }
-        )
     }
 }
 
@@ -432,25 +308,32 @@ fun ShoppingItemRow(
 ) {
     var show by remember { mutableStateOf(true) }
     var offsetX by remember { mutableStateOf(0f) }
+    var confirmDelete by remember { mutableStateOf(false) }
     val view = LocalView.current
     
-    // Израчунавамо праг за брисање
+    // Израчунавамо праг за брисање - повећавамо праг на 200dp
     val density = LocalDensity.current
-    val deleteThreshold = with(density) { 100.dp.toPx() }
+    val deleteThreshold = with(density) { 200.dp.toPx() }
     
     // Стање за превлачење
     val draggableState = rememberDraggableState { delta ->
         offsetX += delta
         
-        // Ако је прелазимо праг први пут, додајемо хаптичку повратну информацију
-        if (offsetX > 50f && offsetX < 60f) {
+        // Хаптичка повратна информација када пређемо први праг
+        if (offsetX > 100f && offsetX < 110f && !confirmDelete) {
             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
+        
+        // Друга хаптичка повратна информација када пређемо праг за брисање
+        if (offsetX > deleteThreshold && !confirmDelete) {
+            confirmDelete = true
+            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
         }
     }
     
     // Када је елемент потпуно одбачен, позовите onDelete
-    LaunchedEffect(offsetX) {
-        if (offsetX > deleteThreshold) {
+    LaunchedEffect(confirmDelete) {
+        if (confirmDelete) {
             show = false
             delay(300) // Мала пауза за анимацију
             onDelete(item)
@@ -461,72 +344,209 @@ fun ShoppingItemRow(
         visible = show,
         exit = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }) + fadeOut()
     ) {
-        Box {
-            // Позадина која се приказује при превлачењу
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(MaterialTheme.colorScheme.error)
-                    .padding(start = 16.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Обриши",
-                        tint = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Обриши ставку",
-                        color = Color.White
-                    )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Box {
+                // Позадина која се приказује при превлачењу
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(if (offsetX < deleteThreshold) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.error)
+                        .padding(start = 16.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Обриши",
+                            tint = if (offsetX < deleteThreshold) MaterialTheme.colorScheme.onErrorContainer else Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (offsetX < deleteThreshold) "Превуците више за брисање" else "Отпустите за брисање",
+                            color = if (offsetX < deleteThreshold) MaterialTheme.colorScheme.onErrorContainer else Color.White
+                        )
+                    }
                 }
-            }
-            
-            // Садржај који се може превлачити
-            Row(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .draggable(
-                        state = draggableState,
-                        orientation = Orientation.Horizontal,
-                        onDragStopped = {
-                            // Ако не пређемо праг, враћамо елемент назад
-                            if (offsetX <= deleteThreshold) {
-                                offsetX = 0f
+                
+                // Садржај који се може превлачити
+                Row(
+                    modifier = modifier
+                        .fillMaxWidth()
+                        .draggable(
+                            state = draggableState,
+                            orientation = Orientation.Horizontal,
+                            onDragStopped = {
+                                // Ако не пређемо праг, враћамо елемент назад
+                                if (offsetX <= deleteThreshold) {
+                                    offsetX = 0f
+                                    confirmDelete = false
+                                }
                             }
-                        }
-                    )
-                    .offset { IntOffset(offsetX.roundToInt(), 0) },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val styleText = if (item.isCompleted) {
-                    MaterialTheme.typography.bodyLarge.copy(
-                        textDecoration = TextDecoration.LineThrough
-                    )
-                } else {
-                    MaterialTheme.typography.bodyLarge
-                }
+                        )
+                        .offset { IntOffset(offsetX.roundToInt(), 0) }
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val styleText = if (item.isCompleted) {
+                        MaterialTheme.typography.bodyLarge.copy(
+                            textDecoration = TextDecoration.LineThrough
+                        )
+                    } else {
+                        MaterialTheme.typography.bodyLarge
+                    }
 
-                Checkbox(
-                    checked = item.isCompleted,
-                    onCheckedChange = { isChecked -> onCheckedChange(item, isChecked) },
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = MaterialTheme.colorScheme.primary,
-                        uncheckedColor = MaterialTheme.colorScheme.primary
+                    Checkbox(
+                        checked = item.isCompleted,
+                        onCheckedChange = { isChecked -> onCheckedChange(item, isChecked) },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = MaterialTheme.colorScheme.primary,
+                            uncheckedColor = MaterialTheme.colorScheme.primary
+                        )
                     )
-                )
-                
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                Text(
-                    text = item.name,
-                    style = styleText,
-                    modifier = Modifier.weight(1f)
-                )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Text(
+                        text = item.name,
+                        style = styleText,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+fun ShoppingItemsList(
+    items: List<ShoppingItem>,
+    listId: String,
+    onCheckedChange: (ShoppingItem, Boolean) -> Unit,
+    onDeleteItem: (ShoppingItem) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Креирамо локално стање за Snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Чувамо последњу обрисану ставку за повраћај
+    var lastDeletedItem by remember { mutableStateOf<ShoppingItem?>(null) }
+    
+    // Корутински обим за приказивање снекбара
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Креирамо референцу на ViewModel
+    val listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory(LocalContext.current))
+    
+    // Ажурирамо функцију за брисање
+    val handleDelete: (ShoppingItem) -> Unit = { item ->
+        // Чувамо ставку за потенцијални повраћај
+        lastDeletedItem = item
+        
+        // Позивамо оригиналну функцију за брисање
+        onDeleteItem(item)
+        
+        // Приказујемо снекбар са опцијом за повраћај
+        coroutineScope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = "Ставка \"${item.name}\" је обрисана",
+                actionLabel = "Поништи",
+                duration = SnackbarDuration.Short
+            )
+            
+            if (result == SnackbarResult.ActionPerformed) {
+                // Враћамо последњу обрисану ставку
+                lastDeletedItem?.let { deletedItem ->
+                    listsViewModel.restoreItem(listId, deletedItem)
+                }
+            }
+        }
+    }
+    
+    Box(modifier = modifier.fillMaxSize()) {
+        if (items.isEmpty()) {
+            EmptyState(message = "Нема ставки у листи. Додајте нове ставке користећи поље за унос испод.")
+        } else {
+            Column(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(items) { item ->
+                        ShoppingItemRow(
+                            item = item,
+                            onCheckedChange = onCheckedChange,
+                            onDelete = handleDelete,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Додајемо Snackbar host у Box
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+    }
+}
+
+@Composable
+fun DeleteConfirmationDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Брисање") },
+        text = { Text("Да ли сте сигурни да желите да обришете ову ставку?") },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Обриши")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Откажи")
+            }
+        }
+    )
+}
+
+@Composable
+fun EmptyState(message: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Додајемо иконицу за празно стање
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(64.dp)
+                    .padding(bottom = 16.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            )
+            
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 32.dp)
+            )
         }
     }
 }

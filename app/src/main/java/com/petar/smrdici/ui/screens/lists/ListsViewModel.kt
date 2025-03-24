@@ -272,37 +272,51 @@ class ListsViewModel(private val context: Context) : ViewModel() {
         }
     }
     
-    // Додајемо нову методу за директно додавање ставке са именом
+    // Функција за додавање ставке у листу - ажурирана да прихвата listId
+    fun addItemToList(listId: String, name: String, quantity: Int = 1) {
+        viewModelScope.launch {
+            try {
+                // Добијамо тренутну листу
+                loadListById(listId)
+                val currentList = _selectedList.value ?: return@launch
+                
+                // Креирамо нову ставку
+                val newItem = ShoppingItem(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    quantity = quantity,
+                    isCompleted = false,
+                    note = ""
+                )
+                
+                // Додајемо нову ставку у листу постојећих ставки
+                val updatedItems = currentList.items + newItem
+                
+                // Креирамо ажурирану листу
+                val updatedList = currentList.copy(items = updatedItems)
+                
+                // Ажурирамо листу у Firestore-у
+                firestore.collection("shopping_lists").document(listId)
+                    .set(updatedList)
+                    .addOnSuccessListener {
+                        _selectedList.value = updatedList
+                    }
+                    .addOnFailureListener { e ->
+                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању ставке")
+                    }
+            } catch (e: Exception) {
+                _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању ставке")
+            }
+        }
+    }
+    
+    // Стара верзија за компатибилност ако је потребно
     fun addItemToList(name: String, quantity: Int = 1) {
         viewModelScope.launch {
             val currentList = _selectedList.value ?: return@launch
             
-            // Креирамо нову ставку
-            val newItem = ShoppingItem(
-                id = UUID.randomUUID().toString(),
-                name = name,
-                quantity = quantity,  // Увек ће бити 1 ако се не специфицира
-                isCompleted = false,
-                note = ""
-            )
-            
-            // Додајемо нову ставку у листу постојећих ставки
-            val updatedItems = currentList.items + newItem
-            
-            // Креирамо ажурирану листу
-            val updatedList = currentList.copy(
-                items = updatedItems
-            )
-            
-            // Ажурирамо листу у Firestore-у
-            firestore.collection("shopping_lists").document(currentList.id ?: "")
-                .set(updatedList)
-                .addOnSuccessListener {
-                    _selectedList.value = updatedList
-                }
-                .addOnFailureListener { e ->
-                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању ставке")
-                }
+            // Прослеђујемо на нову функцију
+            addItemToList(currentList.id ?: return@launch, name, quantity)
         }
     }
     
@@ -464,6 +478,63 @@ class ListsViewModel(private val context: Context) : ViewModel() {
         }
     }
     
+    // Функција за враћање избрисане листе
+    fun restoreList(list: ShoppingList) {
+        viewModelScope.launch {
+            try {
+                // Правимо копију листе без ID-а да бисмо је додали у Firestore
+                val listToRestore = list.copy(id = null)
+                
+                // Додајемо листу назад у Firestore
+                firestore.collection("shopping_lists")
+                    .add(listToRestore)
+                    .addOnSuccessListener { documentReference ->
+                        // Ажурирамо UI након успешног враћања
+                        loadLists()
+                    }
+                    .addOnFailureListener { e ->
+                        _uiState.value = ListsUiState.Error("Грешка приликом враћања листе: ${e.message}")
+                    }
+            } catch (e: Exception) {
+                // У случају грешке, ажурирамо UI стање
+                _uiState.value = ListsUiState.Error("Грешка приликом враћања листе: ${e.message}")
+            }
+        }
+    }
+    
+    // Функција за враћање избрисане ставке у листу
+    fun restoreItem(listId: String, item: ShoppingItem) {
+        viewModelScope.launch {
+            try {
+                // Добијамо тренутну листу
+                val currentList = _selectedList.value ?: return@launch
+                
+                // Креирамо нову ставку (копирамо је да бисмо имали нови ID)
+                val newItem = item.copy(id = UUID.randomUUID().toString())
+                
+                // Ажурирамо листу ставки
+                val updatedItems = currentList.items + newItem
+                
+                // Креирамо ажурирану листу
+                val updatedList = currentList.copy(items = updatedItems)
+                
+                // Ажурирамо листу у Firestore-у
+                firestore.collection("shopping_lists").document(listId)
+                    .set(updatedList)
+                    .addOnSuccessListener {
+                        // Ажурирамо локални податак
+                        _selectedList.value = updatedList
+                    }
+                    .addOnFailureListener { e ->
+                        _uiState.value = ListsUiState.Error("Грешка приликом враћања ставке: ${e.message}")
+                    }
+            } catch (e: Exception) {
+                // У случају грешке, ажурирамо UI стање
+                _uiState.value = ListsUiState.Error("Грешка приликом враћања ставке: ${e.message}")
+            }
+        }
+    }
+    
     // Функција за директно ажурирање UI стања
     fun updateUiState(newState: ListsUiState) {
         _uiState.value = newState
@@ -477,6 +548,58 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                 return ListsViewModel(context) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
+        }
+    }
+
+    // Ажурирање статуса ставке (завршено/незавршено) користећи нову функцију
+    fun updateItemCompletionStatus(listId: String, itemId: String, isCompleted: Boolean) {
+        viewModelScope.launch {
+            val currentList = _selectedList.value ?: return@launch
+            
+            // Ажурирамо статус ставке
+            val updatedItems = currentList.items.map { item ->
+                if (item.id == itemId) {
+                    item.copy(isCompleted = isCompleted)
+                } else {
+                    item
+                }
+            }
+            
+            // Креирамо ажурирану листу
+            val updatedList = currentList.copy(items = updatedItems)
+            
+            // Ажурирамо листу у Firestore-у
+            firestore.collection("shopping_lists").document(listId)
+                .set(updatedList)
+                .addOnSuccessListener {
+                    _selectedList.value = updatedList
+                }
+                .addOnFailureListener { e ->
+                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању ставке")
+                }
+        }
+    }
+    
+    // Брисање ставке из листе са новим именом
+    fun deleteItem(listId: String, itemId: String) {
+        viewModelScope.launch {
+            val currentList = _selectedList.value ?: return@launch
+            
+            // Филтрирамо ставке да уклонимо ону коју желимо да обришемо
+            val updatedItems = currentList.items.filter { it.id != itemId }
+            
+            // Креирамо ажурирану листу
+            val updatedList = currentList.copy(items = updatedItems)
+            
+            // Ажурирамо листу у Firestore-у
+            firestore.collection("shopping_lists").document(listId)
+                .set(updatedList)
+                .addOnSuccessListener {
+                    _selectedList.value = updatedList
+                }
+                .addOnFailureListener { e ->
+                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању ставке")
+                }
         }
     }
 }

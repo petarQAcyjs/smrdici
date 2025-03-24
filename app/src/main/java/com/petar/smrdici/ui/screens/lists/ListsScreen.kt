@@ -94,14 +94,11 @@ fun ListsScreen(
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
     
-    // Приказ инструкција за превлачење
-    var showSwipeInstruction by remember { mutableStateOf(true) }
-    LaunchedEffect(key1 = showSwipeInstruction) {
-        if (showSwipeInstruction) {
-            delay(5000) // Приказ инструкција 5 секунди
-            showSwipeInstruction = false
-        }
-    }
+    // Додајемо стање за Snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Чувамо последњу обрисану листу за повраћај
+    var lastDeletedList by remember { mutableStateOf<ShoppingList?>(null) }
     
     // Функција за освежавање листа
     val refreshLists = {
@@ -114,172 +111,177 @@ fun ListsScreen(
     }
     
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Заглавље са дугметом за повратак
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { navController.navigateUp() }
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = { showAddListDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primary
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Назад"
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Додај нову листу"
                     )
                 }
-                
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                Text(
-                    text = "Листе",
-                    style = MaterialTheme.typography.headlineMedium
-                )
             }
-            
-            // Садржај екрана са подршком за освежавање
-            SwipeRefresh(
-                state = swipeRefreshState,
-                onRefresh = { refreshLists() },
-                modifier = Modifier.fillMaxSize()
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
             ) {
-                // Инструкције за превлачење
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = showSwipeInstruction && listsUiState is ListsUiState.Success && (listsUiState as ListsUiState.Success).lists.isNotEmpty(),
-                    enter = androidx.compose.animation.fadeIn(),
-                    exit = androidx.compose.animation.fadeOut()
-                ) {
-                    Text(
-                        text = "Превуците листе удесно за брисање",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
-                
-                LazyColumn(
+                // Заглавље са дугметом за повратак
+                Row(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Предефинисане листе (2 у реду)
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            // Листа за продавницу
-                            PredefinedListCard(
-                                title = "Spisak za prodavnicu",
-                                iconResId = R.drawable.ic_shopping,
-                                backgroundColor = Color(0xFF30C9C9),
-                                onClick = {
-                                    // Креирамо предефинисану листу ако не постоји и навигирамо на њу
-                                    listsViewModel.getOrCreatePredefinedList(
-                                        title = "Spisak za prodavnicu",
-                                        onSuccess = { listId ->
-                                            navController.navigate(Screen.ListDetails.createRoute(listId))
-                                        },
-                                        onError = { errorMsg ->
-                                            // Можемо приказати поруку о грешци или обрадити грешку на други начин
-                                            listsViewModel.updateUiState(ListsUiState.Error(errorMsg))
-                                        }
-                                    )
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                            
-                            // Кућни послови
-                            PredefinedListCard(
-                                title = "Kućni poslovi",
-                                iconResId = R.drawable.ic_home,
-                                backgroundColor = Color(0xFF9ED36A),
-                                onClick = {
-                                    // Креирамо предефинисану листу ако не постоји и навигирамо на њу
-                                    listsViewModel.getOrCreatePredefinedList(
-                                        title = "Kućni poslovi",
-                                        onSuccess = { listId ->
-                                            navController.navigate(Screen.ListDetails.createRoute(listId))
-                                        },
-                                        onError = { errorMsg ->
-                                            // Можемо приказати поруку о грешци или обрадити грешку на други начин
-                                            listsViewModel.updateUiState(ListsUiState.Error(errorMsg))
-                                        }
-                                    )
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
+                    IconButton(
+                        onClick = { navController.navigateUp() }
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Назад"
+                        )
                     }
                     
-                    // Прилагођене листе
-                    when (listsUiState) {
-                        is ListsUiState.Loading -> {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(200.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    // Индикатор учитавања је већ присутан у SwipeRefresh
-                                    if (!isRefreshing) {
-                                        CircularProgressIndicator()
-                                    }
-                                }
-                            }
-                        }
-                        is ListsUiState.Success -> {
-                            val customLists = (listsUiState as ListsUiState.Success).lists
-                            items(customLists) { list ->
-                                list.id?.let { listId ->
-                                    SwipeToDeleteListItem(
-                                        title = list.title,
-                                        isCompleted = list.isCompleted,
-                                        onClick = {
-                                            navController.navigate(Screen.ListDetails.createRoute(listId))
-                                        },
-                                        onDelete = {
-                                            listsViewModel.deleteShoppingList(listId)
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                        is ListsUiState.Error -> {
-                            item {
-                                Text(
-                                    text = (listsUiState as ListsUiState.Error).message,
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.padding(16.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Text(
+                        text = "Листе",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+                
+                // Приказујемо садржај екрана са подршком за освежавање
+                SwipeRefresh(
+                    state = swipeRefreshState,
+                    onRefresh = { refreshLists() },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Предефинисане листе (2 у реду)
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                // Листа за продавницу
+                                PredefinedListCard(
+                                    title = "Spisak za prodavnicu",
+                                    iconResId = R.drawable.ic_shopping,
+                                    backgroundColor = Color(0xFF30C9C9),
+                                    onClick = {
+                                        // Креирамо предефинисану листу ако не постоји и навигирамо на њу
+                                        listsViewModel.getOrCreatePredefinedList(
+                                            title = "Spisak za prodavnicu",
+                                            onSuccess = { listId ->
+                                                navController.navigate(Screen.ListDetails.createRoute(listId))
+                                            },
+                                            onError = { errorMsg ->
+                                                // Можемо приказати поруку о грешци или обрадити грешку на други начин
+                                                listsViewModel.updateUiState(ListsUiState.Error(errorMsg))
+                                            }
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                
+                                // Кућни послови
+                                PredefinedListCard(
+                                    title = "Kućni poslovi",
+                                    iconResId = R.drawable.ic_home,
+                                    backgroundColor = Color(0xFF9ED36A),
+                                    onClick = {
+                                        // Креирамо предефинисану листу ако не постоји и навигирамо на њу
+                                        listsViewModel.getOrCreatePredefinedList(
+                                            title = "Kućni poslovi",
+                                            onSuccess = { listId ->
+                                                navController.navigate(Screen.ListDetails.createRoute(listId))
+                                            },
+                                            onError = { errorMsg ->
+                                                // Можемо приказати поруку о грешци или обрадити грешку на други начин
+                                                listsViewModel.updateUiState(ListsUiState.Error(errorMsg))
+                                            }
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
                         }
+                        
+                        // Прилагођене листе
+                        when (listsUiState) {
+                            is ListsUiState.Loading -> {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        // Индикатор учитавања је већ присутан у SwipeRefresh
+                                        if (!isRefreshing) {
+                                            CircularProgressIndicator()
+                                        }
+                                    }
+                                }
+                            }
+                            is ListsUiState.Success -> {
+                                val customLists = (listsUiState as ListsUiState.Success).lists
+                                items(customLists) { list ->
+                                    list.id?.let { listId ->
+                                        SwipeToDeleteListItem(
+                                            list = list,
+                                            onClick = {
+                                                navController.navigate(Screen.ListDetails.createRoute(listId))
+                                            },
+                                            onDelete = {
+                                                // Чувамо листу за поништавање
+                                                lastDeletedList = list
+                                                
+                                                // Обришимо листу
+                                                listsViewModel.deleteShoppingList(listId)
+                                                
+                                                // Приказујемо Snackbar са опцијом за повраћај
+                                                coroutineScope.launch {
+                                                    val result = snackbarHostState.showSnackbar(
+                                                        message = "Листа \"${list.title}\" је обрисана",
+                                                        actionLabel = "Поништи",
+                                                        duration = SnackbarDuration.Short
+                                                    )
+                                                    
+                                                    if (result == SnackbarResult.ActionPerformed) {
+                                                        // Поново додајемо листу ако је корисник тражио поништавање
+                                                        lastDeletedList?.let { deletedList ->
+                                                            listsViewModel.restoreList(deletedList)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            is ListsUiState.Error -> {
+                                item {
+                                    Text(
+                                        text = (listsUiState as ListsUiState.Error).message,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
-        
-        // Плутајуће дугме за додавање нове листе
-        FloatingActionButton(
-            onClick = { showAddListDialog = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-            containerColor = MaterialTheme.colorScheme.primary
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Додај нову листу"
-            )
         }
     }
     
@@ -309,7 +311,8 @@ fun PredefinedListCard(
             .height(120.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor)
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        border = null
     ) {
         Column(
             modifier = Modifier
@@ -348,7 +351,8 @@ fun CustomListItem(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = null
     ) {
         Row(
             modifier = Modifier
@@ -454,7 +458,9 @@ fun ShoppingListItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        border = null,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
             modifier = Modifier
@@ -539,33 +545,42 @@ fun AddItemDialog(
 
 @Composable
 fun SwipeToDeleteListItem(
-    title: String,
-    isCompleted: Boolean,
+    list: ShoppingList,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val title = list.title
+    val isCompleted = list.isCompleted
+    
     var show by remember { mutableStateOf(true) }
     var offsetX by remember { mutableStateOf(0f) }
+    var confirmDelete by remember { mutableStateOf(false) }
     val view = LocalView.current
     
-    // Израчунавамо праг за брисање (30% екрана)
+    // Израчунавамо праг за брисање - повећавамо праг на 200dp
     val density = LocalDensity.current
-    val deleteThreshold = with(density) { 100.dp.toPx() }
+    val deleteThreshold = with(density) { 200.dp.toPx() }
     
     // Стање за превлачење
     val draggableState = rememberDraggableState { delta ->
         offsetX += delta
         
-        // Ако је прелазимо праг први пут, додајемо хаптичку повратну информацију
-        if (offsetX > 50f && offsetX < 60f) {
+        // Хаптичка повратна информација када пређемо први праг
+        if (offsetX > 100f && offsetX < 110f && !confirmDelete) {
             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
+        
+        // Друга хаптичка повратна информација када пређемо праг за брисање
+        if (offsetX > deleteThreshold && !confirmDelete) {
+            confirmDelete = true
+            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
         }
     }
     
     // Када је елемент потпуно одбачен, позовите onDelete
-    LaunchedEffect(offsetX) {
-        if (offsetX > deleteThreshold) {
+    LaunchedEffect(confirmDelete) {
+        if (confirmDelete) {
             show = false
             delay(300) // Мала пауза за анимацију
             onDelete()
@@ -576,47 +591,81 @@ fun SwipeToDeleteListItem(
         visible = show,
         exit = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }) + fadeOut()
     ) {
-        Box {
-            // Позадина која се приказује при превлачењу
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(MaterialTheme.colorScheme.error)
-                    .padding(start = 16.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Обриши",
-                        tint = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Box {
+                // Позадина која се приказује при превлачењу
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(if (offsetX < deleteThreshold) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.error)
+                        .padding(start = 16.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Обриши",
+                            tint = if (offsetX < deleteThreshold) MaterialTheme.colorScheme.onErrorContainer else Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (offsetX < deleteThreshold) "Превуците више за брисање" else "Отпустите за брисање",
+                            color = if (offsetX < deleteThreshold) MaterialTheme.colorScheme.onErrorContainer else Color.White
+                        )
+                    }
+                }
+                
+                // Садржај који се може превлачити
+                Row(
+                    modifier = modifier
+                        .fillMaxWidth()
+                        .draggable(
+                            state = draggableState,
+                            orientation = Orientation.Horizontal,
+                            onDragStopped = {
+                                // Ако не пређемо праг, враћамо елемент назад
+                                if (offsetX <= deleteThreshold) {
+                                    offsetX = 0f
+                                    confirmDelete = false
+                                }
+                            }
+                        )
+                        .offset { IntOffset(offsetX.roundToInt(), 0) }
+                        .background(MaterialTheme.colorScheme.surface)
+                        .clickable(onClick = onClick)
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Икона за статус (чекирано или не)
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(if (isCompleted) Color(0xFF4CAF50) else Color.LightGray),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isCompleted) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Завршено",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    // Наслов листе
                     Text(
-                        text = "Обриши листу",
-                        color = Color.White
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
             }
-            
-            // Садржај који се може превлачити
-            CustomListItem(
-                title = title,
-                isCompleted = isCompleted,
-                onClick = onClick,
-                modifier = modifier
-                    .draggable(
-                        state = draggableState,
-                        orientation = Orientation.Horizontal,
-                        onDragStopped = {
-                            // Ако не пређемо праг, враћамо елемент назад
-                            if (offsetX <= deleteThreshold) {
-                                offsetX = 0f
-                            }
-                        }
-                    )
-                    .offset { IntOffset(offsetX.roundToInt(), 0) }
-            )
         }
     }
 } 

@@ -15,6 +15,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -75,7 +77,7 @@ fun CalendarScreen(
                     onClick = { navController.navigateUp() }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Назад"
                     )
                 }
@@ -214,7 +216,7 @@ fun CalendarView(
                 }
             ) {
                 Icon(
-                    imageVector = Icons.Default.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Претходни месец"
                 )
             }
@@ -232,7 +234,7 @@ fun CalendarView(
                 }
             ) {
                 Icon(
-                    imageVector = Icons.Default.ArrowForward,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = "Следећи месец"
                 )
             }

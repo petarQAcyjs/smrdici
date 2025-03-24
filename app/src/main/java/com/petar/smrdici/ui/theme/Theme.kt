@@ -9,7 +9,11 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -50,9 +54,12 @@ fun SmrdiciTheme(
         else -> LightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    // Искључујемо инспекцијски мод
+    CompositionLocalProvider(LocalInspectionMode provides false) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }

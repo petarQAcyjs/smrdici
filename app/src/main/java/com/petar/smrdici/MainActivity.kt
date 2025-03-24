@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.petar.smrdici.ui.navigation.NavGraph
 import com.petar.smrdici.ui.theme.SmrdiciTheme
+import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.runtime.CompositionLocalProvider
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -18,12 +20,15 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SmrdiciTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    val navController = rememberNavController()
-                    NavGraph(navController = navController)
+                // Искључујемо инспекцијски мод који може узроковати црвене оквире
+                CompositionLocalProvider(LocalInspectionMode provides false) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        val navController = rememberNavController()
+                        NavGraph(navController = navController)
+                    }
                 }
             }
         }
