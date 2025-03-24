@@ -151,11 +151,17 @@ fun TodayActivitiesCard(
     onEventClick: (Event) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Дефинишемо упадљиву боју за картицу
+    val cardColor = Color(0xFF3F8CFF) // Светло плава боја
+    val textColor = Color.White // Бела боја за текст
+
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        modifier = modifier,
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = cardColor
+        )
     ) {
         Column(
             modifier = Modifier
@@ -165,6 +171,8 @@ fun TodayActivitiesCard(
             Text(
                 text = "Данашње активности",
                 style = MaterialTheme.typography.titleMedium,
+                color = textColor,
+                fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             
@@ -181,7 +189,7 @@ fun TodayActivitiesCard(
                 Text(
                     text = "Нема активности за данас",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    color = textColor.copy(alpha = 0.9f),
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
             } else {
@@ -190,7 +198,8 @@ fun TodayActivitiesCard(
                 eventsToShow.forEach { event ->
                     EventItemCompact(
                         event = event,
-                        onClick = { onEventClick(event) }
+                        onClick = { onEventClick(event) },
+                        textColor = textColor
                     )
                 }
                 
@@ -199,7 +208,7 @@ fun TodayActivitiesCard(
                     Text(
                         text = "Још ${filteredEvents.size - 3} догађаја...",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = textColor.copy(alpha = 0.9f),
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
@@ -212,7 +221,8 @@ fun TodayActivitiesCard(
 fun EventItemCompact(
     event: Event,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    textColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
     Row(
         modifier = modifier
@@ -238,6 +248,7 @@ fun EventItemCompact(
                 text = event.title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
+                color = textColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -248,14 +259,22 @@ fun EventItemCompact(
                 val timeText = if (event.allDay) {
                     "Цео дан"
                 } else {
-                    val endTimeText = event.endTime?.let { " - ${timeFormat.format(it.toDate())}" } ?: ""
-                    "${timeFormat.format(startTime.toDate())}$endTimeText"
+                    val startTimeText = timeFormat.format(Date(startTime.seconds * 1000))
+                    val endTimeText = event.endTime?.let {
+                        timeFormat.format(Date(it.seconds * 1000))
+                    } ?: ""
+                    
+                    if (endTimeText.isNotEmpty()) {
+                        "$startTimeText - $endTimeText"
+                    } else {
+                        startTimeText
+                    }
                 }
                 
                 Text(
                     text = timeText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    color = textColor.copy(alpha = 0.7f)
                 )
             }
         }
