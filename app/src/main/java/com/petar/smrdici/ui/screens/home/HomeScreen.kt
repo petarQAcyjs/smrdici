@@ -30,6 +30,7 @@ import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import java.text.SimpleDateFormat
 import java.util.*
+import com.airbnb.lottie.compose.*
 
 @Composable
 fun HomeScreen(
@@ -149,11 +150,26 @@ fun TodayActivitiesCard(
     events: List<Event>,
     onSeeAllClick: () -> Unit,
     onEventClick: (Event) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    lottieResId: Int = R.raw.homeanimation
 ) {
     // Дефинишемо упадљиву боју за картицу
     val cardColor = Color(0xFF3F8CFF) // Светло плава боја
     val textColor = Color.White // Бела боја за текст
+    
+    // Конфигурација за Lottie анимацију
+    val lottieComposition by rememberLottieComposition(
+        LottieCompositionSpec.RawRes(lottieResId)
+    )
+    
+    // Стање анимације
+    val lottieAnimationState by animateLottieCompositionAsState(
+        composition = lottieComposition,
+        iterations = LottieConstants.IterateForever,
+        isPlaying = true,
+        speed = 1.0f,
+        restartOnPlay = false
+    )
 
     Card(
         modifier = modifier,
@@ -163,55 +179,81 @@ fun TodayActivitiesCard(
             containerColor = cardColor
         )
     ) {
-        Column(
+        // Главни ред који садржи садржај и анимацију
+        Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = "Данашње активности",
-                style = MaterialTheme.typography.titleMedium,
-                color = textColor,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Филтрирамо прошле догађаје
-            val currentTime = Calendar.getInstance().timeInMillis / 1000 // Тренутно време у секундама
-            val filteredEvents = events.filter { event ->
-                // Задржавамо догађаје који су у току или у будућности
-                event.endTime?.seconds ?: Long.MAX_VALUE >= currentTime
-            }
-            
-            if (filteredEvents.isEmpty()) {
+            // Колона са текстом и догађајима - смањујемо тежину да анимација добије више простора
+            Column(
+                modifier = Modifier
+                    .weight(0.6f)
+                    .fillMaxHeight()
+            ) {
                 Text(
-                    text = "Нема активности за данас",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = textColor.copy(alpha = 0.9f),
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    text = "Данашње активности",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = textColor,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
-            } else {
-                // Приказујемо до 3 догађаја
-                val eventsToShow = filteredEvents.take(3)
-                eventsToShow.forEach { event ->
-                    EventItemCompact(
-                        event = event,
-                        onClick = { onEventClick(event) },
-                        textColor = textColor
-                    )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Филтрирамо прошле догађаје
+                val currentTime = Calendar.getInstance().timeInMillis / 1000 // Тренутно време у секундама
+                val filteredEvents = events.filter { event ->
+                    // Задржавамо догађаје који су у току или у будућности
+                    event.endTime?.seconds ?: Long.MAX_VALUE >= currentTime
                 }
                 
-                // Ако има више од 3 догађаја, додајемо индикатор
-                if (filteredEvents.size > 3) {
+                if (filteredEvents.isEmpty()) {
                     Text(
-                        text = "Још ${filteredEvents.size - 3} догађаја...",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "Нема активности за данас",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = textColor.copy(alpha = 0.9f),
-                        modifier = Modifier.padding(top = 8.dp)
+                        modifier = Modifier.padding(vertical = 8.dp)
                     )
+                } else {
+                    // Приказујемо до 3 догађаја
+                    val eventsToShow = filteredEvents.take(3)
+                    eventsToShow.forEach { event ->
+                        EventItemCompact(
+                            event = event,
+                            onClick = { onEventClick(event) },
+                            textColor = textColor
+                        )
+                    }
+                    
+                    // Ако има више од 3 догађаја, додајемо индикатор
+                    if (filteredEvents.size > 3) {
+                        Text(
+                            text = "Још ${filteredEvents.size - 3} догађаја...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = textColor.copy(alpha = 0.9f),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                 }
+            }
+            
+            // Повећавамо тежину за анимацију и постављамо је у центар тог простора
+            Box(
+                modifier = Modifier
+                    .weight(0.5f)  // Дајемо више простора за анимацију
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.Center
+            ) {
+                // Значајно повећавамо величину, много већа него пре
+                LottieAnimation(
+                    composition = lottieComposition,
+                    progress = { lottieAnimationState },
+                    modifier = Modifier
+                        .size(300.dp)  // Повећавамо на 300dp
+                        .fillMaxSize(1.2f)  // Додајемо и фактор скалирања
+                )
             }
         }
     }

@@ -82,4 +82,7 @@ dependencies {
     
     // Swipe to refresh
     implementation("com.google.accompanist:accompanist-swiperefresh:0.27.0")
+    
+    // Lottie за анимације
+    implementation("com.airbnb.android:lottie-compose:6.1.0")
 }
