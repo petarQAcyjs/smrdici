@@ -66,6 +66,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -76,15 +77,12 @@ fun ListDetailsScreen(
 ) {
     val selectedList by listsViewModel.selectedList.collectAsState()
     var newItemText by remember { mutableStateOf("") }
-    var isAddingNewItem by remember { mutableStateOf(false) }
+    var currentEditingItemId by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     
     // Додајемо корутински опсег за Compose компоненту
     val coroutineScope = rememberCoroutineScope()
-    
-    // Додајемо стање за праћење када треба поново фокусирати поље
-    var shouldRefocus by remember { mutableStateOf(false) }
     
     // Додајемо стање за дијалог за потврду брисања
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -117,20 +115,35 @@ fun ListDetailsScreen(
         isRefreshing = false
     }
     
-    // Фокусирамо поље за унос када се активира или када треба поново фокусирати
-    LaunchedEffect(isAddingNewItem, shouldRefocus) {
-        if (isAddingNewItem) {
+    // Функција за додавање нове празне ставке у листу
+    val addEmptyItem = {
+        // Генеришемо привремени ID за нову ставку
+        val tempId = "temp_${System.currentTimeMillis()}"
+        currentEditingItemId = tempId
+        
+        // Фокусирамо поље за унос након кратког одлагања
+        coroutineScope.launch {
+            delay(100)
             try {
-                // Мало одлагање да би се осигурало да је компонента рендерована
-                delay(100)
                 focusRequester.requestFocus()
-                // Ресетујемо стање за поновно фокусирање
-                if (shouldRefocus) {
-                    shouldRefocus = false
-                }
+                keyboardController?.show()
             } catch (e: Exception) {
                 // Игноришемо грешку ако компонента још није спремна
             }
+        }
+    }
+    
+    // Функција за обраду уноса текста за нову ставку
+    val handleItemTextSubmit = {
+        if (newItemText.isNotBlank()) {
+            // Додајемо ставку са текстом у листу
+            listsViewModel.addItemToList(listId, newItemText.trim())
+            
+            // Чистимо текст и додајемо нову празну ставку
+            newItemText = ""
+            
+            // Одмах додајемо нову празну ставку за даљи унос
+            addEmptyItem()
         }
     }
     
@@ -163,6 +176,32 @@ fun ListDetailsScreen(
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { 
+                    // Ако нема активне ставке за унос, додајемо празну
+                    if (currentEditingItemId == null) {
+                        addEmptyItem()
+                    } else {
+                        // Фокусирамо тренутну ставку за унос
+                        coroutineScope.launch {
+                            try {
+                                focusRequester.requestFocus()
+                                keyboardController?.show()
+                            } catch (e: Exception) {
+                                // Игноришемо грешку ако компонента још није спремна
+                            }
+                        }
+                    }
+                },
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Додај нову ставку"
+                )
+            }
         }
     ) { paddingValues ->
         Column(
@@ -194,88 +233,78 @@ fun ListDetailsScreen(
                     else -> {
                         // Приказивање ставки користећи LazyColumn
                         listState.items?.let { items ->
-                            ShoppingItemsList(
-                                items = items,
-                                listId = listId,
-                                onCheckedChange = { item, isChecked ->
-                                    listsViewModel.updateItemCompletionStatus(listId, item.id!!, isChecked)
-                                },
-                                onDeleteItem = { item ->
-                                    listsViewModel.deleteItem(listId, item.id!!)
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } ?: EmptyState(message = "Грешка при учитавању ставки.")
-                    }
-                }
-            }
-            
-            // Доњи део са пољем за унос
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                // Поље за унос и дугме за додавање
-                if (isAddingNewItem) {
-                    // Приказивање поља за унос
-                    OutlinedTextField(
-                        value = newItemText,
-                        onValueChange = { newItemText = it },
-                        label = { Text("Унесите ставку") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(focusRequester)
-                            .onKeyEvent { keyEvent ->
-                                // Ако је притиснуто Enter, додајемо ставку
-                                if (keyEvent.key == Key.Enter && newItemText.isNotBlank()) {
-                                    listsViewModel.addItemToList(listId, newItemText.trim())
-                                    newItemText = ""
-                                    isAddingNewItem = false
-                                    true
-                                } else {
-                                    false
-                                }
-                            },
-                        keyboardOptions = KeyboardOptions(
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                if (newItemText.isNotBlank()) {
-                                    listsViewModel.addItemToList(listId, newItemText.trim())
-                                    newItemText = ""
-                                    isAddingNewItem = false
-                                    keyboardController?.hide()
-                                }
-                            }
-                        ),
-                        trailingIcon = {
-                            IconButton(
-                                onClick = {
-                                    if (newItemText.isNotBlank()) {
-                                        listsViewModel.addItemToList(listId, newItemText.trim())
-                                        newItemText = ""
-                                        // Останите у режиму додавања са фокусом на пољу за унос
-                                        shouldRefocus = true
-                                    } else {
-                                        isAddingNewItem = false
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                ShoppingItemsList(
+                                    items = items,
+                                    listId = listId,
+                                    onCheckedChange = { item, isChecked ->
+                                        listsViewModel.updateItemCompletionStatus(listId, item.id!!, isChecked)
+                                    },
+                                    onDeleteItem = { item ->
+                                        listsViewModel.deleteItem(listId, item.id!!)
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                
+                                // Приказујемо поље за унос нове ставке ако постоји активна ставка за унос
+                                if (currentEditingItemId != null) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Кружни индикатор (неактиван) уместо чекбокса
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            // Празан садржај, само приказујемо кружни индикатор
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        
+                                        // Поље за унос
+                                        TextField(
+                                            value = newItemText,
+                                            onValueChange = { newItemText = it },
+                                            placeholder = { Text("Унесите ставку") },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .focusRequester(focusRequester)
+                                                .onKeyEvent { keyEvent ->
+                                                    // Ако је притиснуто Enter, додајемо ставку и припремамо нови ред
+                                                    if (keyEvent.key == Key.Enter) {
+                                                        handleItemTextSubmit()
+                                                        true
+                                                    } else {
+                                                        false
+                                                    }
+                                                },
+                                            keyboardOptions = KeyboardOptions(
+                                                imeAction = ImeAction.Done
+                                            ),
+                                            keyboardActions = KeyboardActions(
+                                                onDone = {
+                                                    handleItemTextSubmit()
+                                                }
+                                            ),
+                                            colors = TextFieldDefaults.colors(
+                                                focusedContainerColor = Color.Transparent,
+                                                unfocusedContainerColor = Color.Transparent,
+                                                disabledContainerColor = Color.Transparent,
+                                                focusedIndicatorColor = Color.Transparent,
+                                                unfocusedIndicatorColor = Color.Transparent
+                                            ),
+                                            singleLine = true
+                                        )
                                     }
                                 }
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = "Додај ставку")
                             }
-                        }
-                    )
-                } else {
-                    // Приказивање дугмета за додавање нове ставке
-                    Button(
-                        onClick = { isAddingNewItem = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Додај нову ставку")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Додај нову ставку")
+                        } ?: EmptyState(message = "Грешка при учитавању ставки.")
                     }
                 }
             }
@@ -400,14 +429,26 @@ fun ShoppingItemRow(
                         MaterialTheme.typography.bodyLarge
                     }
 
-                    Checkbox(
-                        checked = item.isCompleted,
-                        onCheckedChange = { isChecked -> onCheckedChange(item, isChecked) },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = MaterialTheme.colorScheme.primary,
-                            uncheckedColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
+                    // Заменили смо стандардни Checkbox са кружним индикатором
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (item.isCompleted) Color(0xFF4CAF50) 
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                            .clickable { onCheckedChange(item, !item.isCompleted) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (item.isCompleted) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Завршено",
+                                tint = Color.White
+                            )
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.width(8.dp))
                     
