@@ -72,6 +72,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.ripple.rememberRipple
+import android.util.Log
 
 @Composable
 fun ListsScreen(
@@ -81,6 +84,10 @@ fun ListsScreen(
 ) {
     val authState by authViewModel.authState.collectAsState()
     val listsUiState by listsViewModel.uiState.collectAsState()
+    // Пратимо тренутне листе које се бришу
+    val deletingListIds by listsViewModel.deletingListIds.collectAsState()
+    val isDeletionInProgress = deletingListIds.isNotEmpty()
+    
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
@@ -107,6 +114,12 @@ fun ListsScreen(
             listsViewModel.loadLists()
             delay(1000) // Минимално трајање анимације освежавања
             isRefreshing = false
+        }
+    }
+    
+    LaunchedEffect(isDeletionInProgress) {
+        if (isDeletionInProgress) {
+            Log.d("ListsScreen", "Брисање је у току: ${deletingListIds.joinToString()}")
         }
     }
     
@@ -164,7 +177,8 @@ fun ListsScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        userScrollEnabled = !isDeletionInProgress // Онемогућавамо скроловање током брисања
                     ) {
                         // Предефинисане листе (2 у реду)
                         item {
@@ -235,37 +249,47 @@ fun ListsScreen(
                             }
                             is ListsUiState.Success -> {
                                 val customLists = (listsUiState as ListsUiState.Success).lists
-                                items(customLists) { list ->
+                                items(
+                                    items = customLists,
+                                    key = { it.id ?: UUID.randomUUID().toString() } // Додајемо стабилни кључ за сваку ставку
+                                ) { list ->
                                     list.id?.let { listId ->
-                                        SwipeToDeleteListItem(
-                                            list = list,
-                                            onClick = {
-                                                navController.navigate(Screen.ListDetails.createRoute(listId))
-                                            },
-                                            onDelete = {
-                                                // Чувамо листу за поништавање
-                                                lastDeletedList = list
-                                                
-                                                // Обришимо листу
-                                                listsViewModel.deleteShoppingList(listId)
-                                                
-                                                // Приказујемо Snackbar са опцијом за повраћај
-                                                coroutineScope.launch {
-                                                    val result = snackbarHostState.showSnackbar(
-                                                        message = "Листа \"${list.title}\" је обрисана",
-                                                        actionLabel = "Поништи",
-                                                        duration = SnackbarDuration.Short
-                                                    )
+                                        // Не приказујемо листе које су у процесу брисања
+                                        if (!deletingListIds.contains(listId)) {
+                                            SwipeToDeleteListItem(
+                                                list = list,
+                                                onClick = {
+                                                    if (!isDeletionInProgress) { // Проверавамо да ли је брисање у току
+                                                        navController.navigate(Screen.ListDetails.createRoute(listId))
+                                                    }
+                                                },
+                                                onDelete = {
+                                                    // Чувамо листу за поништавање
+                                                    lastDeletedList = list
                                                     
-                                                    if (result == SnackbarResult.ActionPerformed) {
-                                                        // Поново додајемо листу ако је корисник тражио поништавање
-                                                        lastDeletedList?.let { deletedList ->
-                                                            listsViewModel.restoreList(deletedList)
+                                                    // Обришимо листу
+                                                    listsViewModel.deleteShoppingList(listId)
+                                                    
+                                                    // Приказујемо Snackbar са опцијом за повраћај и откључавамо брисање након што се снекбар затвори
+                                                    coroutineScope.launch {
+                                                        val result = snackbarHostState.showSnackbar(
+                                                            message = "Листа \"${list.title}\" је обрисана",
+                                                            actionLabel = "Поништи",
+                                                            duration = SnackbarDuration.Short
+                                                        )
+                                                        
+                                                        if (result == SnackbarResult.ActionPerformed) {
+                                                            // Поново додајемо листу ако је корисник тражио поништавање
+                                                            lastDeletedList?.let { deletedList ->
+                                                                listsViewModel.restoreList(deletedList)
+                                                            }
                                                         }
                                                     }
-                                                }
-                                            }
-                                        )
+                                                },
+                                                isDeletionLocked = isDeletionInProgress,
+                                                listsViewModel = listsViewModel
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -548,15 +572,61 @@ fun SwipeToDeleteListItem(
     list: ShoppingList,
     onClick: () -> Unit,
     onDelete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isDeletionLocked: Boolean = false,
+    listsViewModel: ListsViewModel
 ) {
     val title = list.title
     val isCompleted = list.isCompleted
+    val listId = list.id ?: return
+
+    // Проверавамо да ли је ова листа већ у процесу брисања
+    val deletingListIds by listsViewModel.deletingListIds.collectAsState()
+    val isBeingDeleted = deletingListIds.contains(listId) || isDeletionLocked
     
+    // Постављамо дебаг лог да пратимо прави статус сваке листе
+    LaunchedEffect(listId, isBeingDeleted) {
+        Log.d("SwipeToDeleteListItem", "Листа $listId, наслов: $title, статус брисања: $isBeingDeleted")
+    }
+    
+    // Ако је листа у процесу брисања, одмах прекидамо композицију и не приказујемо ништа
+    if (isBeingDeleted) {
+        Log.d("SwipeToDeleteListItem", "Прескачемо рендеровање листе $listId јер је у процесу брисања")
+        return
+    }
+    
+    // Бележимо да ли је компонента видљива
     var show by remember { mutableStateOf(true) }
+    
+    // Бележимо хоризонтално померање при превлачењу
     var offsetX by remember { mutableStateOf(0f) }
+    
+    // Бележимо да ли је потврђено брисање (једном када је true, избегавамо дупло брисање)
     var confirmDelete by remember { mutableStateOf(false) }
+    
+    // Бележимо да ли је листа већ обрисана (спречава дупло брисање)
+    var isDeleted by remember { mutableStateOf(false) }
+    
     val view = LocalView.current
+    
+    // Додајемо корутински опсег
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Додајемо стање за праћење клика на чекбокс
+    var isCheckboxClicked by remember { mutableStateOf(false) }
+    
+    // Локално стање за праћење статуса комплетности
+    var localCompletedState by remember { mutableStateOf(isCompleted) }
+    
+    // Ажурирамо локално стање само при првој композицији или када се промени извори параметар
+    LaunchedEffect(list.id, isCompleted) {
+        localCompletedState = isCompleted
+    }
+    
+    // Додајемо дебаг лог за праћење брисања
+    LaunchedEffect(list.id) {
+        Log.d("SwipeToDeleteListItem", "Компонента креирана/рекомпонована за листу: ${list.id}")
+    }
     
     // Израчунавамо праг за брисање - повећавамо праг на 200dp
     val density = LocalDensity.current
@@ -564,31 +634,88 @@ fun SwipeToDeleteListItem(
     
     // Стање за превлачење
     val draggableState = rememberDraggableState { delta ->
-        offsetX += delta
-        
-        // Хаптичка повратна информација када пређемо први праг
-        if (offsetX > 100f && offsetX < 110f && !confirmDelete) {
-            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        }
-        
-        // Друга хаптичка повратна информација када пређемо праг за брисање
-        if (offsetX > deleteThreshold && !confirmDelete) {
-            confirmDelete = true
-            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        // Само дозвољавамо превлачење ако брисање није већ потврђено, ако елемент није већ избрисан и ако глобално брисање није закључано
+        if (!confirmDelete && !isDeleted && !isDeletionLocked && !isBeingDeleted) {
+            offsetX += delta
+            
+            // Хаптичка повратна информација када пређемо први праг
+            if (offsetX > 100f && offsetX < 110f) {
+                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            }
+            
+            // Друга хаптичка повратна информација када пређемо праг за брисање
+            if (offsetX > deleteThreshold && !confirmDelete) {
+                confirmDelete = true
+                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            }
         }
     }
     
-    // Када је елемент потпуно одбачен, позовите onDelete
+    // Када је елемент потпуно одбачен, позивамо onDelete само једном
     LaunchedEffect(confirmDelete) {
-        if (confirmDelete) {
+        if (confirmDelete && !isDeleted && !isDeletionLocked && !isBeingDeleted) {
+            // Бележимо дебаг информацију
+            Log.d("SwipeToDeleteListItem", "Брисање листе: ${list.id}")
+            
+            // Означавамо да је листа обрисана да бисмо избегли дупло брисање
+            isDeleted = true
+            
+            // Сакривамо елемент
             show = false
-            delay(300) // Мала пауза за анимацију
-            onDelete()
+            
+            // Мала пауза за анимацију
+            delay(300)
+            
+            // Позивамо функцију брисања само једном
+            // Овде је битно да се onDelete позове само једном!
+            if (!isBeingDeleted) {  // Додатна провера пре брисања
+                onDelete()
+            }
+        }
+    }
+    
+    // Када је чекбокс кликнут, приказујемо анимацију и затим позивамо toggleListStatus
+    LaunchedEffect(isCheckboxClicked) {
+        if (isCheckboxClicked && !isDeletionLocked && !isBeingDeleted) {
+            try {
+                // Oдмах ажурирамо локално стање за бољи UX
+                localCompletedState = !localCompletedState
+                
+                Log.d("SwipeToDeleteListItem", "Променили смо чекбокс за листу: ${list.id}, ново стање: $localCompletedState")
+                
+                // Мала пауза за анимацију
+                delay(100)
+                
+                // Ажурирамо статус у бази
+                list.id?.let { listId ->
+                    // Користимо нову корутину да не блокирамо UI ефекте
+                    try {
+                        listsViewModel.toggleListStatus(listId)
+                    } catch (e: Exception) {
+                        Log.e("SwipeToDeleteListItem", "Грешка при ажурирању: ${e.message}")
+                    }
+                }
+            } finally {
+                // Ресетујемо стање клика без обзира на исход операције
+                isCheckboxClicked = false
+            }
+        }
+    }
+    
+    // Пратимо промену својства isDeletionLocked или isBeingDeleted
+    LaunchedEffect(isDeletionLocked, isBeingDeleted) {
+        if (isDeletionLocked || isBeingDeleted) {
+            // Ако је глобално брисање закључано и ова компонента је у процесу брисања,
+            // поништавамо брисање и враћамо компоненту у првобитно стање
+            if (offsetX > 0 && !isDeleted) {
+                offsetX = 0f
+                confirmDelete = false
+            }
         }
     }
     
     androidx.compose.animation.AnimatedVisibility(
-        visible = show,
+        visible = show && !isBeingDeleted,
         exit = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }) + fadeOut()
     ) {
         Card(
@@ -626,9 +753,10 @@ fun SwipeToDeleteListItem(
                         .draggable(
                             state = draggableState,
                             orientation = Orientation.Horizontal,
+                            enabled = !isDeletionLocked && !isBeingDeleted, // Онемогућавамо превлачење ако је брисање закључано
                             onDragStopped = {
                                 // Ако не пређемо праг, враћамо елемент назад
-                                if (offsetX <= deleteThreshold) {
+                                if (offsetX <= deleteThreshold && !isDeleted) {
                                     offsetX = 0f
                                     confirmDelete = false
                                 }
@@ -636,19 +764,35 @@ fun SwipeToDeleteListItem(
                         )
                         .offset { IntOffset(offsetX.roundToInt(), 0) }
                         .background(MaterialTheme.colorScheme.surface)
-                        .clickable(onClick = onClick)
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Икона за статус (чекирано или не)
+                    // Икона за статус (чекирано или не) - сада кликабилна
                     Box(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(if (isCompleted) Color(0xFF4CAF50) else Color.LightGray),
+                            .background(
+                                if (localCompletedState) Color(0xFF4CAF50) 
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = rememberRipple(bounded = false, color = Color.White),
+                                enabled = !isDeletionLocked && !isBeingDeleted, // Онемогућавамо клик ако је брисање закључано
+                                onClick = {
+                                    // Активирамо стање за клик само ако компонента није већ у процесу брисања
+                                    if (!isDeleted && !confirmDelete && !isDeletionLocked && !isBeingDeleted) {
+                                        isCheckboxClicked = true
+                                        
+                                        // Додајемо хаптичку повратну информацију
+                                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    }
+                                }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isCompleted) {
+                        if (localCompletedState) {
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = "Завршено",
@@ -659,10 +803,25 @@ fun SwipeToDeleteListItem(
                     
                     Spacer(modifier = Modifier.width(16.dp))
                     
-                    // Наслов листе
+                    // Наслов листе - прецртан ако је завршен
+                    val textStyle = if (localCompletedState) {
+                        MaterialTheme.typography.titleMedium.copy(
+                            textDecoration = TextDecoration.LineThrough,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    } else {
+                        MaterialTheme.typography.titleMedium
+                    }
+                    
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium
+                        style = textStyle,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(
+                                enabled = !isDeletionLocked && !isDeleted && !confirmDelete && !isBeingDeleted, // Онемогућавамо клик ако је брисање закључано
+                                onClick = onClick
+                            )
                     )
                 }
             }

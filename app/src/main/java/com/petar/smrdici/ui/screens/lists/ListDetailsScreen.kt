@@ -461,7 +461,13 @@ fun ShoppingItemsList(
             if (result == SnackbarResult.ActionPerformed) {
                 // Враћамо последњу обрисану ставку
                 lastDeletedItem?.let { deletedItem ->
-                    listsViewModel.restoreItem(listId, deletedItem)
+                    // Проверавамо да ли ставка има валидан ID (није празан стринг)
+                    if (deletedItem.id.isNotEmpty()) {
+                        listsViewModel.restoreItem(deletedItem.id, listId, deletedItem)
+                    } else {
+                        // Логујемо грешку ако ставка нема валидан ID
+                        println("Не можемо вратити ставку са празним ID-ем")
+                    }
                 }
             }
         }

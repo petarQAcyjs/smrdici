@@ -2,6 +2,7 @@ package com.petar.smrdici.data.model
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.PropertyName
 
 data class ShoppingList(
     var id: String? = null,
@@ -9,13 +10,18 @@ data class ShoppingList(
     val createdBy: String = "",
     val familyId: String = "",
     val createdAt: Timestamp = Timestamp.now(),
-    val isCompleted: Boolean = false,
+    @get:PropertyName("completed")
+    @set:PropertyName("completed")
+    @PropertyName("completed")
+    var isCompleted: Boolean = false,
     val items: List<ShoppingItem> = emptyList()
 )
 
 data class ShoppingItem(
     val id: String = "",
     val name: String = "",
+    @get:PropertyName("completed")
+    @PropertyName("completed")
     val isCompleted: Boolean = false,
     val quantity: Int = 1,
     val note: String = ""
