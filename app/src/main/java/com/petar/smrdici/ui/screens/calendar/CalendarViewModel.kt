@@ -69,41 +69,54 @@ class CalendarViewModel(private val context: Context) : ViewModel() {
             val form = _eventFormState.value
             
             if (!form.isValid) {
+                Log.e("CalendarViewModel", "Неуспело додавање догађаја: форма није валидна")
                 return@launch
             }
             
-            val startCalendar = Calendar.getInstance().apply {
-                time = form.date
-                set(Calendar.HOUR_OF_DAY, form.startHour)
-                set(Calendar.MINUTE, form.startMinute)
-            }
-            
-            val endCalendar = if (form.endHour != null && form.endMinute != null) {
-                Calendar.getInstance().apply {
+            try {
+                val startCalendar = Calendar.getInstance().apply {
                     time = form.date
-                    set(Calendar.HOUR_OF_DAY, form.endHour)
-                    set(Calendar.MINUTE, form.endMinute)
+                    set(Calendar.HOUR_OF_DAY, form.startHour)
+                    set(Calendar.MINUTE, form.startMinute)
                 }
-            } else null
-            
-            val event = Event(
-                title = form.title,
-                description = form.description,
-                startTime = Timestamp(startCalendar.time),
-                endTime = endCalendar?.let { Timestamp(it.time) },
-                allDay = form.allDay,
-                location = form.location,
-                color = form.color
-            )
-            
-            eventRepository.addEvent(event)
-                .onSuccess {
-                    // Ресетујемо форму
-                    _eventFormState.value = EventFormState()
-                }
-                .onFailure { e ->
-                    _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при додавању догађаја")
-                }
+                
+                val endCalendar = if (form.endHour != null && form.endMinute != null) {
+                    Calendar.getInstance().apply {
+                        time = form.date
+                        set(Calendar.HOUR_OF_DAY, form.endHour)
+                        set(Calendar.MINUTE, form.endMinute)
+                    }
+                } else null
+                
+                val event = Event(
+                    title = form.title,
+                    description = form.description,
+                    startTime = Timestamp(startCalendar.time),
+                    endTime = endCalendar?.let { Timestamp(it.time) },
+                    allDay = form.allDay,
+                    location = form.location,
+                    color = form.color
+                )
+                
+                Log.d("CalendarViewModel", "Покушај додавања догађаја: ${event.title}")
+                
+                eventRepository.addEvent(event)
+                    .onSuccess {
+                        // Ресетујемо форму
+                        _eventFormState.value = EventFormState()
+                        Log.d("CalendarViewModel", "Успешно додат догађај: ${event.title}")
+                        
+                        // Освежавамо листу догађаја за тренутни датум
+                        loadEventsForDate(_selectedDate.value)
+                    }
+                    .onFailure { e ->
+                        Log.e("CalendarViewModel", "Грешка при додавању догађаја", e)
+                        _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при додавању догађаја")
+                    }
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Неочекивана грешка при додавању догађаја", e)
+                _uiState.value = CalendarUiState.Error("Неочекивана грешка: ${e.message}")
+            }
         }
     }
     
@@ -112,10 +125,9 @@ class CalendarViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             eventRepository.deleteEvent(eventId)
                 .onSuccess {
-                    // Успешно обрисан догађај
-                    _uiState.value = CalendarUiState.Success(
-                        (_uiState.value as? CalendarUiState.Success)?.events?.filter { it.id != eventId } ?: emptyList()
-                    )
+                    // Успешно обрисан догађај, али не модификујемо директно uiState
+                    // већ позивамо loadEventsForDate да освежи листу догађаја за текући датум
+                    loadEventsForDate(_selectedDate.value)
                 }
                 .onFailure { e ->
                     _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при брисању догађаја")

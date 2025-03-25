@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -252,7 +253,8 @@ fun TodayActivitiesCard(
                     progress = { lottieAnimationState },
                     modifier = Modifier
                         .size(300.dp)  // Повећавамо на 300dp
-                        .fillMaxSize(1.2f)  // Додајемо и фактор скалирања
+                        .fillMaxSize(1.2f),  // Додајемо и фактор скалирања
+                    enableMergePaths = true  // Додајемо подршку за merge paths
                 )
             }
         }
