@@ -15,6 +15,12 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.graphics.Color
 
+enum class ThemeMode {
+    LIGHT,
+    DARK,
+    SYSTEM
+}
+
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
     secondary = PurpleGrey80,
@@ -39,17 +45,21 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun SmrdiciTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    val darkTheme = when (themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
