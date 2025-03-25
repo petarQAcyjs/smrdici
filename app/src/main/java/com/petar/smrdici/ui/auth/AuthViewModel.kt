@@ -85,7 +85,9 @@ class AuthViewModel : ViewModel() {
 
     fun signOut() {
         auth.signOut()
-        googleSignInClient.signOut()
+        if (::googleSignInClient.isInitialized) {
+            googleSignInClient.signOut()
+        }
         _authState.value = AuthState.NotAuthenticated
     }
 

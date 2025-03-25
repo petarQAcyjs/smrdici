@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,11 +63,25 @@ fun ProfileScreen(
     
     val context = LocalContext.current
     
+    // Inicijalizujemo Google Sign-In klijenta za slučaj da korisnik želi da se odjavi
+    LaunchedEffect(Unit) {
+        authViewModel.initGoogleSignIn(context)
+    }
+    
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
     
     val syncStatus by homeViewModel.syncStatus.collectAsState()
+
+    // Pratimo stanje autentifikacije i navigiramo na Login kad korisnik nije autentifikovan
+    LaunchedEffect(authState) {
+        if (authState is AuthState.NotAuthenticated) {
+            navController.navigate(Screen.Login.route) {
+                popUpTo(Screen.Home.route) { inclusive = true }
+            }
+        }
+    }
     
     Column(
         modifier = Modifier.fillMaxSize()
@@ -301,7 +316,11 @@ fun ProfileScreen(
                 
                 // Дугме за одјаву
                 Button(
-                    onClick = { authViewModel.signOut() },
+                    onClick = { 
+                        authViewModel.signOut()
+                        // Ne koristimo recreateActivity jer LaunchedEffect
+                        // već prati promene u authState
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error
