@@ -253,7 +253,9 @@ fun CalendarView(
             }
             
             Text(
-                text = monthFormat.format(calendar.time).capitalize(),
+                text = monthFormat.format(calendar.time).replaceFirstChar { 
+                    if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() 
+                },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -346,44 +348,6 @@ fun CalendarView(
             }
             
             Spacer(modifier = Modifier.height(8.dp))
-        }
-    }
-}
-
-@Composable
-fun CalendarDay(
-    day: Int,
-    isSelected: Boolean,
-    hasEvents: Boolean,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(
-                if (isSelected) MaterialTheme.colorScheme.primary
-                else Color.Transparent
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = day.toString(),
-            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        )
-        
-        if (hasEvents) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isSelected) MaterialTheme.colorScheme.onPrimary
-                        else MaterialTheme.colorScheme.primary
-                    )
-                    .align(Alignment.BottomCenter)
-            )
         }
     }
 }
@@ -839,11 +803,6 @@ fun TimePickerDialog(
         confirmButton = confirmButton,
         dismissButton = dismissButton
     )
-}
-
-// Помоћна функција за капитализацију првог слова
-fun String.capitalize(): String {
-    return this.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() } 
 }
 
 @Composable
