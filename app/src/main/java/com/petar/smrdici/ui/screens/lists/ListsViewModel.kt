@@ -55,7 +55,7 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                 
                 // Постављамо стање учитавања само ако немамо претходне податке
                 if (currentLists.isEmpty()) {
-                    _uiState.value = ListsUiState.Loading
+                _uiState.value = ListsUiState.Loading
                 }
                 
                 // Додајемо логер за праћење
@@ -85,8 +85,8 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                             
                             // Обрађујемо све документе и додајемо их у мапу
                             allDocs.forEach { doc ->
-                                try {
-                                    val list = doc.toObject(ShoppingList::class.java)
+                            try {
+                                val list = doc.toObject(ShoppingList::class.java)
                                     if (list != null) {
                                         list.id = doc.id
                                         
@@ -103,8 +103,8 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                                         
                                         uniqueListsMap[doc.id] = list
                                     }
-                                } catch (e: Exception) {
-                                    Log.e("ListsViewModel", "Грешка при обради листе", e)
+                            } catch (e: Exception) {
+                                Log.e("ListsViewModel", "Грешка при обради листе", e)
                                 }
                             }
                             
@@ -146,7 +146,7 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                     } else {
                         _uiState.value = ListsUiState.Error(e.message ?: "Грешка при учитавању листа")
                     }
-                }
+                    }
             } catch (e: Exception) {
                 Log.e("ListsViewModel", "Општа грешка", e)
                 
@@ -158,7 +158,7 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                 if (currentLists.isNotEmpty()) {
                     _uiState.value = ListsUiState.Success(currentLists)
                 } else {
-                    _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
+                _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
                 }
             }
         }
@@ -182,7 +182,7 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                     items = emptyList(),
                     isCompleted = false
                 )
-
+                
                 firestore.collection("shopping_lists")
                     .add(newList)
                     .addOnSuccessListener { documentReference ->
@@ -299,8 +299,8 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                         }
                         
                         // Ако није предефинисана, бришемо је
-                        firestore.collection("shopping_lists").document(listId).delete()
-                            .addOnSuccessListener {
+            firestore.collection("shopping_lists").document(listId).delete()
+                .addOnSuccessListener {
                                 Log.d("ListsViewModel", "Листа $listId успешно обрисана")
                                 
                                 // Ресетујемо изабрану листу
@@ -312,10 +312,10 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                                 
                                 // Уклањамо ID из скупа оних које се бришу
                                 _deletingListIds.value = _deletingListIds.value - listId
-                            }
-                            .addOnFailureListener { e ->
+                }
+                .addOnFailureListener { e ->
                                 Log.e("ListsViewModel", "Грешка при брисању листе $listId: ${e.message}")
-                                _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању листе")
+                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању листе")
                                 
                                 // Враћамо оригинално стање UI-а
                                 if (currentState is ListsUiState.Success) {
@@ -344,7 +344,7 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                 
                 // Уклањамо ID из скупа оних које се бришу у случају грешке
                 _deletingListIds.value = _deletingListIds.value - listId
-            }
+                }
         }
     }
     

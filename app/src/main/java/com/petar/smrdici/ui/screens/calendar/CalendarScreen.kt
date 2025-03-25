@@ -155,39 +155,39 @@ fun CalendarScreen(
                     .weight(1f)
             ) {
                 when (calendarUiState) {
-                    is CalendarUiState.Loading -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
+                is CalendarUiState.Loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
                             // Приказујемо индикатор учитавања само ако није у току освежавање
                             if (!isRefreshing) {
-                                CircularProgressIndicator()
+                        CircularProgressIndicator()
                             }
-                        }
                     }
-                    is CalendarUiState.Success -> {
+                }
+                is CalendarUiState.Success -> {
                         val eventsToShow = (calendarUiState as CalendarUiState.Success).events
-                        EventsList(
+                    EventsList(
                             events = eventsToShow,
-                            onEventClick = { event ->
-                                selectedEvent = event
-                                showEventDetailsDialog = true
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                        )
-                    }
-                    is CalendarUiState.Error -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
+                        onEventClick = { event ->
+                            selectedEvent = event
+                            showEventDetailsDialog = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    )
+                }
+                is CalendarUiState.Error -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
                                 text = (calendarUiState as CalendarUiState.Error).message,
-                                color = MaterialTheme.colorScheme.error
-                            )
+                            color = MaterialTheme.colorScheme.error
+                        )
                         }
                     }
                 }
@@ -489,7 +489,7 @@ fun EventItem(
             }
             
             Spacer(modifier = Modifier.width(12.dp))
-
+            
             Column(
                 modifier = Modifier.weight(1f)
             ) {
@@ -521,9 +521,9 @@ fun EventItem(
                     formatter.format(event.startTime.toDate())
                 }
                 
-                Text(
+                    Text(
                     text = timeText,
-                    style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -652,7 +652,7 @@ fun AddEventDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
-
+                
                 // Опис поље
                 OutlinedTextField(
                     value = eventFormState.description ?: "",
@@ -713,8 +713,8 @@ fun AddEventDialog(
                 // Време почетка и краја
                 if (!eventFormState.allDay) {
                     Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             OutlinedTextField(
@@ -739,8 +739,8 @@ fun AddEventDialog(
 
                             OutlinedTextField(
                                 value = if (eventFormState.endHour != null && eventFormState.endMinute != null)
-                                    String.format(
-                                        "%02d:%02d",
+                                String.format(
+                                    "%02d:%02d",
                                         eventFormState.endHour,
                                         eventFormState.endMinute
                                     ) else "",
@@ -774,14 +774,14 @@ fun AddEventDialog(
                     // Приказ тренутно изабране особе
                     val currentAssignee = assignees.find { it.name == selectedAssignee }
                     if (currentAssignee != null) {
-                        Text(
+                            Text(
                             text = "Изабрана особа: ${currentAssignee.displayName}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             color = Color(android.graphics.Color.parseColor(currentAssignee.color)),
                             modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                    } else {
+                                    )
+                                } else {
                         Log.d("AddEventDialog", "Није пронађен одговарајући assignee за '${selectedAssignee}'")
                     }
                     
@@ -809,7 +809,7 @@ fun AddEventDialog(
                         }
                     }
                 }
-
+                
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // Дугмад за акције - сада их смештамо у засебne редове за бољи распоред
@@ -818,12 +818,12 @@ fun AddEventDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Дугме за сачување/додавање
-                    Button(
-                        onClick = {
+            Button(
+                onClick = {
                             if (editingEvent != null) {
                                 calendarViewModel.updateEvent()
                             } else {
-                                calendarViewModel.addEvent()
+                    calendarViewModel.addEvent()
                             }
                             onDismissRequest()
                         },
@@ -848,8 +848,8 @@ fun AddEventDialog(
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Откажи")
-                        }
+                Text("Откажи")
+            }
                         
                         // Дугме за брисање, приказ само при уређивању
                         if (editingEvent != null) {
@@ -992,22 +992,22 @@ fun TimePickerDialog(
                 }
             }
         },
-        confirmButton = {
-            Button(
+            confirmButton = {
+                Button(
                 onClick = {
                     onTimeSelected(hour, minute)
                 }
-            ) {
-                Text("ОК")
-            }
-        },
-        dismissButton = {
-            TextButton(
+                ) {
+                    Text("ОК")
+                }
+            },
+            dismissButton = {
+                TextButton(
                 onClick = onDismiss
-            ) {
-                Text("Откажи")
+                ) {
+                    Text("Откажи")
+                }
             }
-        }
     )
 }
 
@@ -1045,7 +1045,7 @@ fun EventDetailsDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
+                            Text(
                         text = "Детаљи догађаја",
                         style = MaterialTheme.typography.titleLarge
                     )
@@ -1088,7 +1088,7 @@ fun EventDetailsDialog(
                     Spacer(modifier = Modifier.width(16.dp))
                     
                     Column {
-                        Text(
+                            Text(
                             text = assignee.displayName,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,

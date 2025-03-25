@@ -57,49 +57,62 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Приказ данашњих активности
             TodayActivitiesCard(
                 events = todayEvents,
                 onSeeAllClick = { navController.navigate(Screen.Calendar.route) },
                 onEventClick = { event ->
-                    // Овде можемо додати навигацију на детаље догађаја или неку другу акцију
-                    // За сада само навигирамо на календар
                     navController.navigate(Screen.Calendar.route)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(250.dp)
-                    .padding(bottom = 24.dp)
+                    .padding(bottom = 16.dp)
             )
             
             // Картице за навигацију
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Листе
-                NavigationCard(
-                    title = "Листе",
-                    iconResId = R.drawable.ic_list,
-                    onClick = { navController.navigate(Screen.Lists.route) }
-                )
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    NavigationCard(
+                        title = "Листе",
+                        iconResId = R.drawable.ic_list,
+                        onClick = { navController.navigate(Screen.Lists.route) }
+                    )
+                }
                 
                 // Календар
-                NavigationCard(
-                    title = "Календар",
-                    iconResId = R.drawable.ic_calendar,
-                    onClick = { navController.navigate(Screen.Calendar.route) }
-                )
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    NavigationCard(
+                        title = "Календар",
+                        iconResId = R.drawable.ic_calendar,
+                        onClick = { navController.navigate(Screen.Calendar.route) }
+                    )
+                }
                 
                 // Буџет
-                NavigationCard(
-                    title = "Буџет",
-                    iconResId = R.drawable.ic_budget,
-                    onClick = { navController.navigate(Screen.Budget.route) }
-                )
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    NavigationCard(
+                        title = "Буџет",
+                        iconResId = R.drawable.ic_budget,
+                        onClick = { navController.navigate(Screen.Budget.route) }
+                    )
+                }
             }
         }
     }
@@ -113,26 +126,25 @@ fun NavigationCard(
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(150.dp)
+            .fillMaxSize()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = 3.dp
+            defaultElevation = 2.dp
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 32.dp),
+                .padding(horizontal = 24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
@@ -140,7 +152,7 @@ fun NavigationCard(
             Image(
                 painter = painterResource(id = iconResId),
                 contentDescription = title,
-                modifier = Modifier.size(80.dp)
+                modifier = Modifier.size(48.dp)
             )
         }
     }
@@ -154,16 +166,13 @@ fun TodayActivitiesCard(
     modifier: Modifier = Modifier,
     lottieResId: Int = R.raw.homeanimation
 ) {
-    // Дефинишемо упадљиву боју за картицу
-    val cardColor = Color(0xFF3F8CFF) // Светло плава боја
-    val textColor = Color.White // Бела боја за текст
+    val cardColor = Color(0xFF3F8CFF)
+    val textColor = Color.White
     
-    // Конфигурација за Lottie анимацију
     val lottieComposition by rememberLottieComposition(
         LottieCompositionSpec.RawRes(lottieResId)
     )
     
-    // Стање анимације
     val lottieAnimationState by animateLottieCompositionAsState(
         composition = lottieComposition,
         iterations = LottieConstants.IterateForever,
@@ -175,19 +184,17 @@ fun TodayActivitiesCard(
     Card(
         modifier = modifier,
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = cardColor
         )
     ) {
-        // Главни ред који садржи садржај и анимацију
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Колона са текстом и догађајима - смањујемо тежину да анимација добије више простора
             Column(
                 modifier = Modifier
                     .weight(0.6f)
@@ -198,15 +205,13 @@ fun TodayActivitiesCard(
                     style = MaterialTheme.typography.titleMedium,
                     color = textColor,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 4.dp)
                 )
                 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 
-                // Филтрирамо прошле догађаје
-                val currentTime = Calendar.getInstance().timeInMillis / 1000 // Тренутно време у секундама
+                val currentTime = Calendar.getInstance().timeInMillis / 1000
                 val filteredEvents = events.filter { event ->
-                    // Задржавамо догађаје који су у току или у будућности
                     event.endTime?.seconds ?: Long.MAX_VALUE >= currentTime
                 }
                 
@@ -215,10 +220,9 @@ fun TodayActivitiesCard(
                         text = "Нема активности за данас",
                         style = MaterialTheme.typography.bodyMedium,
                         color = textColor.copy(alpha = 0.9f),
-                        modifier = Modifier.padding(vertical = 8.dp)
+                        modifier = Modifier.padding(vertical = 4.dp)
                     )
                 } else {
-                    // Приказујемо до 3 догађаја
                     val eventsToShow = filteredEvents.take(3)
                     eventsToShow.forEach { event ->
                         EventItemCompact(
@@ -228,33 +232,30 @@ fun TodayActivitiesCard(
                         )
                     }
                     
-                    // Ако има више од 3 догађаја, додајемо индикатор
                     if (filteredEvents.size > 3) {
                         Text(
                             text = "Још ${filteredEvents.size - 3} догађаја...",
                             style = MaterialTheme.typography.bodySmall,
                             color = textColor.copy(alpha = 0.9f),
-                            modifier = Modifier.padding(top = 8.dp)
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
                 }
             }
             
-            // Повећавамо тежину за анимацију и постављамо је у центар тог простора
             Box(
                 modifier = Modifier
-                    .weight(0.5f)  // Дајемо више простора за анимацију
+                    .weight(0.4f)
                     .fillMaxHeight(),
                 contentAlignment = Alignment.Center
             ) {
-                // Значајно повећавамо величину, много већа него пре
                 LottieAnimation(
                     composition = lottieComposition,
                     progress = { lottieAnimationState },
                     modifier = Modifier
-                        .size(300.dp)  // Повећавамо на 300dp
-                        .fillMaxSize(1.2f),  // Додајемо и фактор скалирања
-                    enableMergePaths = true  // Додајемо подршку за merge paths
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    enableMergePaths = true
                 )
             }
         }
