@@ -17,8 +17,11 @@ data class Event(
     val familyId: String = "",
     val participants: List<String> = emptyList(),
     val calendarId: String? = null,
-    val createdAt: Timestamp? = null
-)
+    val createdAt: Timestamp? = null,
+    val assignee: String = "Сви"
+) {
+    fun toDate() = startTime?.toDate()
+}
 
 enum class EventColor(val colorHex: String, val displayName: String) {
     BLUE("#4285F4", "Плава"),
@@ -27,4 +30,12 @@ enum class EventColor(val colorHex: String, val displayName: String) {
     YELLOW("#FBBC05", "Жута"),
     PURPLE("#9C27B0", "Љубичаста"),
     TEAL("#009688", "Тиркизна")
+}
+
+enum class EventAssignee(val displayName: String, val initial: String, val color: String) {
+    EVERYONE("Сви", "С", "#4285F4"),
+    PETAR("Петар", "П", "#3F51B5"),
+    NATASA("Наташа", "Н", "#DB4437"),
+    MILICA("Милица", "М", "#E91E63"),
+    BOGDAN("Богдан", "Б", "#F4B400")
 }

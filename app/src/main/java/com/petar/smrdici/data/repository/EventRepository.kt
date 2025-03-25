@@ -233,6 +233,7 @@ class EventRepository(private val context: Context) {
                 "allDay" to event.allDay,
                 "location" to event.location,
                 "color" to event.color,
+                "assignee" to event.assignee,
                 "createdBy" to userId,
                 "familyId" to event.familyId,
                 "createdAt" to com.google.firebase.Timestamp.now()
@@ -251,11 +252,12 @@ class EventRepository(private val context: Context) {
         }
     }
     
-    // Ажурирање постојећег догађаја
+    // Функција за ажурирање догађаја
     suspend fun updateEvent(event: Event): Result<Unit> {
         return try {
             val userId = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
-            val eventId = event.id ?: return Result.failure(IllegalArgumentException("Догађај нема ID"))
+            
+            val eventId = event.id ?: return Result.failure(IllegalStateException("ID догађаја не може бити null"))
             
             val eventData: Map<String, Any?> = mapOf(
                 "title" to event.title,
@@ -265,7 +267,8 @@ class EventRepository(private val context: Context) {
                 "allDay" to event.allDay,
                 "location" to event.location,
                 "color" to event.color,
-                "familyId" to event.familyId
+                "assignee" to event.assignee,
+                "updatedAt" to com.google.firebase.Timestamp.now()
             )
             
             firestore.collection("users")

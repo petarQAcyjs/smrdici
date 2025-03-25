@@ -20,6 +20,7 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import java.text.SimpleDateFormat
 import java.util.*
+import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +58,7 @@ fun AddEventScreen(
             // Форма за унос догађаја
             OutlinedTextField(
                 value = formState.title,
-                onValueChange = { newTitle -> calendarViewModel.updateEventForm { it.copy(title = newTitle) } },
+                onValueChange = { newTitle -> calendarViewModel.updateEventField("title", newTitle) },
                 label = { Text("Наслов") },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -66,7 +67,7 @@ fun AddEventScreen(
             
             OutlinedTextField(
                 value = formState.description ?: "",
-                onValueChange = { newDescription -> calendarViewModel.updateEventForm { it.copy(description = newDescription) } },
+                onValueChange = { newDescription -> calendarViewModel.updateEventField("description", newDescription) },
                 label = { Text("Опис") },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -84,7 +85,7 @@ fun AddEventScreen(
                 Spacer(modifier = Modifier.weight(1f))
                 Switch(
                     checked = formState.allDay,
-                    onCheckedChange = { isAllDay -> calendarViewModel.updateEventForm { it.copy(allDay = isAllDay) } }
+                    onCheckedChange = { isAllDay -> calendarViewModel.updateEventField("allDay", isAllDay) }
                 )
             }
             
@@ -164,7 +165,7 @@ fun AddEventScreen(
             // Локација
             OutlinedTextField(
                 value = formState.location,
-                onValueChange = { newLocation -> calendarViewModel.updateEventForm { it.copy(location = newLocation) } },
+                onValueChange = { newLocation -> calendarViewModel.updateEventField("location", newLocation) },
                 label = { Text("Локација") },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -189,7 +190,7 @@ fun AddEventScreen(
                             .size(32.dp)
                             .clip(CircleShape)
                             .background(Color(android.graphics.Color.parseColor(eventColor.colorHex)))
-                            .clickable { calendarViewModel.updateEventForm { it.copy(color = eventColor.colorHex) } }
+                            .clickable { calendarViewModel.updateEventField("color", eventColor.colorHex) }
                             .then(
                                 if (formState.color == eventColor.colorHex) {
                                     Modifier.border(
@@ -218,20 +219,20 @@ fun AddEventScreen(
         }
     }
     
-    // Дијалог за избор датума
+    // Дијалог за избор датума - сада је у @Composable контексту
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = formState.date.time
         )
         
-        DatePickerDialog(
+        androidx.compose.material3.DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(
                     onClick = {
                         datePickerState.selectedDateMillis?.let { millis ->
                             val newDate = Date(millis)
-                            calendarViewModel.updateEventForm { it.copy(date = newDate) }
+                            calendarViewModel.updateEventField("date", newDate)
                         }
                         showDatePicker = false
                     }
@@ -251,40 +252,37 @@ fun AddEventScreen(
         }
     }
     
-    // Дијалог за избор времена
+    // Дијалог за избор времена - сада користимо Material3 TimePickerDialog
     if (showTimePicker) {
         val timePickerState = rememberTimePickerState(
             initialHour = when (timePickerMode) {
                 TimePickerMode.START -> formState.startHour
-                TimePickerMode.END -> formState.endHour ?: formState.startHour
+                TimePickerMode.END -> formState.endHour ?: (formState.startHour + 1).coerceAtMost(23)
             },
             initialMinute = when (timePickerMode) {
                 TimePickerMode.START -> formState.startMinute
-                TimePickerMode.END -> formState.endMinute ?: formState.startMinute
+                TimePickerMode.END -> formState.endMinute ?: 0
             }
         )
         
-        TimePickerDialog(
+        // Користимо Dialog компоненту да обмотамо TimePicker
+        AlertDialog(
             onDismissRequest = { showTimePicker = false },
+            title = { Text("Изаберите време") },
+            text = { TimePicker(state = timePickerState) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         when (timePickerMode) {
                             TimePickerMode.START -> {
-                                calendarViewModel.updateEventForm {
-                                    it.copy(
-                                        startHour = timePickerState.hour,
-                                        startMinute = timePickerState.minute
-                                    )
-                                }
+                                calendarViewModel.updateEventField("startHour", timePickerState.hour)
+                                calendarViewModel.updateEventField("startMinute", timePickerState.minute)
+                                Log.d("AddEventScreen", "Постављено време почетка: ${timePickerState.hour}:${timePickerState.minute}")
                             }
                             TimePickerMode.END -> {
-                                calendarViewModel.updateEventForm {
-                                    it.copy(
-                                        endHour = timePickerState.hour,
-                                        endMinute = timePickerState.minute
-                                    )
-                                }
+                                calendarViewModel.updateEventField("endHour", timePickerState.hour)
+                                calendarViewModel.updateEventField("endMinute", timePickerState.minute)
+                                Log.d("AddEventScreen", "Постављено време краја: ${timePickerState.hour}:${timePickerState.minute}")
                             }
                         }
                         showTimePicker = false
@@ -300,8 +298,6 @@ fun AddEventScreen(
                     Text("Откажи")
                 }
             }
-        ) {
-            TimePicker(state = timePickerState)
-        }
+        )
     }
 } 
