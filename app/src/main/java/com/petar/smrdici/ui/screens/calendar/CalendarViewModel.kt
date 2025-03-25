@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
 import android.util.Log
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class CalendarViewModel(private val context: Context) : ViewModel() {
     private val eventRepository = EventRepository(context)
@@ -141,6 +143,8 @@ class CalendarViewModel(private val context: Context) : ViewModel() {
             _uiState.value = CalendarUiState.Loading
             
             try {
+                Log.d("CalendarViewModel", "Учитавање догађаја за датум: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(date)}")
+                
                 // Постављамо временски опсег за изабрани датум (од поноћи до 23:59:59)
                 val calendar = Calendar.getInstance()
                 calendar.time = date
@@ -159,9 +163,10 @@ class CalendarViewModel(private val context: Context) : ViewModel() {
                     .collect { events -> // Користимо collect уместо first
                         _events.value = events
                         _uiState.value = CalendarUiState.Success(events)
+                        Log.d("CalendarViewModel", "Успешно учитано ${events.size} догађаја за датум: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(date)}")
                     }
             } catch (e: Exception) {
-                Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
+                Log.e("CalendarViewModel", "Грешка при учитавању догађаја за датум: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(date)}", e)
                 _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при учитавању догађаја")
             }
         }

@@ -38,6 +38,10 @@ import com.petar.smrdici.ui.navigation.Screen
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.ui.platform.LocalContext
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @Composable
 fun CalendarScreen(
@@ -55,6 +59,23 @@ fun CalendarScreen(
     var showAddEventDialog by remember { mutableStateOf(false) }
     var selectedEvent by remember { mutableStateOf<Event?>(null) }
     var showEventDetailsDialog by remember { mutableStateOf(false) }
+    
+    // Додајемо корутински опсег за Compose компоненту
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Стање освежавања
+    var isRefreshing by remember { mutableStateOf(false) }
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
+    
+    // Функција за освежавање догађаја
+    val refreshEvents = {
+        coroutineScope.launch {
+            isRefreshing = true
+            calendarViewModel.loadEventsForDate(selectedDate)
+            delay(1000) // Минимално трајање анимације освежавања
+            isRefreshing = false
+        }
+    }
     
     // Учитавамо догађаје при промени датума
     LaunchedEffect(selectedDate) {
@@ -97,39 +118,49 @@ fun CalendarScreen(
                 events = if (uiState is CalendarUiState.Success) (uiState as CalendarUiState.Success).events else emptyList()
             )
             
-            // Приказ догађаја за изабрани датум
-            when (uiState) {
-                is CalendarUiState.Loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
+            // Приказ догађаја за изабрани датум са подршком за освежавање
+            SwipeRefresh(
+                state = swipeRefreshState,
+                onRefresh = { refreshEvents() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                when (uiState) {
+                    is CalendarUiState.Loading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // Приказујемо индикатор учитавања само ако није у току освежавање
+                            if (!isRefreshing) {
+                                CircularProgressIndicator()
+                            }
+                        }
                     }
-                }
-                is CalendarUiState.Success -> {
-                    val events = (uiState as CalendarUiState.Success).events
-                    EventsList(
-                        events = events,
-                        onEventClick = { event ->
-                            selectedEvent = event
-                            showEventDetailsDialog = true
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(16.dp)
-                    )
-                }
-                is CalendarUiState.Error -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = (uiState as CalendarUiState.Error).message,
-                            color = MaterialTheme.colorScheme.error
+                    is CalendarUiState.Success -> {
+                        val events = (uiState as CalendarUiState.Success).events
+                        EventsList(
+                            events = events,
+                            onEventClick = { event ->
+                                selectedEvent = event
+                                showEventDetailsDialog = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
                         )
+                    }
+                    is CalendarUiState.Error -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = (uiState as CalendarUiState.Error).message,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }
