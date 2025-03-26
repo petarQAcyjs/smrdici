@@ -21,6 +21,8 @@ import android.util.Log
 import java.text.SimpleDateFormat
 import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 
 class CalendarViewModel @Inject constructor(
     private val eventRepository: EventRepository,
@@ -44,8 +46,20 @@ class CalendarViewModel @Inject constructor(
     private val _editingEvent = MutableStateFlow<Event?>(null)
     val editingEvent: StateFlow<Event?> = _editingEvent
     
+    private val _allEvents = MutableStateFlow<List<Event>>(emptyList())
+    
+    private var eventsJob: Job? = null
+    
     init {
-        loadEvents()
+        viewModelScope.launch {
+            try {
+                // Чистимо базу при покретању
+                eventRepository.cleanupDatabase()
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Грешка при чишћењу базе", e)
+            }
+            loadEvents()
+        }
     }
     
     // Функција за ресетовање форме за догађај
@@ -56,22 +70,88 @@ class CalendarViewModel @Inject constructor(
         )
     }
     
+    private fun filterEventsForDate(date: Date, events: List<Event>): List<Event> {
+        val calendar = Calendar.getInstance().apply {
+            time = date
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        
+        val startOfDay = calendar.time
+        
+        calendar.add(Calendar.DAY_OF_MONTH, 1)
+        calendar.add(Calendar.MILLISECOND, -1)
+        val endOfDay = calendar.time
+        
+        Log.d("CalendarViewModel", "Филтрирам догађаје за датум: ${formatDate(date)}")
+        Log.d("CalendarViewModel", "Почетак дана: ${formatDate(startOfDay)}")
+        Log.d("CalendarViewModel", "Крај дана: ${formatDate(endOfDay)}")
+        
+        // Користимо distinctBy да избегнемо дупликате
+        return events.distinctBy { "${it.title}${it.startTime}${it.assignee}" }
+            .filter { event ->
+                event.startTime?.toDate()?.let { eventDate ->
+                    !eventDate.before(startOfDay) && !eventDate.after(endOfDay)
+                } ?: false
+            }.also { filtered ->
+                events.forEach { event ->
+                    val message = if (filtered.contains(event)) "је у опсега" else "је ван опсега"
+                    Log.d("CalendarViewModel", "Догађај '${event.title}' време: ${formatDate(event.startTime?.toDate())} $message")
+                }
+                Log.d("CalendarViewModel", "Пронађено ${filtered.size} догађаја од укупно ${events.size}")
+            }
+    }
+    
     private fun loadEvents() {
-        viewModelScope.launch {
-            eventRepository.getEventsForCurrentUser()
-                .catch { e ->
-                    _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при учитавању догађаја")
-                }
-                .collect { events ->
-                    _events.value = events
-                    _uiState.value = CalendarUiState.Success(events)
-                }
+        eventsJob?.cancel() // Отказујемо претходни job ако постоји
+        
+        eventsJob = viewModelScope.launch {
+            try {
+                eventRepository.observeEvents()
+                    .catch { e ->
+                        Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
+                        _uiState.value = CalendarUiState.Error(e.message ?: "Непозната грешка")
+                    }
+                    .collect { events ->
+                        _allEvents.value = events
+                        updateFilteredEvents()
+                    }
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
+                _uiState.value = CalendarUiState.Error(e.message ?: "Непозната грешка")
+            }
+        }
+    }
+    
+    private fun updateFilteredEvents() {
+        val filteredEvents = filterEventsForDate(_selectedDate.value, _allEvents.value)
+        _events.value = filteredEvents
+        _uiState.value = CalendarUiState.Success(filteredEvents)
+        
+        Log.d("CalendarViewModel", "Изабран датум: ${
+            SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(_selectedDate.value)
+        }, приказујем ${filteredEvents.size} догађаја од укупно ${_allEvents.value.size}")
+        
+        // Ажурирамо датум у форми за догађај
+        updateEventForm { form ->
+            form.copy(date = _selectedDate.value)
         }
     }
     
     // Промена изабраног датума
     fun selectDate(date: Date) {
         _selectedDate.value = date
+        
+        // Филтрирамо из свих догађаја
+        val filteredEvents = filterEventsForDate(date, _allEvents.value)
+        _events.value = filteredEvents
+        _uiState.value = CalendarUiState.Success(filteredEvents)
+        
+        Log.d("CalendarViewModel", "Изабран датум: ${
+            SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(date)
+        }, приказујем ${filteredEvents.size} догађаја од укупно ${_allEvents.value.size}")
         
         // Ажурирамо датум у форми за догађај
         updateEventForm { form ->
@@ -152,7 +232,7 @@ class CalendarViewModel @Inject constructor(
                     color = form.color,
                     assignee = form.assignee,
                     createdBy = auth.currentUser?.uid ?: "",
-                    familyId = "" // Ако имате логику за породични ИД, овде је поставите
+                    familyId = "default" // Подразумевана породица
                 )
                 
                 Log.d("CalendarViewModel", "Покушај додавања догађаја: ${event.title}, assignee: ${event.assignee}, color: ${event.color}")
@@ -173,7 +253,7 @@ class CalendarViewModel @Inject constructor(
                         Log.d("CalendarViewModel", "Успешно додат догађај: ${event.title} за особу ${event.assignee}")
                         
                         // Освежавамо листу догађаја за тренутни датум
-                        loadEventsForDate(_selectedDate.value)
+                        loadEvents()
                     }
                     .onFailure { e ->
                         Log.e("CalendarViewModel", "Грешка при додавању догађаја", e)
@@ -193,7 +273,7 @@ class CalendarViewModel @Inject constructor(
                 .onSuccess {
                     // Успешно обрисан догађај, али не модификујемо директно uiState
                     // већ позивамо loadEventsForDate да освежи листу догађаја за текући датум
-                    loadEventsForDate(_selectedDate.value)
+                    loadEvents()
                 }
                 .onFailure { e ->
                     _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при брисању догађаја")
@@ -201,39 +281,63 @@ class CalendarViewModel @Inject constructor(
         }
     }
     
-    // Додајемо нову функцију за учитавање догађаја за одређени датум
-    fun loadEventsForDate(date: Date) {
+    // Функција за учитавање догађаја за одређени период
+    private fun loadEventsForPeriod(startDate: Date, endDate: Date) {
         viewModelScope.launch {
-            _uiState.value = CalendarUiState.Loading
-            
             try {
-                Log.d("CalendarViewModel", "Учитавање догађаја за датум: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(date)}")
+                Log.d("CalendarViewModel", "Учитавање догађаја за период ${
+                    SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(startDate)
+                } - ${
+                    SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(endDate)
+                }")
                 
-                // Постављамо временски опсег за изабрани датум (од поноћи до 23:59:59)
-                val calendar = Calendar.getInstance()
-                calendar.time = date
-                calendar.set(Calendar.HOUR_OF_DAY, 0)
-                calendar.set(Calendar.MINUTE, 0)
-                calendar.set(Calendar.SECOND, 0)
-                val startOfDay = calendar.time
-                
-                calendar.set(Calendar.HOUR_OF_DAY, 23)
-                calendar.set(Calendar.MINUTE, 59)
-                calendar.set(Calendar.SECOND, 59)
-                val endOfDay = calendar.time
-                
-                // Користимо постојећу функцију из репозиторијума
-                eventRepository.getEventsForPeriod(startOfDay, endOfDay)
-                    .collect { events -> // Користимо collect уместо first
-                        _events.value = events
-                        _uiState.value = CalendarUiState.Success(events)
-                        Log.d("CalendarViewModel", "Успешно учитано ${events.size} догађаја за датум: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(date)}")
+                eventRepository.observeEvents()
+                    .catch { e ->
+                        if (e is CancellationException) {
+                            Log.d("CalendarViewModel", "Учитавање догађаја отказано")
+                            return@catch
+                        }
+                        Log.e("CalendarViewModel", "Грешка при учитавању догађаја за период", e)
+                        _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при учитавању догађаја")
+                    }
+                    .collect { allEvents ->
+                        // Филтрирамо догађаје за задати период
+                        val filteredEvents = allEvents.filter { event ->
+                            val eventDate = event.startTime?.toDate()
+                            eventDate != null && eventDate >= startDate && eventDate <= endDate
+                        }
+                        
+                        _allEvents.value = allEvents
+                        _events.value = filteredEvents
+                        _uiState.value = CalendarUiState.Success(filteredEvents)
+                        
+                        Log.d("CalendarViewModel", "Учитано ${allEvents.size} догађаја, филтрирано ${filteredEvents.size} за период")
                     }
             } catch (e: Exception) {
-                Log.e("CalendarViewModel", "Грешка при учитавању догађаја за датум: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(date)}", e)
+                if (e is CancellationException) {
+                    Log.d("CalendarViewModel", "Учитавање догађаја отказано")
+                    return@launch
+                }
+                Log.e("CalendarViewModel", "Грешка при учитавању догађаја за период", e)
                 _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при учитавању догађаја")
             }
         }
+    }
+    
+    // Функција за учитавање догађаја за одређени датум
+    fun loadEventsForDate(date: Date) {
+        val calendar = Calendar.getInstance()
+        calendar.time = date
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        val startOfDay = calendar.time
+        
+        calendar.add(Calendar.DAY_OF_MONTH, 1)
+        calendar.add(Calendar.MILLISECOND, -1)
+        val endOfDay = calendar.time
+        
+        loadEventsForPeriod(startOfDay, endOfDay)
     }
     
     fun startEditingEvent(event: Event) {
@@ -311,7 +415,7 @@ class CalendarViewModel @Inject constructor(
                     .onSuccess {
                         _editingEvent.value = null
                         resetEventForm()
-                        loadEventsForDate(_selectedDate.value)
+                        loadEvents()
                         Log.d("CalendarViewModel", "Успешно ажуриран догађај: ${updatedEvent.title}")
                     }
                     .onFailure { e ->
@@ -328,9 +432,55 @@ class CalendarViewModel @Inject constructor(
     // Додајемо нову функцију за освежавање података
     fun refresh() {
         viewModelScope.launch {
-            Log.d("CalendarViewModel", "Освежавам податке...")
-            loadEventsForDate(_selectedDate.value)
+            try {
+                Log.d("CalendarViewModel", "Освежавам податке...")
+                
+                // Задржавамо тренутне догађаје док се нови не учитају
+                val currentEvents = _events.value
+                if (currentEvents.isNotEmpty()) {
+                    _uiState.value = CalendarUiState.Success(currentEvents)
+                }
+                
+                loadEvents()
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    Log.d("CalendarViewModel", "Освежавање отказано")
+                    return@launch
+                }
+                Log.e("CalendarViewModel", "Неочекивана грешка при освежавању", e)
+                // Задржавамо старе догађаје у случају грешке
+                if (_events.value.isNotEmpty()) {
+                    _uiState.value = CalendarUiState.Success(_events.value)
+                }
+            }
         }
+    }
+    
+    fun cleanupDuplicates() {
+        viewModelScope.launch {
+            try {
+                eventRepository.removeDuplicates()
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Грешка при чишћењу дупликата", e)
+            }
+        }
+    }
+    
+    fun cleanupDatabase() {
+        viewModelScope.launch {
+            try {
+                eventRepository.cleanupDatabase()
+                // Након чишћења, освежавамо приказ
+                loadEvents()
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Грешка при чишћењу базе", e)
+            }
+        }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        eventsJob?.cancel()
     }
     
     // Додајемо Factory класу за креирање CalendarViewModel са Context параметром
@@ -342,6 +492,11 @@ class CalendarViewModel @Inject constructor(
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
+    }
+
+    private fun formatDate(date: Date?): String {
+        if (date == null) return ""
+        return SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(date)
     }
 }
 
