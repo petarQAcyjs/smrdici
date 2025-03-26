@@ -108,13 +108,14 @@ fun ListsScreen(
     var lastDeletedList by remember { mutableStateOf<ShoppingList?>(null) }
     
     // Функција за освежавање листа
-    val refreshLists = {
+    val onRefresh = {
         coroutineScope.launch {
             isRefreshing = true
-            listsViewModel.loadLists()
-            delay(1000) // Минимално трајање анимације освежавања
+            listsViewModel.loadLists() // Враћамо на loadLists док не имплементирамо syncLists
+            delay(1000)
             isRefreshing = false
         }
+        Unit // Додајемо Unit да би тип функције био () -> Unit
     }
     
     LaunchedEffect(isDeletionInProgress) {
@@ -170,7 +171,7 @@ fun ListsScreen(
                 // Приказујемо садржај екрана са подршком за освежавање
                 SwipeRefresh(
                     state = swipeRefreshState,
-                    onRefresh = { refreshLists() },
+                    onRefresh = onRefresh,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     LazyColumn(

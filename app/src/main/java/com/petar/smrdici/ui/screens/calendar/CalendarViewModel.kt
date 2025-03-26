@@ -582,6 +582,20 @@ class CalendarViewModel @Inject constructor(
         }
         return Timestamp(calendar.time)
     }
+
+    fun syncEvents() {
+        viewModelScope.launch {
+            try {
+                Log.d("CalendarViewModel", "Почињем синхронизацију догађаја")
+                eventRepository.syncEvents() // Додати ову методу у репозиторијум
+                loadEventsForDate(selectedDate.value) // Освежи приказ
+                Log.d("CalendarViewModel", "Синхронизација успешно завршена")
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Грешка при синхронизацији", e)
+                _uiState.value = CalendarUiState.Error("Грешка при синхронизацији")
+            }
+        }
+    }
 }
 
 // Стање корисничког интерфејса

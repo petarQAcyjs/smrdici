@@ -97,15 +97,14 @@ fun CalendarScreen(
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
     
     // Функција за освежавање догађаја
-    val refreshEvents = {
+    val onRefresh = {
         coroutineScope.launch {
             isRefreshing = true
-            // Користимо нову функцију за освежавање података
-            calendarViewModel.refresh()
-            delay(1000) // Минимално трајање анимације освежавања
+            calendarViewModel.syncEvents()
+            delay(1000)
             isRefreshing = false
-            Log.d("CalendarScreen", "Повлачење за освежавање - догађаји освежени")
         }
+        Unit
     }
     
     // Ефекат за логовање и учитавање догађаја када се промени selectedDate
@@ -153,123 +152,101 @@ fun CalendarScreen(
         }
     }
     
-    // Главни контејнер
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
+        SwipeRefresh(
+            state = swipeRefreshState,
+            onRefresh = onRefresh,
             modifier = Modifier.fillMaxSize()
         ) {
-            // Додајемо дугме за повратак назад
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { navController.navigateUp() }
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Враћамо на стари начин приказа заглавља
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Назад"
-                    )
-                }
-                
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                Text(
-                    text = "Календар",
-                    style = MaterialTheme.typography.headlineMedium
-                )
-            }
-            
-            // Календарски приказ
-            CalendarGrid(
-                dates = dates,
-                selectedDate = selectedDate,
-                datesWithEvents = datesWithEvents,
-                onDateSelected = calendarViewModel::selectDate
-            )
-            
-            // Приказ догађаја за изабрани датум са подршком за освежавање
-            SwipeRefresh(
-                state = swipeRefreshState,
-                onRefresh = { refreshEvents() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                when (calendarUiState) {
-                is CalendarUiState.Loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                    IconButton(
+                        onClick = { navController.navigateUp() }
                     ) {
-                            // Приказујемо индикатор учитавања само ако није у току освежавање
-                            if (!isRefreshing) {
-                        CircularProgressIndicator()
-                            }
-                    }
-                }
-                is CalendarUiState.Success -> {
-                        val eventsToShow = (calendarUiState as CalendarUiState.Success).events
-                    EventsList(
-                            events = eventsToShow,
-                        onEventClick = { event ->
-                            selectedEvent = event
-                            showEventDetailsDialog = true
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    )
-                }
-                is CalendarUiState.Error -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                                text = (calendarUiState as CalendarUiState.Error).message,
-                            color = MaterialTheme.colorScheme.error
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Назад"
                         )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Text(
+                        text = "Календар",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+                
+                // Враћамо CalendarGrid уместо MonthCalendar
+                CalendarGrid(
+                    dates = dates,
+                    selectedDate = selectedDate,
+                    datesWithEvents = datesWithEvents,
+                    onDateSelected = { date -> 
+                        calendarViewModel.selectDate(date)
+                    }
+                )
+                
+                when (calendarUiState) {
+                    is CalendarUiState.Loading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!isRefreshing) {
+                                CircularProgressIndicator()
+                            }
+                        }
+                    }
+                    is CalendarUiState.Success -> {
+                        val eventsToShow = (calendarUiState as CalendarUiState.Success).events
+                        EventsList(
+                            events = eventsToShow,
+                            onEventClick = { event ->
+                                selectedEvent = event
+                                showEventDetailsDialog = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        )
+                    }
+                    is CalendarUiState.Error -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = (calendarUiState as CalendarUiState.Error).message,
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
                 }
             }
         }
         
-        // Плутајуће дугме за додавање догађаја - премештено изван Column и EventsList
         FloatingActionButton(
             onClick = {
-                // Експлицитно ажурирамо форму са тренутно изабраним датумом
-                Log.d("CalendarScreen", "FAB кликнут - постављам изабрани датум: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(selectedDate)}")
-                // Ресетујемо формулар на подразумеване вредности али постављамо изабрани датум
-                calendarViewModel.updateEventForm { 
-                    EventFormState(
-                        date = selectedDate, 
-                        title = "",
-                        description = "",
-                        location = "",
-                        // Задржавамо Сви као подразумевану вредност, али корисник ће моћи да промени
-                        assignee = "EVERYONE"
-                    )
-                }
+                calendarViewModel.resetEventForm()
                 showAddEventDialog = true
             },
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Додај догађај"
-            )
+            Icon(Icons.Default.Add, "Додај догађај")
         }
     }
     
-    // Приказујемо дијалог за додавање догађаја ако је потребно
     if (showAddEventDialog) {
         AddEventDialog(
             showDialog = showAddEventDialog,
@@ -293,7 +270,6 @@ fun CalendarScreen(
         )
     }
     
-    // Дијалог за приказ детаља догађаја
     if (showEventDetailsDialog && selectedEvent != null) {
         EventDetailsDialog(
             event = selectedEvent!!,

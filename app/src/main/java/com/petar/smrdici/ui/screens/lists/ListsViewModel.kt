@@ -11,13 +11,18 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.ShoppingList
 import com.petar.smrdici.data.model.ShoppingItem
+import com.petar.smrdici.data.repository.ListsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.tasks.await
 
-class ListsViewModel(private val context: Context) : ViewModel() {
+class ListsViewModel(
+    private val context: Context,
+    private val listsRepository: ListsRepository
+) : ViewModel() {
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     
@@ -784,7 +789,10 @@ class ListsViewModel(private val context: Context) : ViewModel() {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ListsViewModel::class.java)) {
-                return ListsViewModel(context) as T
+                return ListsViewModel(
+                    context,
+                    ListsRepository(context)
+                ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
@@ -816,6 +824,20 @@ class ListsViewModel(private val context: Context) : ViewModel() {
                 .addOnFailureListener { e ->
                     _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању ставке")
                 }
+        }
+    }
+
+    fun syncLists() {
+        viewModelScope.launch {
+            try {
+                Log.d("ListsViewModel", "Почињем синхронизацију листа")
+                listsRepository.syncLists() // Треба имплементирати ову методу у репозиторијуму
+                loadLists() // Освежи приказ
+                Log.d("ListsViewModel", "Синхронизација успешно завршена")
+            } catch (e: Exception) {
+                Log.e("ListsViewModel", "Грешка при синхронизацији", e)
+                _uiState.value = ListsUiState.Error("Грешка при синхронизацији")
+            }
         }
     }
 }
