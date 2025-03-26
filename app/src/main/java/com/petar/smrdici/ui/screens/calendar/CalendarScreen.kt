@@ -272,15 +272,20 @@ fun CalendarScreen(
     // Приказујемо дијалог за додавање догађаја ако је потребно
     if (showAddEventDialog) {
         AddEventDialog(
-            onDismissRequest = { 
-                showAddEventDialog = false
-                // Ако затворимо дијалог, ресетујемо стање уређивања
-                if (editingEvent != null) {
-                    calendarViewModel.cancelEditing()
+            showDialog = true,
+            eventFormState = eventFormState,
+            onEventFormChanged = { field, value -> 
+                calendarViewModel.updateEventForm { currentForm ->
+                    when (field) {
+                        "startHour" -> currentForm.copy(startHour = value as Int)
+                        "startMinute" -> currentForm.copy(startMinute = value as Int)
+                        "endHour" -> currentForm.copy(endHour = value as Int)
+                        "endMinute" -> currentForm.copy(endMinute = value as Int)
+                        else -> currentForm
+                    }
                 }
             },
-            onConfirm = {
-                // Додајемо или ажурирамо догађај у зависности од тога да ли уређујемо
+            onSaveClick = {
                 if (editingEvent != null) {
                     calendarViewModel.updateEvent()
                 } else {
@@ -288,7 +293,11 @@ fun CalendarScreen(
                 }
                 showAddEventDialog = false
             },
-            calendarViewModel = calendarViewModel
+            onDismissClick = {
+                calendarViewModel.cancelEditing()
+                showAddEventDialog = false
+            },
+            isEditing = editingEvent != null
         )
     }
     
@@ -508,119 +517,46 @@ fun EventItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEventDialog(
-    onDismissRequest: () -> Unit,
-    onConfirm: () -> Unit,
-    calendarViewModel: CalendarViewModel,
-    modifier: Modifier = Modifier
+    showDialog: Boolean,
+    eventFormState: EventFormState,
+    onEventFormChanged: (String, Any) -> Unit,
+    onSaveClick: () -> Unit,
+    onDismissClick: () -> Unit,
+    isEditing: Boolean = false // Додајемо параметар за проверу да ли уређујемо постојећи догађај
 ) {
-    val eventFormState by calendarViewModel.eventFormState.collectAsState()
-    val editingEvent by calendarViewModel.editingEvent.collectAsState()
-    var selectedAssignee by remember { mutableStateOf(eventFormState.assignee) }
-    var showingDatePicker by remember { mutableStateOf(false) }
-    var showingTimePicker by remember { mutableStateOf<String?>(null) }
-    
-    val assignees = EventAssignee.values()
-    val formattedDate = remember(eventFormState.date) {
-        SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(eventFormState.date)
-    }
+    var showStartTimePicker by remember { mutableStateOf(false) }
+    var showEndTimePicker by remember { mutableStateOf(false) }
 
-    // Иницијализујемо изабрану особу када се дијалог отвори
-    LaunchedEffect(Unit) {
-        Log.d("AddEventDialog", "Дијалог отворен, форма - датум: $formattedDate, особа: ${eventFormState.assignee}")
-        selectedAssignee = eventFormState.assignee
-    }
-    
-    // Ефекат који прати промену у eventFormState.assignee
-    LaunchedEffect(eventFormState.assignee) {
-        Log.d("AddEventDialog", "eventFormState.assignee промењен на: ${eventFormState.assignee}")
-        if (eventFormState.assignee.isNotBlank() && selectedAssignee != eventFormState.assignee) {
-            Log.d("AddEventDialog", "Ажурирана selectedAssignee из форме: ${eventFormState.assignee}")
-            selectedAssignee = eventFormState.assignee
-        }
-    }
-
-    // Приказ дате пикера када је потребно
-    if (showingDatePicker) {
-        DatePickerDialog(
-            selectedDate = eventFormState.date,
-            onDateSelected = { newDate ->
-                calendarViewModel.updateEventField("date", newDate)
-                showingDatePicker = false
-            },
-            onDismiss = {
-                showingDatePicker = false
-            }
-        )
-    }
-
-    // Приказ тајм пикера када је потребно
-    showingTimePicker?.let { pickerType ->
-        TimePickerDialog(
-            initialHour = when (pickerType) {
-                "start" -> eventFormState.startHour
-                "end" -> eventFormState.endHour ?: (eventFormState.startHour + 1).coerceAtMost(23)
-                else -> 12
-            },
-            initialMinute = when (pickerType) {
-                "start" -> eventFormState.startMinute
-                "end" -> eventFormState.endMinute ?: 0
-                else -> 0
-            },
-            onTimeSelected = { hour, minute ->
-                when (pickerType) {
-                    "start" -> {
-                        calendarViewModel.updateEventField("startHour", hour)
-                        calendarViewModel.updateEventField("startMinute", minute)
-                    }
-                    "end" -> {
-                        calendarViewModel.updateEventField("endHour", hour)
-                        calendarViewModel.updateEventField("endMinute", minute)
-                    }
-                }
-                showingTimePicker = null
-            },
-            onDismiss = {
-                showingTimePicker = null
-            }
-        )
-    }
+    if (!showDialog) return
 
     Dialog(
-        onDismissRequest = onDismissRequest,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true
-        )
+        onDismissRequest = onDismissClick,
+        properties = DialogProperties(dismissOnClickOutside = false)
     ) {
         Card(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = if (editingEvent != null) "Уреди догађај" else "Додај догађај",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+                    text = if (isEditing) "Уреди догађај" else "Нови догађај",
+                    style = MaterialTheme.typography.titleLarge
                 )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Наслов поље
                 OutlinedTextField(
                     value = eventFormState.title,
                     onValueChange = { newTitle -> 
-                        calendarViewModel.updateEventField("title", newTitle)
+                        onEventFormChanged("title", newTitle)
                     },
                     label = { Text("Наслов") },
                     modifier = Modifier.fillMaxWidth(),
@@ -631,7 +567,7 @@ fun AddEventDialog(
                 OutlinedTextField(
                     value = eventFormState.description ?: "",
                     onValueChange = { newDescription -> 
-                        calendarViewModel.updateEventField("description", newDescription)
+                        onEventFormChanged("description", newDescription)
                     },
                     label = { Text("Опис") },
                     modifier = Modifier.fillMaxWidth(),
@@ -643,7 +579,7 @@ fun AddEventDialog(
                 OutlinedTextField(
                     value = eventFormState.location,
                     onValueChange = { newLocation -> 
-                        calendarViewModel.updateEventField("location", newLocation)
+                        onEventFormChanged("location", newLocation)
                     },
                     label = { Text("Локација") },
                     modifier = Modifier.fillMaxWidth(),
@@ -652,13 +588,13 @@ fun AddEventDialog(
 
                 // Датум поље
                 OutlinedTextField(
-                    value = formattedDate,
+                    value = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(eventFormState.date),
                     onValueChange = { },
                     label = { Text("Датум") },
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showingDatePicker = true },
+                        .clickable { },
                     trailingIcon = {
                         Icon(
                             imageVector = Icons.Filled.DateRange,
@@ -679,63 +615,11 @@ fun AddEventDialog(
                     Switch(
                         checked = eventFormState.allDay,
                         onCheckedChange = { isAllDay -> 
-                            calendarViewModel.updateEventField("allDay", isAllDay)
+                            onEventFormChanged("allDay", isAllDay)
                         }
                     )
                 }
 
-                // Време почетка и краја
-                if (!eventFormState.allDay) {
-                    Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = String.format(
-                                    "%02d:%02d",
-                                    eventFormState.startHour,
-                                    eventFormState.startMinute
-                                ),
-                                onValueChange = { },
-                                label = { Text("Почетак") },
-                                readOnly = true,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { showingTimePicker = "start" },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Schedule,
-                                        contentDescription = "Изабери време почетка"
-                                    )
-                                }
-                            )
-
-                            OutlinedTextField(
-                                value = if (eventFormState.endHour != null && eventFormState.endMinute != null)
-                                String.format(
-                                    "%02d:%02d",
-                                        eventFormState.endHour,
-                                        eventFormState.endMinute
-                                    ) else "",
-                                onValueChange = { },
-                                label = { Text("Крај") },
-                                readOnly = true,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { showingTimePicker = "end" },
-                                placeholder = { Text("Опционо") },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Schedule,
-                                        contentDescription = "Изабери време краја"
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
-                
                 // Одабир особе - побољшана секција
                 Column {
                     Text(
@@ -746,7 +630,7 @@ fun AddEventDialog(
                     )
                     
                     // Приказ тренутно изабране особе
-                    val currentAssignee = assignees.find { it.name == selectedAssignee }
+                    val currentAssignee = EventAssignee.values().find { it.name == eventFormState.assignee }
                     if (currentAssignee != null) {
                             Text(
                             text = "Изабрана особа: ${currentAssignee.displayName}",
@@ -756,7 +640,7 @@ fun AddEventDialog(
                             modifier = Modifier.padding(bottom = 8.dp)
                                     )
                                 } else {
-                        Log.d("AddEventDialog", "Није пронађен одговарајући assignee за '${selectedAssignee}'")
+                        Log.d("AddEventDialog", "Није пронађен одговарајући assignee за '${eventFormState.assignee}'")
                     }
                     
                     // Избор особе
@@ -764,18 +648,15 @@ fun AddEventDialog(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(assignees) { assignee ->
-                            val isSelected = assignee.name == selectedAssignee
+                        items(EventAssignee.values()) { assignee ->
+                            val isSelected = assignee.name == eventFormState.assignee
                             AssigneeAvatar(
                                 assignee = assignee,
                                 isSelected = isSelected,
                                 onClick = {
                                     Log.d("AddEventDialog", "Особа кликнута: ${assignee.name}")
-                                    selectedAssignee = assignee.name
-                                    
-                                    // Експлицитно ажурирамо форму са новом особом и бојом
-                                    calendarViewModel.updateEventField("assignee", assignee.name)
-                                    calendarViewModel.updateEventField("color", assignee.color)
+                                    onEventFormChanged("assignee", assignee.name)
+                                    onEventFormChanged("color", assignee.color)
                                     
                                     Log.d("AddEventDialog", "После клика - форма assignee: ${assignee.name}, color: ${assignee.color}")
                                 }
@@ -786,64 +667,86 @@ fun AddEventDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Дугмад за акције - сада их смештамо у засебne редове за бољи распоред
-                Column(
+                // Време почетка
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Дугме за сачување/додавање
-            Button(
-                onClick = {
-                            if (editingEvent != null) {
-                                calendarViewModel.updateEvent()
-                            } else {
-                    calendarViewModel.addEvent()
-                            }
-                            onDismissRequest()
-                        },
-                        enabled = eventFormState.isValid,
-                        modifier = Modifier.fillMaxWidth()
+                    Text("Време почетка:")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { showStartTimePicker = true }
                     ) {
-                        Text(if (editingEvent != null) "Сачувај" else "Додај")
+                        Text(String.format("%02d:%02d", eventFormState.startHour, eventFormState.startMinute))
                     }
-                    
-                    // Ред са дугмадима за отказивање и брисање
+                }
+
+                if (!eventFormState.allDay) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Дугме за отказивање
-                        OutlinedButton(
-                            onClick = {
-                                if (editingEvent != null) {
-                                    calendarViewModel.cancelEditing()
-                                }
-                                onDismissRequest()
-                            },
-                            modifier = Modifier.weight(1f)
+                        Text("Време завршетка:")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        FilledTonalButton(
+                            onClick = { showEndTimePicker = true },
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            )
                         ) {
-                Text("Откажи")
-            }
-                        
-                        // Дугме за брисање, приказ само при уређивању
-                        if (editingEvent != null) {
-                            OutlinedButton(
-                                onClick = {
-                                    editingEvent?.id?.let { calendarViewModel.deleteEvent(it) }
-                                    onDismissRequest()
-                                },
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Обриши")
-                            }
+                            Text(
+                                if (eventFormState.endHour != null && eventFormState.endMinute != null)
+                                    String.format("%02d:%02d", eventFormState.endHour, eventFormState.endMinute)
+                                else
+                                    "Изабери"
+                            )
                         }
+                    }
+                }
+
+                // Дугмад за акције
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismissClick) {
+                        Text("Откажи")
+                    }
+                    Button(onClick = onSaveClick) {
+                        Text(if (isEditing) "Сачувај измене" else "Додај")
                     }
                 }
             }
         }
+    }
+
+    // Дијалози за избор времена
+    if (showStartTimePicker) {
+        TimePickerDialog(
+            showDialog = true,
+            initialHour = eventFormState.startHour,
+            initialMinute = eventFormState.startMinute,
+            onTimeSelected = { hour, minute ->
+                onEventFormChanged("startHour", hour)
+                onEventFormChanged("startMinute", minute)
+                showStartTimePicker = false
+            },
+            onDismiss = { showStartTimePicker = false }
+        )
+    }
+
+    if (!eventFormState.allDay && showEndTimePicker) {
+        TimePickerDialog(
+            showDialog = true,
+            initialHour = eventFormState.endHour ?: eventFormState.startHour,
+            initialMinute = eventFormState.endMinute ?: eventFormState.startMinute,
+            onTimeSelected = { hour, minute ->
+                onEventFormChanged("endHour", hour)
+                onEventFormChanged("endMinute", minute)
+                showEndTimePicker = false
+            },
+            onDismiss = { showEndTimePicker = false }
+        )
     }
 }
 
@@ -912,80 +815,6 @@ fun AssigneeAvatar(
 }
 
 @Composable
-fun TimePickerDialog(
-    initialHour: Int,
-    initialMinute: Int,
-    onTimeSelected: (Int, Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val hour by remember { mutableStateOf(initialHour) }
-    val minute by remember { mutableStateOf(initialMinute) }
-    
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Изаберите време") },
-        text = {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Сат")
-                        Spacer(modifier = Modifier.height(8.dp))
-                        for (h in 0..23) {
-                            Text(
-                                text = String.format("%02d", h),
-                                modifier = Modifier
-                                    .clickable {
-                                        onTimeSelected(h, minute)
-                                    }
-                                    .padding(8.dp),
-                                fontWeight = if (h == hour) FontWeight.Bold else FontWeight.Normal,
-                                color = if (h == hour) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                    
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Минут")
-                        Spacer(modifier = Modifier.height(8.dp))
-                        for (m in 0..59 step 5) {
-                            Text(
-                                text = String.format("%02d", m),
-                                modifier = Modifier
-                                    .clickable {
-                                        onTimeSelected(hour, m)
-                                    }
-                                    .padding(8.dp),
-                                fontWeight = if (m == minute) FontWeight.Bold else FontWeight.Normal,
-                                color = if (m == minute) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            }
-        },
-            confirmButton = {
-                Button(
-                onClick = {
-                    onTimeSelected(hour, minute)
-                }
-                ) {
-                    Text("ОК")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                onClick = onDismiss
-                ) {
-                    Text("Откажи")
-                }
-            }
-    )
-}
-
-@Composable
 fun EventDetailsDialog(
     event: Event,
     onDismiss: () -> Unit,
@@ -1002,89 +831,71 @@ fun EventDetailsDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 6.dp
             )
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(24.dp)
             ) {
-                // Наслов и икона за затварање
+                // Заглавље са иконом за затварање
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Аватар и име
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Аватар особе
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(
+                                    color = Color(android.graphics.Color.parseColor(assignee.color)).copy(alpha = 0.2f),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(
-                        text = "Детаљи догађаја",
-                        style = MaterialTheme.typography.titleLarge
-                    )
+                                text = assignee.initial.toString(),
+                                color = Color(android.graphics.Color.parseColor(assignee.color)),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.width(12.dp))
+                        
+                        Text(
+                            text = assignee.displayName,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+
+                    // Дугме за затварање
                     IconButton(onClick = onDismiss) {
                         Icon(
-                            imageVector = Icons.Filled.Close,
+                            imageVector = Icons.Default.Close,
                             contentDescription = "Затвори"
                         )
                     }
                 }
-                
-                Divider()
-                
-                // Аватар и име особе
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(
-                                Color(android.graphics.Color.parseColor(event.color)).copy(alpha = 0.2f),
-                                CircleShape
-                            )
-                            .border(2.dp, Color(android.graphics.Color.parseColor(event.color)), CircleShape)
-                    ) {
-                        // Експлицитан тип String за Text
-                        Text(
-                            text = assignee.initial.toString(),
-                            color = Color(android.graphics.Color.parseColor(event.color)),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(16.dp))
-                    
-                    Column {
-                            Text(
-                            text = assignee.displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(android.graphics.Color.parseColor(event.color))
-                        )
-                        Text(
-                            text = "Додељено",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                
-                Divider()
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // Наслов догађаја
                 Text(
                     text = event.title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.headlineSmall
                 )
-                
+
                 // Опис ако постоји
                 if (event.description != null && event.description.isNotBlank()) {
                     Text(
@@ -1093,101 +904,32 @@ fun EventDetailsDialog(
                     )
                 }
                 
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Локација ако постоји
-                if (event.location.isNotBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = event.location,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                }
-                
-                // Време
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Schedule,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    if (event.allDay) {
-                        Text(
-                            text = "Целодневни догађај",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    } else if (event.startTime != null) {
-                        val startTimeText = remember(event.startTime) {
-                            SimpleDateFormat("HH:mm", Locale.getDefault()).format(event.startTime.toDate())
-                        }
-                        val endTimeText = remember(event.endTime) {
-                            if (event.endTime != null) {
-                                SimpleDateFormat("HH:mm", Locale.getDefault()).format(event.endTime.toDate())
-                            } else {
-                                ""
-                            }
-                        }
-                        
-                        Text(
-                            text = if (endTimeText.isNotBlank()) {
-                                "$startTimeText - $endTimeText"
-                            } else {
-                                startTimeText
-                            },
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
+                Spacer(modifier = Modifier.height(24.dp))
+
                 // Дугмад за акције
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
-                    // Дугме за уређивање
-                    OutlinedButton(
-                        onClick = {
-                            onEdit()
-                            onDismiss()
-                        },
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Уреди"
+                    // Дугме за брисање
+                    FilledTonalButton(
+                        onClick = onDelete,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                            contentColor = MaterialTheme.colorScheme.error
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Уреди")
+                    ) {
+                        Text("Обриши")
                     }
                     
-                    // Дугме за брисање
-                    Button(
-                        onClick = onDelete,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
+                    // Дугме за уређивање
+                    FilledTonalButton(
+                        onClick = onEdit,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                         )
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Обриши"
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Обриши")
+                        Text("Уреди")
                     }
                 }
             }
