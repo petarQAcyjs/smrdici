@@ -830,10 +830,15 @@ class ListsViewModel(
     fun syncLists() {
         viewModelScope.launch {
             try {
-                Log.d("ListsViewModel", "Почињем синхронизацију листа")
-                listsRepository.syncLists() // Треба имплементирати ову методу у репозиторијуму
-                loadLists() // Освежи приказ
-                Log.d("ListsViewModel", "Синхронизација успешно завршена")
+                listsRepository.syncLists()
+                    .onSuccess {
+                        loadLists() // Освежи приказ
+                        Log.d("ListsViewModel", "Синхронизација успешно завршена")
+                    }
+                    .onFailure { e ->
+                        Log.e("ListsViewModel", "Грешка при синхронизацији", e)
+                        _uiState.value = ListsUiState.Error("Грешка при синхронизацији")
+                    }
             } catch (e: Exception) {
                 Log.e("ListsViewModel", "Грешка при синхронизацији", e)
                 _uiState.value = ListsUiState.Error("Грешка при синхронизацији")

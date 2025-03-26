@@ -73,11 +73,41 @@ class CalendarViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             try {
+                _uiState.value = CalendarUiState.Loading
+                
+                // Прво чистимо базу ако треба
                 eventRepository.cleanupDatabase()
+                
+                // Учитавамо догађаје за тренутни месец
+                val calendar = Calendar.getInstance().apply {
+                    time = _selectedDate.value
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                val startDate = calendar.time
+                
+                calendar.add(Calendar.MONTH, 1)
+                calendar.add(Calendar.MILLISECOND, -1)
+                val endDate = calendar.time
+                
+                eventRepository.getEvents(startDate, endDate)
+                    .onSuccess { events ->
+                        _events.value = events
+                        updateDatesWithEvents(events)
+                        // Филтрирамо догађаје за изабрани датум
+                        val eventsForSelectedDate = filterEventsForDate(_selectedDate.value, events)
+                        _uiState.value = CalendarUiState.Success(eventsForSelectedDate)
+                    }
+                    .onFailure { e ->
+                        Log.e("CalendarViewModel", "Грешка при иницијалном учитавању", e)
+                        _uiState.value = CalendarUiState.Error("Грешка при учитавању догађаја")
+                    }
             } catch (e: Exception) {
-                Log.e("CalendarViewModel", "Грешка при чишћењу базе", e)
+                Log.e("CalendarViewModel", "Грешка при иницијализацији", e)
+                _uiState.value = CalendarUiState.Error("Грешка при иницијализацији")
             }
-            loadEvents()
         }
     }
     
@@ -90,6 +120,17 @@ class CalendarViewModel @Inject constructor(
     }
     
     private fun filterEventsForDate(date: Date, events: List<Event>): List<Event> {
+        Log.d("CalendarViewModel", "\n=== ПОЧЕТАК ФИЛТРИРАЊА ===")
+        Log.d("CalendarViewModel", "Сви догађаји пре филтрирања:")
+        events.forEach { event ->
+            Log.d("CalendarViewModel", """
+                Догађај: ${event.title}
+                - ID: ${event.id}
+                - Време: ${formatDate(event.startTime?.toDate())}
+                - Assignee: ${event.assignee}
+            """.trimIndent())
+        }
+
         val calendar = Calendar.getInstance().apply {
             time = date
             set(Calendar.HOUR_OF_DAY, 0)
@@ -104,61 +145,92 @@ class CalendarViewModel @Inject constructor(
         calendar.add(Calendar.MILLISECOND, -1)
         val endOfDay = calendar.time
         
-        Log.d("CalendarViewModel", "Филтрирам догађаје за датум: ${formatDate(date)}")
-        Log.d("CalendarViewModel", "Почетак дана: ${formatDate(startOfDay)}")
-        Log.d("CalendarViewModel", "Крај дана: ${formatDate(endOfDay)}")
+        Log.d("CalendarViewModel", """
+            Параметри филтрирања:
+            - Тражени датум: ${formatDate(date)}
+            - Почетак дана: ${formatDate(startOfDay)} (${startOfDay.time})
+            - Крај дана: ${formatDate(endOfDay)} (${endOfDay.time})
+            - Укупно догађаја за проверу: ${events.size}
+        """.trimIndent())
         
-        // Користимо distinctBy да избегнемо дупликате
-        return events.distinctBy { "${it.title}${it.startTime}${it.assignee}" }
-            .filter { event ->
-                event.startTime?.toDate()?.let { eventDate ->
-                    !eventDate.before(startOfDay) && !eventDate.after(endOfDay)
-                } ?: false
-            }.also { filtered ->
-                events.forEach { event ->
-                    val message = if (filtered.contains(event)) "је у опсега" else "је ван опсега"
-                    Log.d("CalendarViewModel", "Догађај '${event.title}' време: ${formatDate(event.startTime?.toDate())} $message")
-                }
-                Log.d("CalendarViewModel", "Пронађено ${filtered.size} догађаја од укупно ${events.size}")
+        return events.filter { event ->
+            event.startTime?.toDate()?.let { eventDate ->
+                val isInRange = !eventDate.before(startOfDay) && !eventDate.after(endOfDay)
+                Log.d("CalendarViewModel", """
+                    Провера догађаја '${event.title}' (${event.id}):
+                    - Време догађаја: ${formatDate(eventDate)} (${eventDate.time})
+                    - У опсегу: $isInRange
+                    - Пре почетка дана: ${eventDate.before(startOfDay)}
+                    - После краја дана: ${eventDate.after(endOfDay)}
+                """.trimIndent())
+                isInRange
+            } ?: run {
+                Log.d("CalendarViewModel", "Догађај '${event.title}' (${event.id}) нема време почетка")
+                false
             }
+        }.also { filtered ->
+            Log.d("CalendarViewModel", "\n=== РЕЗУЛТАТИ ФИЛТРИРАЊА ===")
+            Log.d("CalendarViewModel", "Пронађено ${filtered.size} догађаја:")
+            filtered.forEach { event ->
+                Log.d("CalendarViewModel", """
+                    Прихваћен догађај:
+                    - Наслов: ${event.title}
+                    - ID: ${event.id}
+                    - Време: ${formatDate(event.startTime?.toDate())}
+                    - Assignee: ${event.assignee}
+                """.trimIndent())
+            }
+            Log.d("CalendarViewModel", "============================\n")
+        }
     }
     
     private fun loadEvents() {
-        eventsJob?.cancel()
-        
-        // Рачунамо почетак и крај месеца за тренутно изабрани датум
-        val calendar = Calendar.getInstance().apply {
-            time = _selectedDate.value
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-        }
-        val startDate = calendar.time
-        
-        calendar.add(Calendar.MONTH, 1)
-        calendar.add(Calendar.MILLISECOND, -1)
-        val endDate = calendar.time
-
-        eventsJob = viewModelScope.launch {
+        viewModelScope.launch {
             try {
-                eventRepository.observeEvents(startDate, endDate)
-                    .catch { e ->
-                        if (e !is CancellationException) {
-                            Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
-                            _uiState.value = CalendarUiState.Error(e.message ?: "Непозната грешка")
+                Log.d("CalendarViewModel", "\n=== УЧИТАВАЊЕ ДОГАЂАЈА ===")
+                
+                // Постављамо Loading стање само ако немамо податке
+                if (_events.value.isEmpty()) {
+                    _uiState.value = CalendarUiState.Loading
+                    Log.d("CalendarViewModel", "Постављено Loading стање")
+                }
+                
+                // Рачунамо почетак и крај месеца
+                val calendar = Calendar.getInstance().apply {
+                    time = _selectedDate.value
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                val startDate = calendar.time
+                
+                calendar.add(Calendar.MONTH, 1)
+                calendar.add(Calendar.MILLISECOND, -1)
+                val endDate = calendar.time
+                
+                Log.d("CalendarViewModel", "Учитавам догађаје за период: ${formatDate(startDate)} - ${formatDate(endDate)}")
+                
+                // Учитавамо догађаје за цео месец
+                eventRepository.getEvents(startDate, endDate)
+                    .onSuccess { events ->
+                        Log.d("CalendarViewModel", "Учитано ${events.size} догађаја из репозиторијума")
+                        Log.d("CalendarViewModel", "Догађаји пре филтрирања:")
+                        events.forEach { event ->
+                            Log.d("CalendarViewModel", "- ${event.title} (${formatDate(event.startTime?.toDate())})")
                         }
-                    }
-                    .collect { events ->
-                        _allEvents.value = events
+                        _events.value = events
                         updateDatesWithEvents(events)
-                        updateFilteredEvents()
+                        val eventsForSelectedDate = filterEventsForDate(_selectedDate.value, events)
+                        _uiState.value = CalendarUiState.Success(eventsForSelectedDate)
+                    }
+                    .onFailure { e ->
+                        Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
+                        _uiState.value = CalendarUiState.Error("Грешка при учитавању догађаја")
                     }
             } catch (e: Exception) {
-                if (e !is CancellationException) {
-                    Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
-                    _uiState.value = CalendarUiState.Error(e.message ?: "Непозната грешка")
-                }
+                Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
+                _uiState.value = CalendarUiState.Error("Грешка при учитавању догађаја")
             }
         }
     }
@@ -403,18 +475,26 @@ class CalendarViewModel @Inject constructor(
     
     // Функција за учитавање догађаја за одређени датум
     fun loadEventsForDate(date: Date) {
-        val calendar = Calendar.getInstance()
-        calendar.time = date
-        calendar.set(Calendar.HOUR_OF_DAY, 0)
-        calendar.set(Calendar.MINUTE, 0)
-        calendar.set(Calendar.SECOND, 0)
-        val startOfDay = calendar.time
-        
-        calendar.add(Calendar.DAY_OF_MONTH, 1)
-        calendar.add(Calendar.MILLISECOND, -1)
-        val endOfDay = calendar.time
-        
-        loadEventsForPeriod(startOfDay, endOfDay)
+        viewModelScope.launch {
+            try {
+                // Не постављамо Loading стање ако већ имамо податке
+                if (_events.value.isEmpty()) {
+                    _uiState.value = CalendarUiState.Loading
+                }
+                
+                // Проверавамо да ли већ имамо учитане догађаје
+                if (_events.value.isEmpty()) {
+                    loadEvents() // Учитавамо све догађаје ако их немамо
+                } else {
+                    // Само филтрирамо постојеће догађаје
+                    val filteredEvents = filterEventsForDate(date, _events.value)
+                    _uiState.value = CalendarUiState.Success(filteredEvents)
+                }
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Грешка при филтрирању догађаја", e)
+                _uiState.value = CalendarUiState.Error("Грешка при филтрирању догађаја")
+            }
+        }
     }
     
     fun startEditingEvent(event: Event) {
@@ -586,10 +666,15 @@ class CalendarViewModel @Inject constructor(
     fun syncEvents() {
         viewModelScope.launch {
             try {
-                Log.d("CalendarViewModel", "Почињем синхронизацију догађаја")
-                eventRepository.syncEvents() // Додати ову методу у репозиторијум
-                loadEventsForDate(selectedDate.value) // Освежи приказ
-                Log.d("CalendarViewModel", "Синхронизација успешно завршена")
+                eventRepository.syncEvents()
+                    .onSuccess {
+                        loadEvents() // Освежи приказ
+                        Log.d("CalendarViewModel", "Синхронизација успешно завршена")
+                    }
+                    .onFailure { e ->
+                        Log.e("CalendarViewModel", "Грешка при синхронизацији", e)
+                        _uiState.value = CalendarUiState.Error("Грешка при синхронизацији")
+                    }
             } catch (e: Exception) {
                 Log.e("CalendarViewModel", "Грешка при синхронизацији", e)
                 _uiState.value = CalendarUiState.Error("Грешка при синхронизацији")

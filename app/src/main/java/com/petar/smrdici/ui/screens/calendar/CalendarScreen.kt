@@ -1,65 +1,87 @@
 package com.petar.smrdici.ui.screens.calendar
-
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.petar.smrdici.data.model.Event
-import com.petar.smrdici.data.model.EventColor
 import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.components.AppHeader
-import com.petar.smrdici.ui.navigation.Screen
-import java.text.SimpleDateFormat
-import java.util.*
-import androidx.compose.ui.platform.LocalContext
-import com.google.accompanist.swiperefresh.SwipeRefresh
-import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.items
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun CalendarScreen(
@@ -107,10 +129,27 @@ fun CalendarScreen(
         Unit
     }
     
-    // Ефекат за логовање и учитавање догађаја када се промени selectedDate
-    LaunchedEffect(selectedDate) {
+    // Ефекат за учитавање догађаја када се промени selectedDate
+    LaunchedEffect(selectedDate.time) {
         Log.d("CalendarScreen", "Изабрани датум промењен: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(selectedDate)}")
         calendarViewModel.loadEventsForDate(selectedDate)
+    }
+    
+    // Додајемо нови LaunchedEffect за праћење стања учитавања
+    LaunchedEffect(calendarUiState) {
+        when (val state = calendarUiState) {
+            is CalendarUiState.Loading -> {
+                Log.d("CalendarScreen", "Учитавање у току...")
+            }
+            is CalendarUiState.Success -> {
+                Log.d("CalendarScreen", "Учитавање завршено: ${state.events.size} догађаја")
+                isRefreshing = false
+            }
+            is CalendarUiState.Error -> {
+                Log.e("CalendarScreen", "Грешка: ${state.message}")
+                isRefreshing = false
+            }
+        }
     }
     
     // Додајте ову функцију за генерисање датума за месец
@@ -193,42 +232,45 @@ fun CalendarScreen(
                     }
                 )
                 
-                when (calendarUiState) {
+                when (val state = calendarUiState) {
                     is CalendarUiState.Loading -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (!isRefreshing) {
+                        if (!isRefreshing && events.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 CircularProgressIndicator()
                             }
+                        } else {
+                            EventsList(
+                                events = emptyList(),
+                                onEventClick = { },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                            )
                         }
                     }
                     is CalendarUiState.Success -> {
-                        val eventsToShow = (calendarUiState as CalendarUiState.Success).events
                         EventsList(
-                            events = eventsToShow,
+                            events = state.events,
                             onEventClick = { event ->
                                 selectedEvent = event
                                 showEventDetailsDialog = true
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp)
+                                .weight(1f)
                         )
                     }
                     is CalendarUiState.Error -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = (calendarUiState as CalendarUiState.Error).message,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
+                        Text(
+                            text = state.message,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(16.dp)
+                        )
                     }
                 }
             }
@@ -364,33 +406,87 @@ fun CalendarGrid(
 fun EventsList(
     events: List<Event>,
     onEventClick: (Event) -> Unit,
-    modifier: Modifier
+    modifier: Modifier = Modifier
 ) {
     LazyColumn(
-        modifier = modifier
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        item {
-            Text(
-                text = "Догађаји",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
+        items(events) { event ->
+            EventCard(
+                event = event,
+                onClick = { onEventClick(event) }
             )
         }
-        
-        if (events.isEmpty()) {
-            item {
+    }
+}
+
+@Composable
+fun EventCard(
+    event: Event,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Индикатор боје догађаја
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(
+                        color = Color(android.graphics.Color.parseColor(event.color ?: "#4285F4")),
+                        shape = CircleShape
+                    )
+            )
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
-                    text = "Нема догађаја за изабрани дан",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    text = event.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                
+                event.startTime?.toDate()?.let { startTime ->
+                    Text(
+                        text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(startTime),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-        } else {
-            items(events) { event ->
-                EventItem(
-                    event = event,
-                    onClick = { onEventClick(event) }
+            
+            // Индикатор особе задужене за догађај
+            val assignee = EventAssignee.values().find { it.name == event.assignee } ?: EventAssignee.EVERYONE
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(
+                        color = Color(android.graphics.Color.parseColor(assignee.color)).copy(alpha = 0.2f),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = assignee.initial.toString(),
+                    color = Color(android.graphics.Color.parseColor(assignee.color)),
+                    style = MaterialTheme.typography.labelMedium
                 )
             }
         }

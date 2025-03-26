@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterialApi::class)
+
 package com.petar.smrdici.ui.screens.home
 
 import android.content.Context
@@ -32,6 +34,11 @@ import com.petar.smrdici.ui.navigation.Screen
 import java.text.SimpleDateFormat
 import java.util.*
 import com.airbnb.lottie.compose.*
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.runtime.remember
+import androidx.compose.material.ExperimentalMaterialApi
 
 @Composable
 fun HomeScreen(
@@ -41,6 +48,14 @@ fun HomeScreen(
 ) {
     val authState by authViewModel.authState.collectAsState()
     val todayEvents by homeViewModel.todayEvents.collectAsState()
+    val syncStatus by homeViewModel.syncStatus.collectAsState()
+    
+    val isRefreshing = syncStatus == SyncStatus.Syncing
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = { homeViewModel.syncEvents() }
+    )
+    
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
@@ -54,66 +69,80 @@ fun HomeScreen(
             navController = navController
         )
         
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .pullRefresh(pullRefreshState)
         ) {
-            // Приказ данашњих активности
-            TodayActivitiesCard(
-                events = todayEvents,
-                onSeeAllClick = { navController.navigate(Screen.Calendar.route) },
-                onEventClick = { event ->
-                    navController.navigate(Screen.Calendar.route)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(250.dp)
-                    .padding(bottom = 16.dp)
-            )
-            
-            // Картице за навигацију
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Листе
-                Box(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    NavigationCard(
-                        title = "Листе",
-                        iconResId = R.drawable.ic_list,
-                        onClick = { navController.navigate(Screen.Lists.route) }
-                    )
-                }
+                // Приказ данашњих активности
+                TodayActivitiesCard(
+                    events = todayEvents,
+                    onSeeAllClick = { navController.navigate(Screen.Calendar.route) },
+                    onEventClick = { event ->
+                        navController.navigate(Screen.Calendar.route)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .padding(bottom = 16.dp)
+                )
                 
-                // Календар
-                Box(
-                    modifier = Modifier.weight(1f)
+                // Картице за навигацију
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    NavigationCard(
-                        title = "Календар",
-                        iconResId = R.drawable.ic_calendar,
-                        onClick = { navController.navigate(Screen.Calendar.route) }
-                    )
-                }
-                
-                // Буџет
-                Box(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    NavigationCard(
-                        title = "Буџет",
-                        iconResId = R.drawable.ic_budget,
-                        onClick = { navController.navigate(Screen.Budget.route) }
-                    )
+                    // Листе
+                    Box(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        NavigationCard(
+                            title = "Листе",
+                            iconResId = R.drawable.ic_list,
+                            onClick = { navController.navigate(Screen.Lists.route) }
+                        )
+                    }
+                    
+                    // Календар
+                    Box(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        NavigationCard(
+                            title = "Календар",
+                            iconResId = R.drawable.ic_calendar,
+                            onClick = { navController.navigate(Screen.Calendar.route) }
+                        )
+                    }
+                    
+                    // Буџет
+                    Box(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        NavigationCard(
+                            title = "Буџет",
+                            iconResId = R.drawable.ic_budget,
+                            onClick = { navController.navigate(Screen.Budget.route) }
+                        )
+                    }
                 }
             }
+            
+            PullRefreshIndicator(
+                refreshing = isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                backgroundColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
@@ -210,12 +239,7 @@ fun TodayActivitiesCard(
                 
                 Spacer(modifier = Modifier.height(4.dp))
                 
-                val currentTime = Calendar.getInstance().timeInMillis / 1000
-                val filteredEvents = events.filter { event ->
-                    event.endTime?.seconds ?: Long.MAX_VALUE >= currentTime
-                }
-                
-                if (filteredEvents.isEmpty()) {
+                if (events.isEmpty()) {
                     Text(
                         text = "Нема активности за данас",
                         style = MaterialTheme.typography.bodyMedium,
@@ -223,7 +247,7 @@ fun TodayActivitiesCard(
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
                 } else {
-                    val eventsToShow = filteredEvents.take(3)
+                    val eventsToShow = events.take(3)
                     eventsToShow.forEach { event ->
                         EventItemCompact(
                             event = event,
@@ -232,9 +256,9 @@ fun TodayActivitiesCard(
                         )
                     }
                     
-                    if (filteredEvents.size > 3) {
+                    if (events.size > 3) {
                         Text(
-                            text = "Још ${filteredEvents.size - 3} догађаја...",
+                            text = "Још ${events.size - 3} догађаја...",
                             style = MaterialTheme.typography.bodySmall,
                             color = textColor.copy(alpha = 0.9f),
                             modifier = Modifier.padding(top = 4.dp)

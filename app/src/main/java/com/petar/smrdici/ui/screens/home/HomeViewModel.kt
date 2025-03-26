@@ -43,6 +43,7 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     private fun loadTodayEvents() {
         viewModelScope.launch {
             try {
+                Log.d("HomeViewModel", "\n=== УЧИТАВАЊЕ ДАНАШЊИХ ДОГАЂАЈА ===")
                 val userId = auth.currentUser?.uid ?: return@launch
                 
                 // Постављамо временски опсег за данас (од поноћи до 23:59:59)
@@ -57,45 +58,55 @@ class HomeViewModel(private val context: Context) : ViewModel() {
                 calendar.set(Calendar.SECOND, 59)
                 val endOfDay = calendar.time
                 
+                Log.d("HomeViewModel", """
+                    Тражим догађаје за данас:
+                    - Почетак дана: ${formatDate(startOfDay)}
+                    - Крај дана: ${formatDate(endOfDay)}
+                """.trimIndent())
+                
                 // Учитавамо све догађаје за данас
-                firestore.collection("users")
-                    .document(userId)
-                    .collection("events")
-                    .whereGreaterThanOrEqualTo("startTime", Timestamp(startOfDay))
-                    .whereLessThanOrEqualTo("startTime", Timestamp(endOfDay))
-                    .orderBy("startTime", Query.Direction.ASCENDING)
-                    .get()
-                    .addOnSuccessListener { snapshot ->
-                        val events = snapshot.documents.mapNotNull { doc ->
-                            try {
-                                val event = doc.toObject(Event::class.java)
-                                event?.id = doc.id
-                                event
-                            } catch (e: Exception) {
-                                Log.e("HomeViewModel", "Грешка при обради догађаја", e)
-                                null
-                            }
+                eventRepository.getEvents(startOfDay, endOfDay)
+                    .onSuccess { events ->
+                        Log.d("HomeViewModel", "Учитано ${events.size} догађаја")
+                        
+                        // Филтрирамо само будуће догађаје
+                        val currentTime = Calendar.getInstance().time
+                        val activeEvents = events.filter { event ->
+                            val endTime = event.endTime?.toDate() ?: Date(Long.MAX_VALUE)
+                            endTime >= currentTime
                         }
                         
-                        // Филтрирамо прошле догађаје
-                        val currentTime = Calendar.getInstance().timeInMillis / 1000 // Тренутно време у секундама
-                        val filteredEvents = events.filter { event ->
-                            // Задржавамо догађаје који су у току или у будућности
-                            event.endTime?.seconds ?: Long.MAX_VALUE >= currentTime
+                        Log.d("HomeViewModel", """
+                            Филтрирање догађаја:
+                            - Укупно догађаја: ${events.size}
+                            - Активних догађаја: ${activeEvents.size}
+                            - Тренутно време: ${formatDate(currentTime)}
+                        """.trimIndent())
+                        
+                        activeEvents.forEach { event ->
+                            Log.d("HomeViewModel", """
+                                Активан догађај:
+                                - Наслов: ${event.title}
+                                - Почетак: ${formatDate(event.startTime?.toDate())}
+                                - Крај: ${formatDate(event.endTime?.toDate())}
+                            """.trimIndent())
                         }
                         
-                        // Сортирамо догађаје по времену почетка
-                        val sortedEvents = filteredEvents.sortedBy { it.startTime?.seconds }
-                        
-                        _todayEvents.value = sortedEvents
+                        _todayEvents.value = activeEvents
                     }
-                    .addOnFailureListener { e ->
-                        Log.e("HomeViewModel", "Грешка при учитавању из Firestore-а", e)
+                    .onFailure { e ->
+                        Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
                     }
             } catch (e: Exception) {
-                Log.e("HomeViewModel", "Општа грешка", e)
+                Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
             }
         }
+    }
+    
+    private fun formatDate(date: Date?): String {
+        return date?.let { 
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(it) 
+        } ?: "null"
     }
     
     // Функција за додавање тест догађаја директно у Firestore
@@ -165,14 +176,15 @@ class HomeViewModel(private val context: Context) : ViewModel() {
             try {
                 _syncStatus.value = SyncStatus.Syncing
                 
-                val success = eventRepository.syncEvents()
-                
-                if (success) {
-                    _syncStatus.value = SyncStatus.Success
-                    refreshEvents()
-                } else {
-                    _syncStatus.value = SyncStatus.Error("Грешка при синхронизацији")
-                }
+                eventRepository.syncEvents()
+                    .onSuccess {
+                        _syncStatus.value = SyncStatus.Success
+                        refreshEvents()
+                    }
+                    .onFailure { e ->
+                        Log.e("HomeViewModel", "Грешка при синхронизацији", e)
+                        _syncStatus.value = SyncStatus.Error(e.message ?: "Грешка при синхронизацији")
+                    }
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Грешка при синхронизацији", e)
                 _syncStatus.value = SyncStatus.Error(e.message ?: "Непозната грешка")

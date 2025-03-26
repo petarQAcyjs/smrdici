@@ -33,17 +33,29 @@ class EventRepository @Inject constructor(private val context: Context) {
     private val prefs = context.getSharedPreferences("event_migration", Context.MODE_PRIVATE)
     private var eventsListener: ListenerRegistration? = null
     
+    // Додајемо кеширање
+    private var cachedEvents: List<Event> = emptyList()
+    private var lastFetchTime: Long = 0
+    private val CACHE_DURATION = 5 * 60 * 1000 // 5 минута
+    
+    private val PAGE_SIZE = 20
+    
+    private fun shouldRefreshCache(): Boolean {
+        return System.currentTimeMillis() - lastFetchTime > CACHE_DURATION || cachedEvents.isEmpty()
+    }
+    
     // Добијање тренутног корисника
     private val currentUserId: String
         get() = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
     
     // Функција за синхронизацију догађаја
-    suspend fun syncEvents(): Boolean {
-        try {
-            val userId = auth.currentUser?.uid ?: return false
+    suspend fun syncEvents(): Result<Unit> {
+        return try {
+            val userId = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
+            val batch = firestore.batch()
             
-            // Учитавамо догађаје директно из calendar_events колекције
-            val events = eventsCollection
+            // 1. Прво учитавамо све догађаје из базе
+            val remoteEvents = eventsCollection
                 .orderBy("startTime", Query.Direction.ASCENDING)
                 .get()
                 .await()
@@ -57,11 +69,27 @@ class EventRepository @Inject constructor(private val context: Context) {
                     }
                 }
             
-            Log.d("EventRepository", "Синхронизовано ${events.size} догађаја")
-            return true
+            // 2. Учитавамо локалне промене
+            val localChanges = getLocalChanges()
+            
+            // 3. Примењујемо batch операције
+            localChanges.forEach { event ->
+                val docRef = eventsCollection.document(event.id ?: eventsCollection.document().id)
+                batch.set(docRef, event)
+            }
+            
+            // 4. Извршавамо batch
+            batch.commit().await()
+            
+            // 5. Инвалидирамо кеш
+            lastFetchTime = 0
+            cachedEvents = remoteEvents
+            
+            Log.d("EventRepository", "Синхронизовано ${remoteEvents.size} догађаја")
+            Result.success(Unit)
         } catch (e: Exception) {
-            Log.e("EventRepository", "Грешка при синхронизацији догађаја", e)
-            return false
+            Log.e("EventRepository", "Грешка при синхронизацији", e)
+            Result.failure(e)
         }
     }
     
@@ -419,30 +447,117 @@ class EventRepository @Inject constructor(private val context: Context) {
         }
     }
     
-    suspend fun getEvents(): Flow<List<Event>> = flow {
-        try {
+    suspend fun getEvents(startDate: Date, endDate: Date): Result<List<Event>> {
+        return try {
+            Log.d("EventRepository", "\n=== УЧИТАВАЊЕ ДОГАЂАЈА ИЗ БАЗЕ ===")
+            Log.d("EventRepository", "Тражим догађаје између ${formatDate(startDate)} и ${formatDate(endDate)}")
+            
+            val userId = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
+            
+            // Прво учитајмо СВЕ догађаје да видимо шта имамо
+            val allEvents = eventsCollection
+                .orderBy("startTime", Query.Direction.ASCENDING)
+                .get()
+                .await()
+            
+            Log.d("EventRepository", "Укупно пронађено ${allEvents.size()} догађаја у бази")
+            allEvents.documents.forEach { doc ->
+                val event = doc.toObject(Event::class.java)
+                Log.d("EventRepository", """
+                    Догађај из базе:
+                    - ID: ${doc.id}
+                    - Наслов: ${event?.title}
+                    - Време: ${formatDate(event?.startTime?.toDate())}
+                    - Assignee: ${event?.assignee}
+                """.trimIndent())
+            }
+            
+            // Сада применимо филтер
+            val startTimestamp = Timestamp(startDate.time / 1000, 0)
+            val endTimestamp = Timestamp(endDate.time / 1000, 0)
+            
+            Log.d("EventRepository", """
+                Филтрирам по времену:
+                - Start timestamp: ${startTimestamp.seconds}
+                - End timestamp: ${endTimestamp.seconds}
+            """.trimIndent())
+            
             val snapshot = eventsCollection
+                .whereGreaterThanOrEqualTo("startTime", startTimestamp)
+                .whereLessThanOrEqualTo("startTime", endTimestamp)
                 .orderBy("startTime", Query.Direction.ASCENDING)
                 .get()
                 .await()
                 
-            val events = snapshot.documents
-                .mapNotNull { doc ->
-                    try {
-                        doc.toObject(Event::class.java)?.copy(id = doc.id)
-                    } catch (e: Exception) {
-                        Log.e("EventRepository", "Грешка при конверзији документа", e)
-                        null
-                    }
+            val events = snapshot.documents.mapNotNull { doc ->
+                try {
+                    val event = doc.toObject(Event::class.java)?.copy(id = doc.id)
+                    Log.d("EventRepository", """
+                        Конвертован догађај:
+                        - ID: ${doc.id}
+                        - Наслов: ${event?.title}
+                        - Време: ${formatDate(event?.startTime?.toDate())}
+                    """.trimIndent())
+                    event
+                } catch (e: Exception) {
+                    Log.e("EventRepository", "Грешка при конверзији документа ${doc.id}", e)
+                    null
                 }
-                // Додајемо distinctBy да спречимо дупликате
-                .distinctBy { "${it.title}${it.startTime}${it.assignee}" }
-                
-            Log.d("EventRepository", "Учитано ${events.size} догађаја из нове колекције")
-            emit(events)
+            }
+            
+            Log.d("EventRepository", "Након филтрирања пронађено ${events.size} догађаја")
+            events.forEach { event ->
+                Log.d("EventRepository", "- ${event.title} (${formatDate(event.startTime?.toDate())})")
+            }
+            Log.d("EventRepository", "============================\n")
+            
+            Result.success(events)
         } catch (e: Exception) {
             Log.e("EventRepository", "Грешка при учитавању догађаја", e)
-            emit(emptyList())
+            Result.failure(e)
         }
-    }.flowOn(Dispatchers.IO)
+    }
+    
+    // Помоћна функција за добављање локалних промена
+    private fun getLocalChanges(): List<Event> {
+        // TODO: Имплементирати логику за праћење локалних промена
+        return emptyList()
+    }
+
+    // Додајемо функцију за учитавање догађаја по странама
+    suspend fun getEventsPaginated(startDate: Date, lastEvent: Event? = null): Result<List<Event>> {
+        return try {
+            var query = eventsCollection
+                .whereGreaterThanOrEqualTo("startTime", startDate)
+                .orderBy("startTime", Query.Direction.ASCENDING)
+                .limit(PAGE_SIZE.toLong())
+            
+            // Ако имамо последњи догађај, почињемо од њега
+            lastEvent?.let { last ->
+                query = query.startAfter(last.startTime)
+            }
+            
+            val snapshot = query.get().await()
+            
+            val events = snapshot.documents.mapNotNull { doc ->
+                try {
+                    doc.toObject(Event::class.java)?.copy(id = doc.id)
+                } catch (e: Exception) {
+                    Log.e("EventRepository", "Грешка при конверзији документа", e)
+                    null
+                }
+            }
+            
+            Result.success(events)
+        } catch (e: Exception) {
+            Log.e("EventRepository", "Грешка при учитавању догађаја", e)
+            Result.failure(e)
+        }
+    }
+
+    private fun formatDate(date: Date?): String {
+        return date?.let { 
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(it) 
+        } ?: "null"
+    }
 } 
