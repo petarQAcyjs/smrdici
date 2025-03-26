@@ -547,9 +547,7 @@ fun AddEventDialog(
                 // Наслов поље
                 OutlinedTextField(
                     value = eventFormState.title,
-                    onValueChange = { newTitle -> 
-                        onEventFormChanged("title", newTitle)
-                    },
+                    onValueChange = { onEventFormChanged("title", it) },
                     label = { Text("Наслов") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -557,10 +555,8 @@ fun AddEventDialog(
                 
                 // Опис поље
                 OutlinedTextField(
-                    value = eventFormState.description ?: "",
-                    onValueChange = { newDescription -> 
-                        onEventFormChanged("description", newDescription)
-                    },
+                    value = eventFormState.description,
+                    onValueChange = { onEventFormChanged("description", it) },
                     label = { Text("Опис") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
@@ -570,9 +566,7 @@ fun AddEventDialog(
                 // Локација поље
                 OutlinedTextField(
                     value = eventFormState.location,
-                    onValueChange = { newLocation -> 
-                        onEventFormChanged("location", newLocation)
-                    },
+                    onValueChange = { onEventFormChanged("location", it) },
                     label = { Text("Локација") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true

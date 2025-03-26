@@ -226,11 +226,27 @@ class CalendarViewModel @Inject constructor(
     fun updateEventFormField(field: String, value: Any) {
         val currentForm = _eventFormState.value
         val updatedForm = when (field) {
+            "title" -> currentForm.copy(title = value as String)
+            "description" -> currentForm.copy(description = value as String)
+            "location" -> currentForm.copy(location = value as String)
             "assignee" -> currentForm.copy(assignee = value as String)
             "color" -> currentForm.copy(color = value as String)
-            // ... остала поља ...
-            else -> currentForm
+            "startHour" -> currentForm.copy(startHour = value as Int)
+            "startMinute" -> currentForm.copy(startMinute = value as Int)
+            "endHour" -> currentForm.copy(endHour = value as Int)
+            "endMinute" -> currentForm.copy(endMinute = value as Int)
+            "allDay" -> currentForm.copy(allDay = value as Boolean)
+            "date" -> currentForm.copy(date = value as Date)
+            else -> {
+                Log.e("CalendarViewModel", "Непознато поље: $field")
+                currentForm
+            }
         }
+        
+        Log.d("CalendarViewModel", "Ажурирање поља '$field': $value")
+        Log.d("CalendarViewModel", "Стара форма: $currentForm")
+        Log.d("CalendarViewModel", "Нова форма: $updatedForm")
+        
         _eventFormState.value = updatedForm
     }
     
