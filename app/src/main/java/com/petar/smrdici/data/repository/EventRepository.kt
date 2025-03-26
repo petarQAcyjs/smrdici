@@ -203,24 +203,30 @@ class EventRepository @Inject constructor(private val context: Context) {
     // Ажурирање догађаја
     suspend fun updateEvent(event: Event): Result<Unit> {
         return try {
-            val eventData = mapOf(
+            val eventData = hashMapOf(
                 "title" to event.title,
                 "description" to event.description,
                 "startTime" to event.startTime,
                 "endTime" to event.endTime,
                 "allDay" to event.allDay,
                 "location" to event.location,
-                "color" to event.color,
-                "assignee" to event.assignee
+                "assignee" to event.assignee,
+                "color" to event.color
             )
             
-            eventsCollection.document(event.id ?: "")
-                .update(eventData)
-                .await()
+            Log.d("EventRepository", "Ажурирам догађај у бази: id=${event.id}, assignee=${event.assignee}")
             
+            event.id?.let { id ->
+                eventsCollection.document(id)
+                    .update(eventData.toMap())
+                    .await()
+                
+                Log.d("EventRepository", "Догађај успешно ажуриран у бази")
+            } ?: throw IllegalStateException("Event ID cannot be null")
+
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e("EventRepository", "Грешка при ажурирању догађаја", e)
+            Log.e("EventRepository", "Грешка при ажурирању догађаја у бази", e)
             Result.failure(e)
         }
     }

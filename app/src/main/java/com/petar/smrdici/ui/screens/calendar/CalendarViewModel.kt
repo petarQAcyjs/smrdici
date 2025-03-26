@@ -23,12 +23,18 @@ import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.ListenerRegistration
 
 class CalendarViewModel @Inject constructor(
     private val eventRepository: EventRepository,
     private val auth: FirebaseAuth
 ) : ViewModel() {
     private val firestore = FirebaseFirestore.getInstance()
+    private val eventsCollection = firestore.collection("calendar_events")
+    private var eventsListener: ListenerRegistration? = null
     
     private val _uiState = MutableStateFlow<CalendarUiState>(CalendarUiState.Loading)
     val uiState: StateFlow<CalendarUiState> = _uiState
@@ -53,6 +59,16 @@ class CalendarViewModel @Inject constructor(
     val datesWithEvents: StateFlow<Set<Date>> = _datesWithEvents
     
     private var eventsJob: Job? = null
+    
+    private var lastLogTime = 0L
+    private fun shouldLog(): Boolean {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastLogTime > 1000) { // 1 секунда између логова
+            lastLogTime = currentTime
+            return true
+        }
+        return false
+    }
     
     init {
         viewModelScope.launch {
@@ -149,12 +165,12 @@ class CalendarViewModel @Inject constructor(
     
     private fun updateFilteredEvents() {
         val filteredEvents = filterEventsForDate(_selectedDate.value, _allEvents.value)
-        _events.value = filteredEvents
+        _events.value = filteredEvents.distinctBy { "${it.title}${it.startTime}${it.assignee}" }
         _uiState.value = CalendarUiState.Success(filteredEvents)
         
-        Log.d("CalendarViewModel", "Изабран датум: ${
-            SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(_selectedDate.value)
-        }, приказујем ${filteredEvents.size} догађаја од укупно ${_allEvents.value.size}")
+        if (shouldLog()) {
+            Log.d("CalendarViewModel", "Изабран датум: ${formatDate(_selectedDate.value)}, приказујем ${filteredEvents.size} догађаја од укупно ${_allEvents.value.size}")
+        }
         
         // Ажурирамо датум у форми за догађај
         updateEventForm { form ->
@@ -183,10 +199,39 @@ class CalendarViewModel @Inject constructor(
     
     // Ажурирање форме за унос догађаја
     fun updateEventForm(update: (EventFormState) -> EventFormState) {
-        _eventFormState.value = update(_eventFormState.value)
-        // Додајемо логовање за дебаговање
-        val form = _eventFormState.value
-        Log.d("CalendarViewModel", "Форма ажурирана: датум=${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(form.date)}, assignee=${form.assignee}")
+        val currentForm = _eventFormState.value
+        val updatedForm = update(currentForm)
+        
+        Log.d("CalendarViewModel", "Ажурирање форме: тренутни assignee=${currentForm.assignee}, нови assignee=${updatedForm.assignee}")
+        
+        // Креирамо нови објекат са свим пољима
+        _eventFormState.value = currentForm.copy(
+            assignee = updatedForm.assignee,
+            color = updatedForm.color,
+            title = updatedForm.title,
+            description = updatedForm.description,
+            date = updatedForm.date,
+            startHour = updatedForm.startHour,
+            startMinute = updatedForm.startMinute,
+            endHour = updatedForm.endHour,
+            endMinute = updatedForm.endMinute,
+            allDay = updatedForm.allDay,
+            location = updatedForm.location
+        )
+        
+        Log.d("CalendarViewModel", "Форма ажурирана: assignee=${_eventFormState.value.assignee}")
+    }
+    
+    // Додајемо нову функцију за директно ажурирање поља
+    fun updateEventFormField(field: String, value: Any) {
+        val currentForm = _eventFormState.value
+        val updatedForm = when (field) {
+            "assignee" -> currentForm.copy(assignee = value as String)
+            "color" -> currentForm.copy(color = value as String)
+            // ... остала поља ...
+            else -> currentForm
+        }
+        _eventFormState.value = updatedForm
     }
     
     // Функција за једноставно ажурирање једног поља форме
@@ -369,7 +414,7 @@ class CalendarViewModel @Inject constructor(
             Calendar.getInstance().apply { time = it }
         }
         
-        _eventFormState.value = EventFormState(
+        val newForm = EventFormState(
             title = event.title,
             description = event.description ?: "",
             date = startCalendar.time,
@@ -380,8 +425,11 @@ class CalendarViewModel @Inject constructor(
             allDay = event.allDay,
             location = event.location,
             color = event.color,
-            assignee = event.assignee
+            assignee = event.assignee // Осигуравамо да се assignee правилно постави
         )
+        
+        Log.d("CalendarViewModel", "Постављам форму за уређивање: assignee=${newForm.assignee}")
+        _eventFormState.value = newForm
     }
     
     fun cancelEditing() {
@@ -391,56 +439,45 @@ class CalendarViewModel @Inject constructor(
     
     fun updateEvent() {
         viewModelScope.launch {
-            val form = _eventFormState.value
-            val event = _editingEvent.value
-            
-            if (!form.isValid || event == null) {
-                Log.e("CalendarViewModel", "Неуспело ажурирање догађаја: форма није валидна или догађај није изабран")
-                return@launch
-            }
-            
             try {
-                val startCalendar = Calendar.getInstance().apply {
-                    time = form.date
-                    set(Calendar.HOUR_OF_DAY, form.startHour)
-                    set(Calendar.MINUTE, form.startMinute)
-                }
-                
-                val endCalendar = if (form.endHour != null && form.endMinute != null) {
-                    Calendar.getInstance().apply {
-                        time = form.date
-                        set(Calendar.HOUR_OF_DAY, form.endHour)
-                        set(Calendar.MINUTE, form.endMinute)
-                    }
-                } else null
-                
-                val updatedEvent = event.copy(
-                    title = form.title,
-                    description = form.description,
-                    startTime = Timestamp(startCalendar.time),
-                    endTime = endCalendar?.let { Timestamp(it.time) },
-                    allDay = form.allDay,
-                    location = form.location,
-                    color = form.color,
-                    assignee = form.assignee
+                val currentEvent = editingEvent.value ?: return@launch
+                val formState = eventFormState.value
+
+                Log.d("CalendarViewModel", "Припремам ажурирање догађаја:")
+                Log.d("CalendarViewModel", "- Тренутни assignee: ${currentEvent.assignee}")
+                Log.d("CalendarViewModel", "- Нови assignee из форме: ${formState.assignee}")
+
+                // Креирамо нови Event објекат са ажурираним подацима
+                val updatedEvent = currentEvent.copy(
+                    title = formState.title,
+                    description = formState.description,
+                    startTime = combineDateAndTime(formState.date, formState.startHour, formState.startMinute),
+                    endTime = if (!formState.allDay && formState.endHour != null && formState.endMinute != null) {
+                        combineDateAndTime(formState.date, formState.endHour, formState.endMinute)
+                    } else null,
+                    allDay = formState.allDay,
+                    location = formState.location,
+                    assignee = formState.assignee,
+                    color = formState.color
                 )
-                
-                Log.d("CalendarViewModel", "Ажурирам догађај: ${updatedEvent.title}, assignee: ${updatedEvent.assignee}")
+
+                Log.d("CalendarViewModel", "Шаљем ажурирање у базу:")
+                Log.d("CalendarViewModel", "- ID догађаја: ${updatedEvent.id}")
+                Log.d("CalendarViewModel", "- Assignee: ${updatedEvent.assignee}")
                 
                 eventRepository.updateEvent(updatedEvent)
                     .onSuccess {
+                        Log.d("CalendarViewModel", "Успешно ажуриран догађај у бази")
                         _editingEvent.value = null
-                        resetEventForm()
-                        loadEvents()
-                        Log.d("CalendarViewModel", "Успешно ажуриран догађај: ${updatedEvent.title}")
+                        loadEventsForDate(selectedDate.value)
                     }
                     .onFailure { e ->
                         Log.e("CalendarViewModel", "Грешка при ажурирању догађаја", e)
-                        _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при ажурирању догађаја")
+                        _uiState.value = CalendarUiState.Error(e.message ?: "Непозната грешка")
                     }
             } catch (e: Exception) {
-                Log.e("CalendarViewModel", "Неочекивана грешка при ажурирању догађаја", e)
-                _uiState.value = CalendarUiState.Error("Неочекивана грешка: ${e.message}")
+                Log.e("CalendarViewModel", "Грешка при ажурирању догађаја", e)
+                _uiState.value = CalendarUiState.Error(e.message ?: "Непозната грешка")
             }
         }
     }
@@ -517,6 +554,17 @@ class CalendarViewModel @Inject constructor(
             }
         }.toSet()
         _datesWithEvents.value = dates
+    }
+
+    private fun combineDateAndTime(date: Date, hour: Int, minute: Int): Timestamp {
+        val calendar = Calendar.getInstance().apply {
+            time = date
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return Timestamp(calendar.time)
     }
 }
 

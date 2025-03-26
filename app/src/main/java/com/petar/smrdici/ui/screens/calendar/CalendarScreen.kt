@@ -272,18 +272,10 @@ fun CalendarScreen(
     // Приказујемо дијалог за додавање догађаја ако је потребно
     if (showAddEventDialog) {
         AddEventDialog(
-            showDialog = true,
+            showDialog = showAddEventDialog,
             eventFormState = eventFormState,
             onEventFormChanged = { field, value -> 
-                calendarViewModel.updateEventForm { currentForm ->
-                    when (field) {
-                        "startHour" -> currentForm.copy(startHour = value as Int)
-                        "startMinute" -> currentForm.copy(startMinute = value as Int)
-                        "endHour" -> currentForm.copy(endHour = value as Int)
-                        "endMinute" -> currentForm.copy(endMinute = value as Int)
-                        else -> currentForm
-                    }
-                }
+                calendarViewModel.updateEventFormField(field, value)
             },
             onSaveClick = {
                 if (editingEvent != null) {
@@ -522,7 +514,7 @@ fun AddEventDialog(
     onEventFormChanged: (String, Any) -> Unit,
     onSaveClick: () -> Unit,
     onDismissClick: () -> Unit,
-    isEditing: Boolean = false // Додајемо параметар за проверу да ли уређујемо постојећи догађај
+    isEditing: Boolean = false
 ) {
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
@@ -645,20 +637,19 @@ fun AddEventDialog(
                     
                     // Избор особе
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(EventAssignee.values()) { assignee ->
-                            val isSelected = assignee.name == eventFormState.assignee
                             AssigneeAvatar(
                                 assignee = assignee,
-                                isSelected = isSelected,
+                                isSelected = eventFormState.assignee == assignee.name,
                                 onClick = {
                                     Log.d("AddEventDialog", "Особа кликнута: ${assignee.name}")
                                     onEventFormChanged("assignee", assignee.name)
                                     onEventFormChanged("color", assignee.color)
-                                    
-                                    Log.d("AddEventDialog", "После клика - форма assignee: ${assignee.name}, color: ${assignee.color}")
                                 }
                             )
                         }
