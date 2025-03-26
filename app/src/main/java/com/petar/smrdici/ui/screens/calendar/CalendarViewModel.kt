@@ -48,6 +48,10 @@ class CalendarViewModel @Inject constructor(
     
     private val _allEvents = MutableStateFlow<List<Event>>(emptyList())
     
+    // Додајемо ново стање за праћење датума са догађајима
+    private val _datesWithEvents = MutableStateFlow<Set<Date>>(emptySet())
+    val datesWithEvents: StateFlow<Set<Date>> = _datesWithEvents
+    
     private var eventsJob: Job? = null
     
     init {
@@ -131,6 +135,7 @@ class CalendarViewModel @Inject constructor(
                     }
                     .collect { events ->
                         _allEvents.value = events
+                        updateDatesWithEvents(events)
                         updateFilteredEvents()
                     }
             } catch (e: Exception) {
@@ -496,6 +501,22 @@ class CalendarViewModel @Inject constructor(
     private fun formatDate(date: Date?): String {
         if (date == null) return ""
         return SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(date)
+    }
+
+    // Функција која ажурира сет датума са догађајима
+    private fun updateDatesWithEvents(events: List<Event>) {
+        val dates = events.mapNotNull { event ->
+            event.startTime?.toDate()?.let { date ->
+                Calendar.getInstance().apply {
+                    time = date
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
+            }
+        }.toSet()
+        _datesWithEvents.value = dates
     }
 }
 

@@ -57,6 +57,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
 
 @Composable
 fun CalendarScreen(
@@ -70,6 +73,7 @@ fun CalendarScreen(
     val selectedDate by calendarViewModel.selectedDate.collectAsState()
     val events by calendarViewModel.events.collectAsState()
     val editingEvent by calendarViewModel.editingEvent.collectAsState()
+    val datesWithEvents by calendarViewModel.datesWithEvents.collectAsState()
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
@@ -110,6 +114,45 @@ fun CalendarScreen(
         calendarViewModel.loadEventsForDate(selectedDate)
     }
     
+    // Додајте ову функцију за генерисање датума за месец
+    val dates = remember(selectedDate) {
+        val calendar = Calendar.getInstance().apply {
+            time = selectedDate
+            set(Calendar.DAY_OF_MONTH, 1)  // Постављамо на први дан у месецу
+        }
+        
+        val currentMonth = calendar.get(Calendar.MONTH)
+        val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+        
+        // Додајемо дане из претходног месеца да попунимо прву недељу
+        val firstDayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+        val previousMonthDays = (firstDayOfWeek - Calendar.MONDAY + 7) % 7
+        
+        calendar.add(Calendar.DAY_OF_MONTH, -previousMonthDays)
+        
+        // Генеришемо листу датума
+        buildList {
+            // Додајемо дане из претходног месеца
+            repeat(previousMonthDays) {
+                add(calendar.time)
+                calendar.add(Calendar.DAY_OF_MONTH, 1)
+            }
+            
+            // Додајемо дане тренутног месеца
+            repeat(daysInMonth) {
+                add(calendar.time)
+                calendar.add(Calendar.DAY_OF_MONTH, 1)
+            }
+            
+            // Додајемо дане следећег месеца да попунимо последњу недељу
+            val remainingDays = (7 - size % 7) % 7
+            repeat(remainingDays) {
+                add(calendar.time)
+                calendar.add(Calendar.DAY_OF_MONTH, 1)
+            }
+        }
+    }
+    
     // Главни контејнер
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -140,10 +183,11 @@ fun CalendarScreen(
             }
             
             // Календарски приказ
-            CalendarView(
+            CalendarGrid(
+                dates = dates,
                 selectedDate = selectedDate,
-                onDateSelected = { calendarViewModel.selectDate(it) },
-                events = if (calendarUiState is CalendarUiState.Success) (calendarUiState as CalendarUiState.Success).events else emptyList()
+                datesWithEvents = datesWithEvents,
+                onDateSelected = calendarViewModel::selectDate
             )
             
             // Приказ догађаја за изабрани датум са подршком за освежавање
@@ -266,145 +310,75 @@ fun CalendarScreen(
 }
 
 @Composable
-fun CalendarView(
-    selectedDate: Date,
-    onDateSelected: (Date) -> Unit,
-    events: List<Event>
+fun DateCell(
+    date: Date,
+    isSelected: Boolean,
+    hasEvents: Boolean,
+    onClick: () -> Unit
 ) {
-    val calendar = remember { Calendar.getInstance() }
-    calendar.time = selectedDate
-    
-    val currentMonth = calendar.get(Calendar.MONTH)
-    val currentYear = calendar.get(Calendar.YEAR)
-    
-    val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-    
-    val firstDayOfMonth = Calendar.getInstance().apply {
-        set(currentYear, currentMonth, 1)
-    }
-    val firstDayOfWeek = firstDayOfMonth.get(Calendar.DAY_OF_WEEK)
-    
-    val monthFormat = SimpleDateFormat("MMMM yyyy", Locale("sr"))
-    
-    Column(
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        // Заглавље календара
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = {
-                    calendar.add(Calendar.MONTH, -1)
-                    onDateSelected(calendar.time)
+            .aspectRatio(1f)
+            .padding(2.dp)
+            .clip(CircleShape)
+            .background(
+                when {
+                    isSelected -> MaterialTheme.colorScheme.primary
+                    else -> Color.Transparent
                 }
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Претходни месец"
-                )
-            }
-            
-            Text(
-                text = monthFormat.format(calendar.time).replaceFirstChar { 
-                    if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() 
-                },
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
             )
-            
-            IconButton(
-                onClick = {
-                    calendar.add(Calendar.MONTH, 1)
-                    onDateSelected(calendar.time)
-                }
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "Следећи месец"
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Дани у недељи
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            val daysOfWeek = listOf("Пон", "Уто", "Сре", "Чет", "Пет", "Суб", "Нед")
-            daysOfWeek.forEach { day ->
-                Text(
-                    text = day,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Bold
+            Text(
+                text = SimpleDateFormat("d", Locale.getDefault()).format(date),
+                color = if (isSelected) Color.White else Color.Unspecified
+            )
+            if (hasEvents) {
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) Color.White 
+                            else MaterialTheme.colorScheme.primary
+                        )
                 )
             }
         }
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        // Календарска мрежа
-        val rows = (daysInMonth + firstDayOfWeek - 2) / 7 + 1
-        
-        for (row in 0 until rows) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                for (col in 0 until 7) {
-                    val day = row * 7 + col - (firstDayOfWeek - 2)
-                    
-                    if (day in 1..daysInMonth) {
-                        val date = Calendar.getInstance().apply {
-                            set(currentYear, currentMonth, day)
-                        }.time
-                        
-                        val isSelected = Calendar.getInstance().apply {
-                            time = selectedDate
-                        }.get(Calendar.DAY_OF_MONTH) == day &&
-                                Calendar.getInstance().apply {
-                                    time = selectedDate
-                                }.get(Calendar.MONTH) == currentMonth &&
-                                Calendar.getInstance().apply {
-                                    time = selectedDate
-                                }.get(Calendar.YEAR) == currentYear
-                        
-                        val hasEvents = events.any { event ->
-                            val eventDate = event.startTime?.toDate()
-                            if (eventDate != null) {
-                                val eventCal = Calendar.getInstance().apply { time = eventDate }
-                                eventCal.get(Calendar.YEAR) == currentYear &&
-                                        eventCal.get(Calendar.MONTH) == currentMonth &&
-                                        eventCal.get(Calendar.DAY_OF_MONTH) == day
-                            } else {
-                                false
-                            }
-                        }
-                        
-                        CalendarDay(
-                            day = day,
-                            isSelected = isSelected,
-                            hasEvents = hasEvents,
-                            onClick = { onDateSelected(date) }
-                        )
-                    } else {
-                        // Празан простор за дане који нису у тренутном месецу
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                        )
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+fun CalendarGrid(
+    dates: List<Date>,
+    selectedDate: Date,
+    datesWithEvents: Set<Date>,
+    onDateSelected: (Date) -> Unit
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(7),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(dates) { date ->
+            val calendar = Calendar.getInstance().apply { time = date }
+            val normalizedDate = calendar.apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.time
+
+            DateCell(
+                date = date,
+                isSelected = isSameDay(selectedDate, date),
+                hasEvents = datesWithEvents.any { isSameDay(it, normalizedDate) },
+                onClick = { onDateSelected(date) }
+            )
         }
     }
 }
@@ -1340,4 +1314,13 @@ fun DatePickerDialog(
             }
         }
     )
+}
+
+// Помоћна функција за поређење датума
+private fun isSameDay(date1: Date, date2: Date): Boolean {
+    val cal1 = Calendar.getInstance().apply { time = date1 }
+    val cal2 = Calendar.getInstance().apply { time = date2 }
+    return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+           cal1.get(Calendar.MONTH) == cal2.get(Calendar.MONTH) &&
+           cal1.get(Calendar.DAY_OF_MONTH) == cal2.get(Calendar.DAY_OF_MONTH)
 } 
