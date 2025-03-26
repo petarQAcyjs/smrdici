@@ -14,6 +14,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.Event
+import com.petar.smrdici.data.model.EventAssignee
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -281,11 +282,15 @@ class EventRepository @Inject constructor(private val context: Context) {
     }
     
     // Функција за праћење догађаја
-    fun observeEvents(): Flow<List<Event>> = callbackFlow {
-        // Отказујемо претходни listener ако постоји
+    fun observeEvents(startDate: Date, endDate: Date): Flow<List<Event>> = callbackFlow {
         eventsListener?.remove()
         
+        val startTimestamp = Timestamp(startDate)
+        val endTimestamp = Timestamp(endDate)
+        
         eventsListener = eventsCollection
+            .whereGreaterThanOrEqualTo("startTime", startTimestamp)
+            .whereLessThanOrEqualTo("startTime", endTimestamp)
             .orderBy("startTime", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -306,7 +311,6 @@ class EventRepository @Inject constructor(private val context: Context) {
                 trySend(events)
             }
 
-        // Чистимо listener када се проток откаже
         awaitClose {
             eventsListener?.remove()
             eventsListener = null

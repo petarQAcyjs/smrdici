@@ -53,7 +53,6 @@ class CalendarViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             try {
-                // Чистимо базу при покретању
                 eventRepository.cleanupDatabase()
             } catch (e: Exception) {
                 Log.e("CalendarViewModel", "Грешка при чишћењу базе", e)
@@ -105,22 +104,40 @@ class CalendarViewModel @Inject constructor(
     }
     
     private fun loadEvents() {
-        eventsJob?.cancel() // Отказујемо претходни job ако постоји
+        eventsJob?.cancel()
         
+        // Рачунамо почетак и крај месеца за тренутно изабрани датум
+        val calendar = Calendar.getInstance().apply {
+            time = _selectedDate.value
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+        }
+        val startDate = calendar.time
+        
+        calendar.add(Calendar.MONTH, 1)
+        calendar.add(Calendar.MILLISECOND, -1)
+        val endDate = calendar.time
+
         eventsJob = viewModelScope.launch {
             try {
-                eventRepository.observeEvents()
+                eventRepository.observeEvents(startDate, endDate)
                     .catch { e ->
-                        Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
-                        _uiState.value = CalendarUiState.Error(e.message ?: "Непозната грешка")
+                        if (e !is CancellationException) {
+                            Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
+                            _uiState.value = CalendarUiState.Error(e.message ?: "Непозната грешка")
+                        }
                     }
                     .collect { events ->
                         _allEvents.value = events
                         updateFilteredEvents()
                     }
             } catch (e: Exception) {
-                Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
-                _uiState.value = CalendarUiState.Error(e.message ?: "Непозната грешка")
+                if (e !is CancellationException) {
+                    Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
+                    _uiState.value = CalendarUiState.Error(e.message ?: "Непозната грешка")
+                }
             }
         }
     }
@@ -291,7 +308,7 @@ class CalendarViewModel @Inject constructor(
                     SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(endDate)
                 }")
                 
-                eventRepository.observeEvents()
+                eventRepository.observeEvents(startDate, endDate)
                     .catch { e ->
                         if (e is CancellationException) {
                             Log.d("CalendarViewModel", "Учитавање догађаја отказано")
@@ -301,17 +318,11 @@ class CalendarViewModel @Inject constructor(
                         _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при учитавању догађаја")
                     }
                     .collect { allEvents ->
-                        // Филтрирамо догађаје за задати период
-                        val filteredEvents = allEvents.filter { event ->
-                            val eventDate = event.startTime?.toDate()
-                            eventDate != null && eventDate >= startDate && eventDate <= endDate
-                        }
-                        
                         _allEvents.value = allEvents
-                        _events.value = filteredEvents
-                        _uiState.value = CalendarUiState.Success(filteredEvents)
+                        _events.value = allEvents
+                        _uiState.value = CalendarUiState.Success(allEvents)
                         
-                        Log.d("CalendarViewModel", "Учитано ${allEvents.size} догађаја, филтрирано ${filteredEvents.size} за период")
+                        Log.d("CalendarViewModel", "Учитано ${allEvents.size} догађаја за период")
                     }
             } catch (e: Exception) {
                 if (e is CancellationException) {
@@ -434,13 +445,6 @@ class CalendarViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 Log.d("CalendarViewModel", "Освежавам податке...")
-                
-                // Задржавамо тренутне догађаје док се нови не учитају
-                val currentEvents = _events.value
-                if (currentEvents.isNotEmpty()) {
-                    _uiState.value = CalendarUiState.Success(currentEvents)
-                }
-                
                 loadEvents()
             } catch (e: Exception) {
                 if (e is CancellationException) {
@@ -448,10 +452,6 @@ class CalendarViewModel @Inject constructor(
                     return@launch
                 }
                 Log.e("CalendarViewModel", "Неочекивана грешка при освежавању", e)
-                // Задржавамо старе догађаје у случају грешке
-                if (_events.value.isNotEmpty()) {
-                    _uiState.value = CalendarUiState.Success(_events.value)
-                }
             }
         }
     }
@@ -470,7 +470,6 @@ class CalendarViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 eventRepository.cleanupDatabase()
-                // Након чишћења, освежавамо приказ
                 loadEvents()
             } catch (e: Exception) {
                 Log.e("CalendarViewModel", "Грешка при чишћењу базе", e)
