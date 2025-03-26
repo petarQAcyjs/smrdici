@@ -251,7 +251,10 @@ fun ListsScreen(
                                 val customLists = (listsUiState as ListsUiState.Success).lists
                                 items(
                                     items = customLists,
-                                    key = { it.id ?: UUID.randomUUID().toString() } // Додајемо стабилни кључ за сваку ставку
+                                    key = { list -> 
+                                        // Додајемо временски печат уз ID да осигурамо јединственост
+                                        "${list.id}_${System.currentTimeMillis()}"
+                                    }
                                 ) { list ->
                                     list.id?.let { listId ->
                                         // Не приказујемо листе које су у процесу брисања
@@ -259,7 +262,7 @@ fun ListsScreen(
                                             SwipeToDeleteListItem(
                                                 list = list,
                                                 onClick = {
-                                                    if (!isDeletionInProgress) { // Проверавамо да ли је брисање у току
+                                                    if (!isDeletionInProgress) {
                                                         navController.navigate(Screen.ListDetails.createRoute(listId))
                                                     }
                                                 },

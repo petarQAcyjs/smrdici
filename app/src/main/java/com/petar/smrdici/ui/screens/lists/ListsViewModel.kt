@@ -261,90 +261,56 @@ class ListsViewModel(private val context: Context) : ViewModel() {
             try {
                 // Проверавамо да ли је листа већ у процесу брисања
                 if (_deletingListIds.value.contains(listId)) {
-                    Log.w("ListsViewModel", "Листа $listId је већ у процесу брисања, прескачемо нови захтев")
+                    Log.w("ListsViewModel", "Листа $listId је већ у процесу брисања")
                     return@launch
                 }
                 
-                // Додајемо листу у скуп оних које се тренутно бришу
+                // Додајемо ID у сет листа које се бришу
                 _deletingListIds.value = _deletingListIds.value + listId
                 
-                // Спремамо тренутне листе у случају да треба да вратимо претходно стање
+                // Спремамо тренутно стање за случај грешке
                 val currentState = _uiState.value
-                val currentLists = if (currentState is ListsUiState.Success) currentState.lists else emptyList()
                 
-                // Проактивно ажурирамо UI да сакријемо обрисану листу
-                if (currentState is ListsUiState.Success) {
-                    val updatedLists = currentLists.filter { it.id != listId }
-                    _uiState.value = ListsUiState.Success(updatedLists)
-                }
-                
-                // Прво проверавамо да ли је листа предефинисана
-                firestore.collection("shopping_lists").document(listId)
-                    .get()
-                    .addOnSuccessListener { document ->
-                        val list = document.toObject(ShoppingList::class.java)
-                        if (list != null && (list.title == "Spisak za prodavnicu" || list.title == "Kućni poslovi")) {
-                            // Не дозвољавамо брисање предефинисаних листа
-                            _uiState.value = ListsUiState.Error("Предефинисане листе не могу бити обрисане")
+                firestore.collection("shopping_lists")
+                    .document(listId)
+                    .delete()
+                    .addOnSuccessListener {
+                        viewModelScope.launch {
+                            Log.d("ListsViewModel", "Листа $listId успешно обрисана")
                             
-                            // Уклањамо ID из скупа оних које се бришу
+                            // Уклањамо ID из сета листа које се бришу
                             _deletingListIds.value = _deletingListIds.value - listId
                             
-                            // Враћамо оригинално стање UI-а
+                            // Ажурирамо UI стање ако је потребно
+                            if (currentState is ListsUiState.Success) {
+                                val updatedLists = currentState.lists.filter { it.id != listId }
+                                _uiState.value = ListsUiState.Success(updatedLists)
+                            }
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        viewModelScope.launch {
+                            Log.e("ListsViewModel", "Грешка при брисању листе $listId: ${e.message}")
+                            
+                            // Уклањамо ID из сета листа које се бришу
+                            _deletingListIds.value = _deletingListIds.value - listId
+                            
+                            // Враћамо претходно стање у случају грешке
                             if (currentState is ListsUiState.Success) {
                                 _uiState.value = currentState
                             }
                             
-                            return@addOnSuccessListener
+                            // Постављамо стање грешке без бацања изузетка
+                            _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању листе")
                         }
-                        
-                        // Ако није предефинисана, бришемо је
-            firestore.collection("shopping_lists").document(listId).delete()
-                .addOnSuccessListener {
-                                Log.d("ListsViewModel", "Листа $listId успешно обрисана")
-                                
-                                // Ресетујемо изабрану листу
-                                if (_selectedList.value?.id == listId) {
-                                    _selectedList.value = null
-                                }
-                                
-                                // Листа је већ уклоњена из UI, не морамо поново да учитавамо
-                                
-                                // Уклањамо ID из скупа оних које се бришу
-                                _deletingListIds.value = _deletingListIds.value - listId
-                }
-                .addOnFailureListener { e ->
-                                Log.e("ListsViewModel", "Грешка при брисању листе $listId: ${e.message}")
-                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању листе")
-                                
-                                // Враћамо оригинално стање UI-а
-                                if (currentState is ListsUiState.Success) {
-                                    _uiState.value = currentState
-                                }
-                                
-                                // Уклањамо ID из скупа оних које се бришу
-                                _deletingListIds.value = _deletingListIds.value - listId
-                            }
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e("ListsViewModel", "Грешка при провери листе $listId: ${e.message}")
-                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при провери листе")
-                        
-                        // Враћамо оригинално стање UI-а
-                        if (currentState is ListsUiState.Success) {
-                            _uiState.value = currentState
-                        }
-                        
-                        // Уклањамо ID из скупа оних које се бришу
-                        _deletingListIds.value = _deletingListIds.value - listId
                     }
             } catch (e: Exception) {
-                Log.e("ListsViewModel", "Општа грешка при брисању листе $listId: ${e.message}")
-                _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
-                
-                // Уклањамо ID из скупа оних које се бришу у случају грешке
+                // Уклањамо ID из сета листа које се бришу
                 _deletingListIds.value = _deletingListIds.value - listId
-                }
+                
+                Log.e("ListsViewModel", "Општа грешка при брисању листе $listId", e)
+                _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању листе")
+            }
         }
     }
     

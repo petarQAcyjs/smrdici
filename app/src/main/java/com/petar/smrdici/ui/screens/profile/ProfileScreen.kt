@@ -479,5 +479,6 @@ private fun recreateActivity(context: Context) {
         val intent = Intent(activity, MainActivity::class.java)
         activity.finish()
         activity.startActivity(intent)
+
     }
 } 
