@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -62,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +76,7 @@ import androidx.navigation.NavController
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.ui.auth.AuthState
@@ -86,8 +89,8 @@ import java.util.Date
 import java.util.Locale
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
-import androidx.compose.material3.TimePickerState
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.ui.res.painterResource
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -252,6 +255,7 @@ fun CalendarScreen(
                         EventsList(
                             events = emptyList(),
                             onEventClick = { },
+                            selectedDate = selectedDate,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
@@ -265,6 +269,7 @@ fun CalendarScreen(
                             selectedEvent = event
                             showEventDetailsDialog = true
                         },
+                        selectedDate = selectedDate,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -416,17 +421,66 @@ fun CalendarGrid(
 fun EventsList(
     events: List<Event>,
     onEventClick: (Event) -> Unit,
+    selectedDate: Date,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    val dateFormatter = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+    val selectedDateText = remember(selectedDate) {
+        dateFormatter.format(selectedDate)
+    }
+
+    Column(
+        modifier = modifier.padding(horizontal = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        items(events) { event ->
-            EventCard(
-                event = event,
-                onClick = { onEventClick(event) }
-            )
+        Text(
+            text = "Догађаји за $selectedDateText",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+        
+        if (events.isEmpty()) {
+            // Додајемо приказ када нема догађаја
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Event,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .padding(bottom = 16.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    )
+                    
+                    Text(
+                        text = "Нема догађаја за изабрани датум",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(events) { event ->
+                    EventItem(
+                        event = event,
+                        onClick = { onEventClick(event) },
+                        onLongClick = { /* Додајте акцију за дуги клик */ }
+                    )
+                }
+            }
         }
     }
 }
@@ -506,7 +560,8 @@ fun EventCard(
 @Composable
 fun EventItem(
     event: Event,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     // Нађимо објекат EventAssignee који одговара имену особе из догађаја
     val assignee = EventAssignee.entries.find { it.name == event.assignee } ?: EventAssignee.EVERYONE
