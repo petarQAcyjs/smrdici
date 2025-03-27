@@ -8,12 +8,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
 import com.petar.smrdici.ui.auth.AuthViewModel
 
 @Composable
 fun MainLayout(
-    navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
     content: @Composable () -> Unit
 ) {

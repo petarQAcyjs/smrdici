@@ -102,9 +102,9 @@ class AuthViewModel : ViewModel() {
 }
 
 sealed class AuthState {
-    object Initial : AuthState()
-    object Loading : AuthState()
-    object NotAuthenticated : AuthState()
+    data object Initial : AuthState()
+    data object Loading : AuthState()
+    data object NotAuthenticated : AuthState()
     data class Authenticated(val user: FirebaseUser) : AuthState()
     data class Error(val message: String) : AuthState()
 } 

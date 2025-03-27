@@ -1,15 +1,17 @@
 package com.petar.smrdici.ui.navigation
 
 sealed class Screen(val route: String) {
-    object Login : Screen("login")
-    object Register : Screen("register")
-    object Home : Screen("home")
-    object Budget : Screen("budget")
-    object Calendar : Screen("calendar")
-    object Lists : Screen("lists")
-    object ListDetails : Screen("list_details/{listId}") {
-        fun createRoute(listId: String) = "list_details/$listId"
+    data object Login : Screen("login")
+    data object Register : Screen("register")
+    data object Home : Screen("home")
+    data object Budget : Screen("budget")
+    data object Calendar : Screen("calendar") {
+        fun createRoute(eventId: String) = "calendar/$eventId"
     }
-    object Profile : Screen("profile")
-    object AddEvent : Screen("add_event")
+    data object Lists : Screen("lists")
+    data object ListDetails : Screen("list/{listId}") {
+        fun createRoute(listId: String) = "list/$listId"
+    }
+    data object Profile : Screen("profile")
+    data object AddEvent : Screen("add_event")
 } 

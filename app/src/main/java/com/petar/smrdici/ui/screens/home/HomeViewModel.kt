@@ -8,16 +8,17 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.repository.EventRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.util.*
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
-class HomeViewModel(private val context: Context) : ViewModel() {
+class HomeViewModel(context: Context) : ViewModel() {
     private val eventRepository = EventRepository(context)
     private val _todayEvents = MutableStateFlow<List<Event>>(emptyList())
     val todayEvents: StateFlow<List<Event>> = _todayEvents
@@ -166,7 +167,7 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     }
     
     // Функција за ручно освежавање
-    fun refreshEvents() {
+    private fun refreshEvents() {
         loadTodayEvents()
     }
     
@@ -206,12 +207,25 @@ class HomeViewModel(private val context: Context) : ViewModel() {
             throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
+
+    // Додајемо функцију за освежавање података
+    fun refreshData() {
+        viewModelScope.launch {
+            _syncStatus.value = SyncStatus.Syncing
+            try {
+                loadTodayEvents()
+                _syncStatus.value = SyncStatus.Success
+            } catch (e: Exception) {
+                _syncStatus.value = SyncStatus.Error(e.message ?: "Error refreshing data")
+            }
+        }
+    }
 }
 
 // Класа за праћење статуса синхронизације
 sealed class SyncStatus {
-    object Idle : SyncStatus()
-    object Syncing : SyncStatus()
-    object Success : SyncStatus()
+    data object Idle : SyncStatus()
+    data object Syncing : SyncStatus()
+    data object Success : SyncStatus()
     data class Error(val message: String) : SyncStatus()
 } 

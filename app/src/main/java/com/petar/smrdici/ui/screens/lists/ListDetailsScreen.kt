@@ -1,21 +1,70 @@
 package com.petar.smrdici.ui.screens.lists
 
-import androidx.compose.foundation.layout.*
+import android.view.HapticFeedbackConstants
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -23,52 +72,27 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.petar.smrdici.data.model.ShoppingItem
-import com.petar.smrdici.data.model.ShoppingList
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import kotlinx.coroutines.delay
-import com.google.accompanist.swiperefresh.SwipeRefresh
-import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.launch
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.background
-import android.view.HapticFeedbackConstants
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.ui.draw.alpha
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.foundation.clickable
+import com.petar.smrdici.data.model.ShoppingItem
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material3.ExperimentalMaterial3Api as Material3ExperimentalApi
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(Material3ExperimentalApi::class, ExperimentalComposeUiApi::class, ExperimentalMaterialApi::class)
 @Composable
 fun ListDetailsScreen(
     navController: NavController,
@@ -89,7 +113,17 @@ fun ListDetailsScreen(
     
     // Додајемо стање за освежавање
     var isRefreshing by remember { mutableStateOf(false) }
-    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isRefreshing)
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = {
+            coroutineScope.launch {
+                isRefreshing = true
+                listsViewModel.loadListById(listId)
+                delay(1000) // Минимално трајање анимације освежавања
+                isRefreshing = false
+            }
+        }
+    )
     
     // Додајемо стање за Snackbar
     val snackbarHostState = remember { SnackbarHostState() }
@@ -210,12 +244,10 @@ fun ListDetailsScreen(
                 .padding(paddingValues)
         ) {
             // Приказ листе са подршком за освежавање
-            SwipeRefresh(
-                state = swipeRefreshState,
-                onRefresh = { refreshList() },
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
+                    .fillMaxSize()
+                    .pullRefresh(pullRefreshState)
             ) {
                 // Садржај листе
                 when (val listState = selectedList) {
@@ -232,20 +264,21 @@ fun ListDetailsScreen(
                     }
                     else -> {
                         // Приказивање ставки користећи LazyColumn
-                        listState.items?.let { items ->
+                        listState.items.let { items ->
                             Column(modifier = Modifier.fillMaxSize()) {
                                 ShoppingItemsList(
                                     items = items,
                                     listId = listId,
                                     onCheckedChange = { item, isChecked ->
-                                        listsViewModel.updateItemCompletionStatus(listId, item.id!!, isChecked)
+                                        listsViewModel.updateItemCompletionStatus(listId,
+                                            item.id, isChecked)
                                     },
                                     onDeleteItem = { item ->
-                                        listsViewModel.deleteItem(listId, item.id!!)
+                                        listsViewModel.deleteItem(listId, item.id)
                                     },
                                     modifier = Modifier.weight(1f)
                                 )
-                                
+
                                 // Приказујемо поље за унос нове ставке ако постоји активна ставка за унос
                                 if (currentEditingItemId != null) {
                                     Row(
@@ -264,9 +297,9 @@ fun ListDetailsScreen(
                                         ) {
                                             // Празан садржај, само приказујемо кружни индикатор
                                         }
-                                        
+
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        
+
                                         // Поље за унос
                                         TextField(
                                             value = newItemText,
@@ -304,9 +337,15 @@ fun ListDetailsScreen(
                                     }
                                 }
                             }
-                        } ?: EmptyState(message = "Грешка при учитавању ставки.")
+                        }
                     }
                 }
+
+                PullRefreshIndicator(
+                    refreshing = isRefreshing,
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
         }
         
@@ -336,7 +375,7 @@ fun ShoppingItemRow(
     modifier: Modifier = Modifier
 ) {
     var show by remember { mutableStateOf(true) }
-    var offsetX by remember { mutableStateOf(0f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
     var confirmDelete by remember { mutableStateOf(false) }
     val view = LocalView.current
     
@@ -369,7 +408,7 @@ fun ShoppingItemRow(
         }
     }
     
-    androidx.compose.animation.AnimatedVisibility(
+    AnimatedVisibility(
         visible = show,
         exit = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }) + fadeOut()
     ) {
@@ -463,6 +502,7 @@ fun ShoppingItemRow(
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun ShoppingItemsList(
     items: List<ShoppingItem>,

@@ -47,7 +47,7 @@ class ShoppingListRepository(private val context: Context) {
     }
     
     // Учитавање једне листе за куповину
-    suspend fun getShoppingList(listId: String): ShoppingList? {
+    private suspend fun getShoppingList(listId: String): ShoppingList? {
         return try {
             val doc = firestore.collection("shopping_lists")
                 .document(listId)
@@ -90,7 +90,7 @@ class ShoppingListRepository(private val context: Context) {
     }
     
     // Ажурирање листе за куповину
-    suspend fun updateShoppingList(list: ShoppingList): Boolean {
+    private suspend fun updateShoppingList(list: ShoppingList): Boolean {
         return try {
             firestore.collection("shopping_lists").document(list.id ?: "")
                 .set(list)

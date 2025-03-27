@@ -9,7 +9,6 @@ import com.petar.smrdici.data.repository.TransactionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.util.Date
 
@@ -34,7 +33,7 @@ class BudgetViewModel : ViewModel() {
         viewModelScope.launch {
             repository.getTransactionsForCurrentUser()
                 .catch { e ->
-                    _uiState.value = BudgetUiState.Error(e.message ?: "Грешка при учитавању трансакција")
+                    _uiState.value = BudgetUiState.Error("Failed to load transactions")
                 }
                 .collect { transactions ->
                     _transactions.value = transactions
@@ -54,12 +53,7 @@ class BudgetViewModel : ViewModel() {
             
         val balance = totalIncome - totalExpense
         
-        _uiState.value = BudgetUiState.Success(
-            totalIncome = totalIncome,
-            totalExpense = totalExpense,
-            balance = balance,
-            transactions = transactions
-        )
+        _uiState.value = BudgetUiState.Success(transactions)
     }
     
     // Ажурирање форме за унос трансакције
@@ -90,7 +84,7 @@ class BudgetViewModel : ViewModel() {
                     _transactionFormState.value = TransactionFormState()
                 }
                 .onFailure { e ->
-                    _uiState.value = BudgetUiState.Error(e.message ?: "Грешка при додавању трансакције")
+                    _uiState.value = BudgetUiState.Error("Failed to add transaction")
                 }
         }
     }
@@ -100,7 +94,7 @@ class BudgetViewModel : ViewModel() {
         viewModelScope.launch {
             repository.deleteTransaction(transactionId)
                 .onFailure { e ->
-                    _uiState.value = BudgetUiState.Error(e.message ?: "Грешка при брисању трансакције")
+                    _uiState.value = BudgetUiState.Error("Failed to delete transaction")
                 }
         }
     }
@@ -109,12 +103,8 @@ class BudgetViewModel : ViewModel() {
 // Стање корисничког интерфејса
 sealed class BudgetUiState {
     object Loading : BudgetUiState()
-    data class Success(
-        val totalIncome: Double,
-        val totalExpense: Double,
-        val balance: Double,
-        val transactions: List<Transaction>
-    ) : BudgetUiState()
+    object Empty : BudgetUiState()
+    data class Success(val transactions: List<Transaction>) : BudgetUiState()
     data class Error(val message: String) : BudgetUiState()
 }
 

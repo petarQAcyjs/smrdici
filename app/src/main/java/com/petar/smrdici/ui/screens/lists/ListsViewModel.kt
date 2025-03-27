@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.ShoppingList
 import com.petar.smrdici.data.model.ShoppingItem
 import com.petar.smrdici.data.repository.ListsRepository
@@ -17,10 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.*
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.tasks.await
 
 class ListsViewModel(
-    private val context: Context,
     private val listsRepository: ListsRepository
 ) : ViewModel() {
     private val firestore = FirebaseFirestore.getInstance()
@@ -271,7 +268,7 @@ class ListsViewModel(
                 }
                 
                 // Додајемо ID у сет листа које се бришу
-                _deletingListIds.value = _deletingListIds.value + listId
+                _deletingListIds.value += listId
                 
                 // Спремамо тренутно стање за случај грешке
                 val currentState = _uiState.value
@@ -284,7 +281,7 @@ class ListsViewModel(
                             Log.d("ListsViewModel", "Листа $listId успешно обрисана")
                             
                             // Уклањамо ID из сета листа које се бришу
-                            _deletingListIds.value = _deletingListIds.value - listId
+                            _deletingListIds.value -= listId
                             
                             // Ажурирамо UI стање ако је потребно
                             if (currentState is ListsUiState.Success) {
@@ -298,7 +295,7 @@ class ListsViewModel(
                             Log.e("ListsViewModel", "Грешка при брисању листе $listId: ${e.message}")
                             
                             // Уклањамо ID из сета листа које се бришу
-                            _deletingListIds.value = _deletingListIds.value - listId
+                            _deletingListIds.value -= listId
                             
                             // Враћамо претходно стање у случају грешке
                             if (currentState is ListsUiState.Success) {
@@ -311,7 +308,7 @@ class ListsViewModel(
                     }
             } catch (e: Exception) {
                 // Уклањамо ID из сета листа које се бришу
-                _deletingListIds.value = _deletingListIds.value - listId
+                _deletingListIds.value -= listId
                 
                 Log.e("ListsViewModel", "Општа грешка при брисању листе $listId", e)
                 _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању листе")
@@ -541,12 +538,12 @@ class ListsViewModel(
             try {
                 // Проверавамо да ли је ставка већ у процесу брисања
                 if (_deletingListIds.value.contains(itemId)) {
-                    Log.w("ListsViewModel", "Ставка ${itemId} је већ у процесу брисања")
+                    Log.w("ListsViewModel", "Ставка $itemId је већ у процесу брисања")
                     return@launch
                 }
                 
                 // Додајемо ID ставке у листу оних које се бришу
-                _deletingListIds.value = _deletingListIds.value + itemId
+                _deletingListIds.value += itemId
                 
                 // Чувамо тренутно стање за случај поништавања
                 val currentList = _selectedList.value ?: return@launch
@@ -556,7 +553,7 @@ class ListsViewModel(
                 val itemToDelete = originalItems.find { it.id == itemId } ?: run {
                     Log.e("ListsViewModel", "Ставка са ID-ем $itemId није пронађена")
                     // Уклањамо ID ставке из листе оних које се бришу
-                    _deletingListIds.value = _deletingListIds.value - itemId
+                    _deletingListIds.value -= itemId
                     return@launch
                 }
                 
@@ -573,7 +570,7 @@ class ListsViewModel(
                         Log.d("ListsViewModel", "Ставка $itemId успешно обрисана")
                         
                         // Уклањамо ID ставке из листе оних које се бришу
-                        _deletingListIds.value = _deletingListIds.value - itemId
+                        _deletingListIds.value -= itemId
                     }
                     .addOnFailureListener { e ->
                         Log.e("ListsViewModel", "Грешка приликом брисања ставке: ${e.message}")
@@ -582,7 +579,7 @@ class ListsViewModel(
                         _selectedList.value = currentList.copy(items = originalItems)
                         
                         // Уклањамо ID ставке из листе оних које се бришу
-                        _deletingListIds.value = _deletingListIds.value - itemId
+                        _deletingListIds.value -= itemId
                     }
             } catch (e: Exception) {
                 Log.e("ListsViewModel", "Општа грешка приликом брисања ставке: ${e.message}")
@@ -659,7 +656,7 @@ class ListsViewModel(
                 
                 // Проверавамо да ли је ова листа већ у процесу брисања или враћања
                 if (_deletingListIds.value.contains(listId)) {
-                    Log.w("ListsViewModel", "Листа ${listId} је у процесу брисања, не можемо је вратити")
+                    Log.w("ListsViewModel", "Листа $listId је у процесу брисања, не можемо је вратити")
                     return@launch
                 }
                 
@@ -681,7 +678,7 @@ class ListsViewModel(
                     .document(listId) // Користимо исти ID
                     .set(listToRestore)
                     .addOnSuccessListener { documentReference ->
-                        Log.d("ListsViewModel", "Листа ${listId} успешно враћена")
+                        Log.d("ListsViewModel", "Листа $listId успешно враћена")
                     }
                     .addOnFailureListener { e ->
                         Log.e("ListsViewModel", "Грешка приликом враћања листе ${listId}: ${e.message}")
@@ -707,7 +704,7 @@ class ListsViewModel(
             try {
                 // Проверавамо да ли је ставка већ у процесу брисања или враћања
                 if (_deletingListIds.value.contains(itemId)) {
-                    Log.w("ListsViewModel", "Ставка ${itemId} је у процесу брисања, не можемо је вратити")
+                    Log.w("ListsViewModel", "Ставка $itemId је у процесу брисања, не можемо је вратити")
                     return@launch
                 }
                 
@@ -738,7 +735,7 @@ class ListsViewModel(
                                 firestore.collection("shopping_lists").document(listId)
                                     .update("items", updatedItems)
                                     .addOnSuccessListener {
-                                        Log.d("ListsViewModel", "Ставка ${itemId} успешно враћена")
+                                        Log.d("ListsViewModel", "Ставка $itemId успешно враћена")
                                     }
                                     .addOnFailureListener { e ->
                                         Log.e("ListsViewModel", "Грешка приликом враћања ставке ${itemId}: ${e.message}")
@@ -790,7 +787,6 @@ class ListsViewModel(
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ListsViewModel::class.java)) {
                 return ListsViewModel(
-                    context,
                     ListsRepository(context)
                 ) as T
             }
@@ -827,29 +823,11 @@ class ListsViewModel(
         }
     }
 
-    fun syncLists() {
-        viewModelScope.launch {
-            try {
-                listsRepository.syncLists()
-                    .onSuccess {
-                        loadLists() // Освежи приказ
-                        Log.d("ListsViewModel", "Синхронизација успешно завршена")
-                    }
-                    .onFailure { e ->
-                        Log.e("ListsViewModel", "Грешка при синхронизацији", e)
-                        _uiState.value = ListsUiState.Error("Грешка при синхронизацији")
-                    }
-            } catch (e: Exception) {
-                Log.e("ListsViewModel", "Грешка при синхронизацији", e)
-                _uiState.value = ListsUiState.Error("Грешка при синхронизацији")
-            }
-        }
-    }
 }
 
 // Стање корисничког интерфејса
 sealed class ListsUiState {
-    object Loading : ListsUiState()
+    data object Loading : ListsUiState()
     data class Success(val lists: List<ShoppingList>) : ListsUiState()
     data class Error(val message: String) : ListsUiState()
 }

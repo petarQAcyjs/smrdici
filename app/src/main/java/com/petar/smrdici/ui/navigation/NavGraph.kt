@@ -30,31 +30,31 @@ fun NavGraph(
         }
         
         composable(route = Screen.Home.route) {
-            MainLayout(navController = navController) {
+            MainLayout() {
                 HomeScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Budget.route) {
-            MainLayout(navController = navController) {
+            MainLayout() {
                 BudgetScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Calendar.route) {
-            MainLayout(navController = navController) {
+            MainLayout() {
                 CalendarScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Lists.route) {
-            MainLayout(navController = navController) {
+            MainLayout() {
                 ListsScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Profile.route) {
-            MainLayout(navController = navController) {
+            MainLayout() {
                 ProfileScreen(navController = navController)
             }
         }

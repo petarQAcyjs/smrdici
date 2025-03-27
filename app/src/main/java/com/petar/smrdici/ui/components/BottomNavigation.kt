@@ -2,15 +2,18 @@ package com.petar.smrdici.ui.components
 
 import android.util.Log
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavController
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.petar.smrdici.R
 import com.petar.smrdici.ui.navigation.Screen
@@ -65,14 +68,14 @@ sealed class BottomNavItem(
     val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
     val unselectedIcon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
-    object Home : BottomNavItem(
+    data object Home : BottomNavItem(
         screen = Screen.Home,
         titleResId = R.string.home,
         selectedIcon = Icons.Filled.Home,
         unselectedIcon = Icons.Outlined.Home
     )
     
-    object Profile : BottomNavItem(
+    data object Profile : BottomNavItem(
         screen = Screen.Profile,
         titleResId = R.string.profile,
         selectedIcon = Icons.Filled.Person,

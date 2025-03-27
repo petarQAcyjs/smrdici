@@ -1,19 +1,37 @@
 @file:OptIn(ExperimentalMaterialApi::class)
-
 package com.petar.smrdici.ui.screens.home
-
-import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +43,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieComposition
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.ui.auth.AuthState
@@ -32,47 +55,95 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import java.text.SimpleDateFormat
-import java.util.*
-import com.airbnb.lottie.compose.*
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
-import androidx.compose.runtime.remember
-import androidx.compose.material.ExperimentalMaterialApi
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
     homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(LocalContext.current))
 ) {
+    val coroutineScope = rememberCoroutineScope()
     val authState by authViewModel.authState.collectAsState()
     val todayEvents by homeViewModel.todayEvents.collectAsState()
     val syncStatus by homeViewModel.syncStatus.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     
-    val isRefreshing = syncStatus == SyncStatus.Syncing
+    var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
-        onRefresh = { homeViewModel.syncEvents() }
+        onRefresh = {
+            coroutineScope.launch {
+                isRefreshing = true
+                homeViewModel.syncEvents()
+                delay(1000)
+                isRefreshing = false
+            }
+        }
     )
     
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
+
+    var testRefresh by remember { mutableStateOf(false) }
     
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        AppHeader(
-            title = "Почетна",
-            user = user,
-            navController = navController
-        )
-        
+    // Додајемо стање за ручно праћење гестова
+    var dragStartY by remember { mutableStateOf(0f) }
+    var dragCurrentY by remember { mutableStateOf(0f) }
+
+    Scaffold(
+        topBar = {
+            AppHeader(
+                title = "Почетна",
+                user = user,
+                navController = navController
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(paddingValues)
                 .pullRefresh(pullRefreshState)
+                // Додајемо експлицитну подршку за гест повлачења
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragStart = { dragStartY = it.y },
+                        onDragEnd = {
+                            if (dragCurrentY - dragStartY > 100f) {
+                                // Повлачење надоле
+                                coroutineScope.launch {
+                                    isRefreshing = true
+                                    homeViewModel.syncEvents()
+                                    delay(1000)
+                                    isRefreshing = false
+                                }
+                            }
+                            dragStartY = 0f
+                            dragCurrentY = 0f
+                        },
+                        onDragCancel = {
+                            dragStartY = 0f
+                            dragCurrentY = 0f
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            dragCurrentY = change.position.y
+                        }
+                    )
+                }
         ) {
             Column(
                 modifier = Modifier
@@ -81,12 +152,12 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Приказ данашњих активности
                 TodayActivitiesCard(
                     events = todayEvents,
-                    onSeeAllClick = { navController.navigate(Screen.Calendar.route) },
                     onEventClick = { event ->
-                        navController.navigate(Screen.Calendar.route)
+                        event.id?.let { eventId ->
+                            navController.navigate(Screen.Calendar.createRoute(eventId))
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -94,14 +165,12 @@ fun HomeScreen(
                         .padding(bottom = 16.dp)
                 )
                 
-                // Картице за навигацију
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Листе
                     Box(
                         modifier = Modifier.weight(1f)
                     ) {
@@ -112,7 +181,6 @@ fun HomeScreen(
                         )
                     }
                     
-                    // Календар
                     Box(
                         modifier = Modifier.weight(1f)
                     ) {
@@ -123,7 +191,6 @@ fun HomeScreen(
                         )
                     }
                     
-                    // Буџет
                     Box(
                         modifier = Modifier.weight(1f)
                     ) {
@@ -139,9 +206,7 @@ fun HomeScreen(
             PullRefreshIndicator(
                 refreshing = isRefreshing,
                 state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter),
-                backgroundColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
+                modifier = Modifier.align(Alignment.TopCenter)
             )
         }
     }
@@ -190,7 +255,6 @@ fun NavigationCard(
 @Composable
 fun TodayActivitiesCard(
     events: List<Event>,
-    onSeeAllClick: () -> Unit,
     onEventClick: (Event) -> Unit,
     modifier: Modifier = Modifier,
     lottieResId: Int = R.raw.homeanimation
@@ -300,7 +364,6 @@ fun EventItemCompact(
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Индикатор боје догађаја
         Box(
             modifier = Modifier
                 .size(12.dp)
@@ -322,7 +385,6 @@ fun EventItemCompact(
                 overflow = TextOverflow.Ellipsis
             )
             
-            // Приказујемо време догађаја
             event.startTime?.let { startTime ->
                 val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
                 val timeText = if (event.allDay) {

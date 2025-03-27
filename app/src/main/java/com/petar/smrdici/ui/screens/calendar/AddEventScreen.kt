@@ -22,6 +22,24 @@ import java.text.SimpleDateFormat
 import java.util.*
 import android.util.Log
 
+// Додајемо помоћну класу за време
+data class EventTime(
+    val hour: Int,
+    val minute: Int
+) {
+    fun formatted(): String = String.format("%02d:%02d", hour, minute)
+    
+    companion object {
+        fun fromDate(date: Date): EventTime {
+            val calendar = Calendar.getInstance().apply { time = date }
+            return EventTime(
+                hour = calendar.get(Calendar.HOUR_OF_DAY),
+                minute = calendar.get(Calendar.MINUTE)
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEventScreen(
@@ -66,7 +84,7 @@ fun AddEventScreen(
             )
             
             OutlinedTextField(
-                value = formState.description ?: "",
+                value = formState.description,
                 onValueChange = { newDescription -> calendarViewModel.updateEventField("description", newDescription) },
                 label = { Text("Опис") },
                 modifier = Modifier
@@ -109,9 +127,7 @@ fun AddEventScreen(
             if (!formState.allDay) {
                 // Време почетка
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Почетак:")
@@ -123,20 +139,14 @@ fun AddEventScreen(
                         }
                     ) {
                         Text(
-                            String.format(
-                                "%02d:%02d",
-                                formState.startHour,
-                                formState.startMinute
-                            )
+                            formState.startTime?.formatted() ?: "--:--"
                         )
                     }
                 }
                 
                 // Време завршетка
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Завршетак:")
@@ -147,17 +157,23 @@ fun AddEventScreen(
                             showTimePicker = true 
                         }
                     ) {
-                        Text(
-                            if (formState.endHour != null && formState.endMinute != null) {
-                                String.format(
-                                    "%02d:%02d",
-                                    formState.endHour,
-                                    formState.endMinute
-                                )
-                            } else {
-                                "Изабери време"
-                            }
-                        )
+                        Text(formState.endTime?.formatted() ?: "Није постављено")
+                    }
+                }
+                
+                // Валидација времена
+                formState.startTime?.let { startTime ->
+                    formState.endTime?.let { endTime ->
+                        val startMinutes = startTime.hour * 60 + startTime.minute
+                        val endMinutes = endTime.hour * 60 + endTime.minute
+                        
+                        if (endMinutes <= startMinutes) {
+                            Text(
+                                text = "Време завршетка мора бити након времена почетка",
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -184,7 +200,7 @@ fun AddEventScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                EventColor.values().forEach { eventColor ->
+                EventColor.entries.forEach { eventColor ->
                     Box(
                         modifier = Modifier
                             .size(32.dp)
@@ -225,7 +241,7 @@ fun AddEventScreen(
             initialSelectedDateMillis = formState.date.time
         )
         
-        androidx.compose.material3.DatePickerDialog(
+        DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(
@@ -252,20 +268,19 @@ fun AddEventScreen(
         }
     }
     
-    // Дијалог за избор времена - сада користимо Material3 TimePickerDialog
+    // Дијалог за избор времена
     if (showTimePicker) {
         val timePickerState = rememberTimePickerState(
             initialHour = when (timePickerMode) {
-                TimePickerMode.START -> formState.startHour
-                TimePickerMode.END -> formState.endHour ?: (formState.startHour + 1).coerceAtMost(23)
+                TimePickerMode.START -> formState.startTime?.hour ?: 0
+                TimePickerMode.END -> formState.endTime?.hour ?: (formState.startTime?.hour?.plus(1) ?: 0)
             },
             initialMinute = when (timePickerMode) {
-                TimePickerMode.START -> formState.startMinute
-                TimePickerMode.END -> formState.endMinute ?: 0
+                TimePickerMode.START -> formState.startTime?.minute ?: 0
+                TimePickerMode.END -> formState.endTime?.minute ?: 0
             }
         )
         
-        // Користимо Dialog компоненту да обмотамо TimePicker
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
             title = { Text("Изаберите време") },
@@ -273,16 +288,18 @@ fun AddEventScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        val newTime = EventTime(
+                            hour = timePickerState.hour,
+                            minute = timePickerState.minute
+                        )
                         when (timePickerMode) {
                             TimePickerMode.START -> {
-                                calendarViewModel.updateEventField("startHour", timePickerState.hour)
-                                calendarViewModel.updateEventField("startMinute", timePickerState.minute)
-                                Log.d("AddEventScreen", "Постављено време почетка: ${timePickerState.hour}:${timePickerState.minute}")
+                                calendarViewModel.updateEventField("startTime", newTime)
+                                Log.d("AddEventScreen", "Постављено време почетка: ${newTime.formatted()}")
                             }
                             TimePickerMode.END -> {
-                                calendarViewModel.updateEventField("endHour", timePickerState.hour)
-                                calendarViewModel.updateEventField("endMinute", timePickerState.minute)
-                                Log.d("AddEventScreen", "Постављено време краја: ${timePickerState.hour}:${timePickerState.minute}")
+                                calendarViewModel.updateEventField("endTime", newTime)
+                                Log.d("AddEventScreen", "Постављено време краја: ${newTime.formatted()}")
                             }
                         }
                         showTimePicker = false
@@ -292,9 +309,7 @@ fun AddEventScreen(
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { showTimePicker = false }
-                ) {
+                TextButton(onClick = { showTimePicker = false }) {
                     Text("Откажи")
                 }
             }

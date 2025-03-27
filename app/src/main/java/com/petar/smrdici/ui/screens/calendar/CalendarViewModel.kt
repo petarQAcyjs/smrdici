@@ -270,7 +270,7 @@ class CalendarViewModel @Inject constructor(
     }
     
     // Ажурирање форме за унос догађаја
-    fun updateEventForm(update: (EventFormState) -> EventFormState) {
+    private fun updateEventForm(update: (EventFormState) -> EventFormState) {
         val currentForm = _eventFormState.value
         val updatedForm = update(currentForm)
         
@@ -283,10 +283,8 @@ class CalendarViewModel @Inject constructor(
             title = updatedForm.title,
             description = updatedForm.description,
             date = updatedForm.date,
-            startHour = updatedForm.startHour,
-            startMinute = updatedForm.startMinute,
-            endHour = updatedForm.endHour,
-            endMinute = updatedForm.endMinute,
+            startTime = updatedForm.startTime,
+            endTime = updatedForm.endTime,
             allDay = updatedForm.allDay,
             location = updatedForm.location
         )
@@ -303,10 +301,8 @@ class CalendarViewModel @Inject constructor(
             "location" -> currentForm.copy(location = value as String)
             "assignee" -> currentForm.copy(assignee = value as String)
             "color" -> currentForm.copy(color = value as String)
-            "startHour" -> currentForm.copy(startHour = value as Int)
-            "startMinute" -> currentForm.copy(startMinute = value as Int)
-            "endHour" -> currentForm.copy(endHour = value as Int)
-            "endMinute" -> currentForm.copy(endMinute = value as Int)
+            "startTime" -> currentForm.copy(startTime = value as EventTime?)
+            "endTime" -> currentForm.copy(endTime = value as EventTime?)
             "allDay" -> currentForm.copy(allDay = value as Boolean)
             "date" -> currentForm.copy(date = value as Date)
             else -> {
@@ -329,10 +325,8 @@ class CalendarViewModel @Inject constructor(
                 "title" -> form.copy(title = value as String)
                 "description" -> form.copy(description = value as String)
                 "date" -> form.copy(date = value as Date)
-                "startHour" -> form.copy(startHour = value as Int)
-                "startMinute" -> form.copy(startMinute = value as Int)
-                "endHour" -> form.copy(endHour = value as Int)
-                "endMinute" -> form.copy(endMinute = value as Int)
+                "startTime" -> form.copy(startTime = value as EventTime?)
+                "endTime" -> form.copy(endTime = value as EventTime?)
                 "allDay" -> form.copy(allDay = value as Boolean)
                 "location" -> form.copy(location = value as String)
                 "color" -> form.copy(color = value as String)
@@ -359,15 +353,15 @@ class CalendarViewModel @Inject constructor(
                 // Узимамо датум из форме и постављамо време
                 val startCalendar = Calendar.getInstance().apply {
                     time = form.date
-                    set(Calendar.HOUR_OF_DAY, form.startHour)
-                    set(Calendar.MINUTE, form.startMinute)
+                    set(Calendar.HOUR_OF_DAY, form.startTime?.hour ?: 0)
+                    set(Calendar.MINUTE, form.startTime?.minute ?: 0)
                 }
                 
-                val endCalendar = if (form.endHour != null && form.endMinute != null) {
+                val endCalendar = if (form.endTime != null) {
                     Calendar.getInstance().apply {
                         time = form.date
-                        set(Calendar.HOUR_OF_DAY, form.endHour)
-                        set(Calendar.MINUTE, form.endMinute)
+                        set(Calendar.HOUR_OF_DAY, form.endTime.hour)
+                        set(Calendar.MINUTE, form.endTime.minute)
                     }
                 } else null
                 
@@ -514,14 +508,12 @@ class CalendarViewModel @Inject constructor(
             title = event.title,
             description = event.description ?: "",
             date = startCalendar.time,
-            startHour = startCalendar.get(Calendar.HOUR_OF_DAY),
-            startMinute = startCalendar.get(Calendar.MINUTE),
-            endHour = endCalendar?.get(Calendar.HOUR_OF_DAY),
-            endMinute = endCalendar?.get(Calendar.MINUTE),
+            startTime = EventTime.fromDate(startCalendar.time),
+            endTime = endCalendar?.time?.let { EventTime.fromDate(it) },
             allDay = event.allDay,
             location = event.location,
             color = event.color,
-            assignee = event.assignee // Осигуравамо да се assignee правилно постави
+            assignee = event.assignee
         )
         
         Log.d("CalendarViewModel", "Постављам форму за уређивање: assignee=${newForm.assignee}")
@@ -547,9 +539,9 @@ class CalendarViewModel @Inject constructor(
                 val updatedEvent = currentEvent.copy(
                     title = formState.title,
                     description = formState.description,
-                    startTime = combineDateAndTime(formState.date, formState.startHour, formState.startMinute),
-                    endTime = if (!formState.allDay && formState.endHour != null && formState.endMinute != null) {
-                        combineDateAndTime(formState.date, formState.endHour, formState.endMinute)
+                    startTime = combineDateAndTime(formState.date, formState.startTime?.hour ?: 0, formState.startTime?.minute ?: 0),
+                    endTime = if (!formState.allDay && formState.endTime != null) {
+                        combineDateAndTime(formState.date, formState.endTime.hour, formState.endTime.minute)
                     } else null,
                     allDay = formState.allDay,
                     location = formState.location,
@@ -593,28 +585,7 @@ class CalendarViewModel @Inject constructor(
             }
         }
     }
-    
-    fun cleanupDuplicates() {
-        viewModelScope.launch {
-            try {
-                eventRepository.removeDuplicates()
-            } catch (e: Exception) {
-                Log.e("CalendarViewModel", "Грешка при чишћењу дупликата", e)
-            }
-        }
-    }
-    
-    fun cleanupDatabase() {
-        viewModelScope.launch {
-            try {
-                eventRepository.cleanupDatabase()
-                loadEvents()
-            } catch (e: Exception) {
-                Log.e("CalendarViewModel", "Грешка при чишћењу базе", e)
-            }
-        }
-    }
-    
+
     override fun onCleared() {
         super.onCleared()
         eventsJob?.cancel()
@@ -685,7 +656,7 @@ class CalendarViewModel @Inject constructor(
 
 // Стање корисничког интерфејса
 sealed class CalendarUiState {
-    object Loading : CalendarUiState()
+    data object Loading : CalendarUiState()
     data class Success(val events: List<Event>) : CalendarUiState()
     data class Error(val message: String) : CalendarUiState()
 }
@@ -695,15 +666,17 @@ data class EventFormState(
     val title: String = "",
     val description: String = "",
     val date: Date = Calendar.getInstance().time,
-    val startHour: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
-    val startMinute: Int = Calendar.getInstance().get(Calendar.MINUTE),
-    val endHour: Int? = null,
-    val endMinute: Int? = null,
+    val startTime: EventTime? = null,
+    val endTime: EventTime? = null,
     val allDay: Boolean = false,
     val location: String = "",
-    val color: String = "#4285F4", // Подразумевана плава боја
-    val assignee: String = EventAssignee.EVERYONE.name // Користимо име из енумерације
+    val color: String = "#4285F4",
+    val assignee: String = EventAssignee.EVERYONE.name
 ) {
     val isValid: Boolean
-        get() = title.isNotBlank()
+        get() = title.isNotBlank() && 
+                (!allDay && startTime != null || allDay) &&
+                (endTime == null || startTime != null && 
+                 (endTime.hour * 60 + endTime.minute) > 
+                 (startTime.hour * 60 + startTime.minute))
 }

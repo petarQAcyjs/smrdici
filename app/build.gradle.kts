@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "com.petar.smrdici"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.petar.smrdici"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -59,10 +59,10 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation("androidx.compose.material:material:1.6.4")
-    implementation("androidx.compose.animation:animation:1.6.4")
-    implementation("androidx.compose.animation:animation-graphics:1.6.4")
-    implementation("androidx.compose.material:material-icons-extended:1.6.4")
+    implementation("androidx.compose.material:material:1.5.4")
+    implementation("androidx.compose.animation:animation:1.5.4")
+    implementation("androidx.compose.animation:animation-graphics:1.5.4")
+    implementation("androidx.compose.material:material-icons-extended:1.5.4")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -70,25 +70,24 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    implementation(platform("com.google.firebase:firebase-bom:33.10.0"))
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
 
     // Navigation
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.navigation:navigation-compose:2.7.5")
 
     // Firebase
+    implementation("com.google.android.gms:play-services-auth:20.7.0")
     implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.android.gms:play-services-auth:21.0.0")
     implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-common-ktx")
+    implementation("com.google.firebase:firebase-database-ktx")
 
     // Календарска компонента
     implementation("com.kizitonwose.calendar:compose:2.4.1")
     
     // Swipe to refresh
-    implementation("com.google.accompanist:accompanist-swiperefresh:0.27.0")
+    implementation("com.google.accompanist:accompanist-swiperefresh:0.30.1")
     
     // Lottie за анимације
-    implementation("com.airbnb.android:lottie-compose:6.1.0")
-
-    // New dependency
-    implementation("androidx.compose.material:material:1.6.3")
+    implementation("com.airbnb.android:lottie-compose:6.3.0")
 }
