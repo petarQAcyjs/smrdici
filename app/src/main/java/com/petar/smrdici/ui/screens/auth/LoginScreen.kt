@@ -72,8 +72,9 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Spacer(modifier = Modifier.weight(0.1f))
             
@@ -82,8 +83,8 @@ fun LoginScreen(
                 painter = painterResource(id = R.mipmap.ic_launcher_foreground),
                 contentDescription = "Лого апликације",
                 modifier = Modifier
-                    .size(180.dp)
-                    .padding(bottom = 16.dp)
+                    .size(140.dp)
+                    .padding(bottom = 8.dp)
             )
             
             // Naziv aplikacije
@@ -93,10 +94,10 @@ fun LoginScreen(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 24.dp)
+                modifier = Modifier.padding(bottom = 16.dp)
             )
             
-            Spacer(modifier = Modifier.weight(0.1f))
+            Spacer(modifier = Modifier.height(16.dp))
             
             // Email polje
             OutlinedTextField(
@@ -104,9 +105,9 @@ fun LoginScreen(
                 onValueChange = { email = it },
                 label = { Text("Имејл") },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                    .fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                shape = RoundedCornerShape(12.dp)
             )
             
             // Password polje
@@ -115,11 +116,13 @@ fun LoginScreen(
                 onValueChange = { password = it },
                 label = { Text("Лозинка") },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                    .fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                shape = RoundedCornerShape(12.dp)
             )
+            
+            Spacer(modifier = Modifier.height(8.dp))
             
             // Dugme za prijavu/registraciju
             Button(
@@ -135,7 +138,7 @@ fun LoginScreen(
                     .height(48.dp),
                 shape = RoundedCornerShape(24.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    containerColor = MaterialTheme.colorScheme.primary
                 )
             ) {
                 Text(
@@ -146,30 +149,48 @@ fun LoginScreen(
                 )
             }
             
-            // Замењујемо стандардно дугме са GoogleSignInButton
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Текст за раздвајање
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f))
+                Text(
+                    text = "или",
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                HorizontalDivider(modifier = Modifier.weight(1f))
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Google Sign-In дугме
             GoogleSignInButton(
                 onClick = {
                     googleSignInLauncher.launch(authViewModel.getGoogleSignInIntent())
                 },
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier
             )
+            
+            Spacer(modifier = Modifier.weight(0.1f))
             
             // Prebacivanje između prijave i registracije
             TextButton(
-                onClick = { isSignUp = !isSignUp },
-                modifier = Modifier.padding(vertical = 8.dp)
+                onClick = { isSignUp = !isSignUp }
             ) {
                 Text(if (isSignUp) "Већ имаш налог? Пријави се" else "Немаш налог? Региструј се")
             }
-            
-            Spacer(modifier = Modifier.weight(0.2f))
             
             // Prikaz greške
             if (authState is AuthState.Error) {
                 Text(
                     text = (authState as AuthState.Error).message,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
             
