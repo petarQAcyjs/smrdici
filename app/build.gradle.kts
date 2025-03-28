@@ -90,4 +90,7 @@ dependencies {
     
     // Lottie за анимације
     implementation("com.airbnb.android:lottie-compose:6.3.0")
+
+    // Додајемо или ажурирамо зависност за Material3
+    implementation("androidx.compose.material3:material3:1.2.0")
 }
