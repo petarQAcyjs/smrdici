@@ -15,6 +15,7 @@ import com.petar.smrdici.ui.screens.lists.ListDetailsScreen
 import com.petar.smrdici.ui.screens.lists.ListsScreen
 import com.petar.smrdici.ui.screens.profile.ProfileScreen
 import com.petar.smrdici.ui.screens.calendar.AddEventScreen
+import com.petar.smrdici.ui.screens.settings.BudgetSettingsScreen
 
 @Composable
 fun NavGraph(
@@ -30,31 +31,31 @@ fun NavGraph(
         }
         
         composable(route = Screen.Home.route) {
-            MainLayout() {
+            MainLayout {
                 HomeScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Budget.route) {
-            MainLayout() {
+            MainLayout {
                 BudgetScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Calendar.route) {
-            MainLayout() {
+            MainLayout {
                 CalendarScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Lists.route) {
-            MainLayout() {
+            MainLayout {
                 ListsScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Profile.route) {
-            MainLayout() {
+            MainLayout {
                 ProfileScreen(navController = navController)
             }
         }
@@ -74,6 +75,10 @@ fun NavGraph(
                 navController = navController,
                 listId = listId
             )
+        }
+        
+        composable(Screen.BudgetSettings.route) {
+            BudgetSettingsScreen(navController = navController)
         }
     }
 } 
