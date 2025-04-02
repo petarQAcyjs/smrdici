@@ -471,13 +471,8 @@ class CalendarViewModel @Inject constructor(
     fun loadEventsForDate(date: Date) {
         viewModelScope.launch {
             try {
-                // Не постављамо Loading стање ако већ имамо податке
                 if (_events.value.isEmpty()) {
                     _uiState.value = CalendarUiState.Loading
-                }
-                
-                // Проверавамо да ли већ имамо учитане догађаје
-                if (_events.value.isEmpty()) {
                     loadEvents() // Учитавамо све догађаје ако их немамо
                 } else {
                     // Само филтрирамо постојеће догађаје

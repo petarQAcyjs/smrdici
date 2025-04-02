@@ -93,61 +93,6 @@ class EventRepository @Inject constructor(private val context: Context) {
         }
     }
     
-    // Функција за добијање свих догађаја из локалног календара
-    suspend fun getEventsFromCalendar(): List<Event> {
-        return withContext(Dispatchers.IO) {
-            val events = mutableListOf<Event>()
-            val contentResolver: ContentResolver = context.contentResolver
-            
-            // Пројекција за упит
-            val projection = arrayOf(
-                CalendarContract.Events._ID,
-                CalendarContract.Events.TITLE,
-                CalendarContract.Events.DESCRIPTION,
-                CalendarContract.Events.DTSTART,
-                CalendarContract.Events.DTEND,
-                CalendarContract.Events.CALENDAR_ID,
-                CalendarContract.Events.EVENT_COLOR
-            )
-            
-            // Упит за догађаје
-            val cursor: Cursor? = contentResolver.query(
-                CalendarContract.Events.CONTENT_URI,
-                projection,
-                null,
-                null,
-                null
-            )
-            
-            cursor?.use {
-                while (it.moveToNext()) {
-                    val id = it.getLong(it.getColumnIndexOrThrow(CalendarContract.Events._ID))
-                    val title = it.getString(it.getColumnIndexOrThrow(CalendarContract.Events.TITLE))
-                    val description = it.getString(it.getColumnIndexOrThrow(CalendarContract.Events.DESCRIPTION))
-                    val startMillis = it.getLong(it.getColumnIndexOrThrow(CalendarContract.Events.DTSTART))
-                    val endMillis = it.getLong(it.getColumnIndexOrThrow(CalendarContract.Events.DTEND))
-                    val calendarId = it.getString(it.getColumnIndexOrThrow(CalendarContract.Events.CALENDAR_ID))
-                    
-                    val startDate = Date(startMillis)
-                    val endDate = Date(endMillis)
-                    
-                    val event = Event(
-                        id = id.toString(),
-                        title = title ?: "",
-                        description = description,
-                        startTime = Timestamp(startDate),
-                        endTime = Timestamp(endDate),
-                        calendarId = calendarId
-                    )
-                    
-                    events.add(event)
-                }
-            }
-            
-            events
-        }
-    }
-    
     // Функција за додавање догађаја у локални календар
     suspend fun addEventToCalendar(event: Event): Long {
         return withContext(Dispatchers.IO) {
@@ -183,22 +128,6 @@ class EventRepository @Inject constructor(private val context: Context) {
         } catch (e: Exception) {
             Log.e("EventRepository", "Грешка при брисању догађаја из Firebase-а", e)
             false
-        }
-    }
-    
-    // Функција за брисање догађаја из локалног календара
-    suspend fun deleteEventFromCalendar(eventId: String): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                val contentResolver: ContentResolver = context.contentResolver
-                val deleteUri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId.toLong())
-                val rows = contentResolver.delete(deleteUri, null, null)
-                
-                rows > 0
-            } catch (e: Exception) {
-                Log.e("EventRepository", "Грешка при брисању догађаја из календара", e)
-                false
-            }
         }
     }
     

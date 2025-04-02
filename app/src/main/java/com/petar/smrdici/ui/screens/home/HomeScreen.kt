@@ -3,6 +3,7 @@ package com.petar.smrdici.ui.screens.home
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,9 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -36,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -54,18 +59,11 @@ import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.ui.input.pointer.pointerInput
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -97,8 +95,6 @@ fun HomeScreen(
         (authState as AuthState.Authenticated).user
     } else null
 
-    var testRefresh by remember { mutableStateOf(false) }
-    
     // Додајемо стање за ручно праћење гестова
     var dragStartY by remember { mutableStateOf(0f) }
     var dragCurrentY by remember { mutableStateOf(0f) }
@@ -156,7 +152,7 @@ fun HomeScreen(
                     events = todayEvents,
                     onEventClick = { event ->
                         event.id?.let { eventId ->
-                            navController.navigate(Screen.Calendar.createRoute(eventId))
+                            navController.navigate(Screen.Calendar.route)
                         }
                     },
                     modifier = Modifier

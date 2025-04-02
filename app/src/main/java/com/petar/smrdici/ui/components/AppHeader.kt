@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,7 +25,6 @@ import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseUser
 import com.petar.smrdici.ui.navigation.Screen
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppHeader(
     title: String,
