@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
 import java.util.*
 import javax.inject.Inject
 
-class EventRepository @Inject constructor(private val context: Context) {
+class EventRepository private constructor(private val context: Context) {
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     private val eventsCollection = firestore.collection("calendar_events")
@@ -488,5 +488,26 @@ class EventRepository @Inject constructor(private val context: Context) {
         return date?.let { 
             java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(it) 
         } ?: "null"
+    }
+
+    companion object {
+        @Volatile
+        private var instance: EventRepository? = null
+        
+        fun getInstance(context: Context): EventRepository {
+            return instance ?: synchronized(this) {
+                instance ?: EventRepository(context).also { instance = it }
+            }
+        }
+        
+        // Додајте методу за проверу да ли је репозиторијум већ иницијализован
+        fun isInitialized(): Boolean {
+            return instance != null
+        }
+        
+        // Додајте методу за ресетовање инстанце (користи се за тестирање)
+        fun reset() {
+            instance = null
+        }
     }
 } 

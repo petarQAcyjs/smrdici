@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,7 +31,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -76,32 +77,38 @@ fun ProfileScreen(
     homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(LocalContext.current)),
     themeViewModel: ThemeViewModel = viewModel(factory = ThemeViewModelFactory(LocalContext.current))
 ) {
+    // Спречавамо непотребно учитавање EventRepository-а
+    DisposableEffect(Unit) {
+        // Ништа не радимо, само спречавамо непотребно учитавање
+        onDispose { }
+    }
+
     val authState by authViewModel.authState.collectAsState()
     val themeMode by themeViewModel.themeMode.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
-    
+
     val context = LocalContext.current
-    
+
     // Додајемо coroutineScope и snackbarHostState
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    
+
     // Функција за приказивање Snackbar-а
     fun showSnackbar(message: String) {
         coroutineScope.launch {
             snackbarHostState.showSnackbar(message)
         }
     }
-    
-    // Inicijalizujemo Google Sign-In klijenta za slučaj da korisnik želi da se odjavi
+
+    // Inicijalizujemo Google Sign-In klijenta за slučaj да се одјави
     LaunchedEffect(Unit) {
         authViewModel.initGoogleSignIn(context)
     }
-    
+
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
-    
+
     val syncStatus by homeViewModel.syncStatus.collectAsState()
 
     // Pratimo stanje autentifikacije i navigiramo na Login kad korisnik nije autentifikovan
@@ -112,7 +119,7 @@ fun ProfileScreen(
             }
         }
     }
-    
+
     // Користимо само један Scaffold
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -149,32 +156,32 @@ fun ProfileScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = user.displayName?.firstOrNull()?.toString() ?: 
-                                      user.email?.firstOrNull()?.toString() ?: "?",
+                                text = user.displayName?.firstOrNull()?.toString() ?:
+                                user.email?.firstOrNull()?.toString() ?: "?",
                                 style = MaterialTheme.typography.headlineLarge,
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     // Име корисника
                     Text(
                         text = user.displayName ?: "Корисник",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    
+
                     // Имејл
                     Text(
                         text = user.email ?: "",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
-                    
+
                     Spacer(modifier = Modifier.height(32.dp))
-                    
+
                     // Подешавања
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -191,240 +198,83 @@ fun ProfileScreen(
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(bottom = 16.dp)
                             )
-                            
+
                             // Дугме за синхронизацију
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        homeViewModel.syncEvents()
-                                    }
-                                    .padding(vertical = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Синхронизуј",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                
-                                Spacer(modifier = Modifier.width(16.dp))
-                                
-                                Column {
-                                    Text(
-                                        text = "Синхронизуј податке",
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                    
-                                    // Приказујемо статус синхронизације
-                                    when (syncStatus) {
-                                        is SyncStatus.Syncing -> {
-                                            Text(
-                                                text = "Синхронизација у току...",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                        is SyncStatus.Success -> {
-                                            Text(
-                                                text = "Синхронизација успешна",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                        is SyncStatus.Error -> {
-                                            Text(
-                                                text = "Грешка: ${(syncStatus as SyncStatus.Error).message}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                        else -> {}
-                                    }
-                                }
-                                
-                                Spacer(modifier = Modifier.weight(1f))
-                                
-                                // Приказујемо индикатор учитавања током синхронизације
-                                if (syncStatus is SyncStatus.Syncing) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    )
-                                }
-                            }
-                            
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 8.dp)
+                            SettingsItem(
+                                icon = Icons.Default.Refresh,
+                                title = "Синхронизуј податке",
+                                subtitle = when (syncStatus) {
+                                    is SyncStatus.Syncing -> "Синхронизација у току..."
+                                    is SyncStatus.Success -> "Синхронизација успешна"
+                                    is SyncStatus.Error -> "Грешка: ${(syncStatus as SyncStatus.Error).message}"
+                                    else -> null
+                                },
+                                trailingText = when (syncStatus) {
+                                    is SyncStatus.Syncing -> null
+                                    is SyncStatus.Success -> null
+                                    is SyncStatus.Error -> null
+                                    else -> null
+                                },
+                                onClick = { homeViewModel.syncEvents() }
                             )
-                            
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+
                             // Промена језика
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { /* Промена језика */ }
-                                    .padding(vertical = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Језик",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                
-                                Spacer(modifier = Modifier.width(16.dp))
-                                
-                                Text(
-                                    text = "Језик",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                
-                                Spacer(modifier = Modifier.weight(1f))
-                                
-                                Text(
-                                    text = "Српски",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                                
-                                Spacer(modifier = Modifier.width(8.dp))
-                                
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            }
-                            
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 8.dp)
+                            SettingsItem(
+                                icon = Icons.Default.Edit,
+                                title = "Језик",
+                                trailingText = "Српски",
+                                onClick = { /* Промена језика */ }
                             )
-                            
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+
                             // Тема
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showThemeDialog = true }
-                                    .padding(vertical = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = when (themeMode) {
-                                        ThemeMode.LIGHT -> Icons.Default.LightMode
-                                        ThemeMode.DARK -> Icons.Default.DarkMode
-                                        ThemeMode.SYSTEM -> Icons.Default.Settings
-                                    },
-                                    contentDescription = "Тема",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                
-                                Spacer(modifier = Modifier.width(16.dp))
-                                
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Тема",
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                    
-                                    Text(
-                                        text = when (themeMode) {
-                                            ThemeMode.LIGHT -> "Светла"
-                                            ThemeMode.DARK -> "Тамна"
-                                            ThemeMode.SYSTEM -> "Систем"
-                                        },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                    )
-                                }
-                                
-                                Spacer(modifier = Modifier.width(8.dp))
-                                
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            }
+                            SettingsItem(
+                                icon = when (themeMode) {
+                                    ThemeMode.LIGHT -> Icons.Default.LightMode
+                                    ThemeMode.DARK -> Icons.Default.DarkMode
+                                    ThemeMode.SYSTEM -> Icons.Default.Settings
+                                },
+                                title = "Тема",
+                                subtitle = when (themeMode) {
+                                    ThemeMode.LIGHT -> "Светла"
+                                    ThemeMode.DARK -> "Тамна"
+                                    ThemeMode.SYSTEM -> "Систем"
+                                },
+                                onClick = { showThemeDialog = true }
+                            )
 
                             // За подешавања буџета
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        navController.navigate(Screen.BudgetSettings.route)
-                                    }
-                                    .padding(vertical = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AccountBalance,
-                                    contentDescription = "Подешавања буџета",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                
-                                Spacer(modifier = Modifier.width(16.dp))
-                                
-                                Text(
-                                    text = "Подешавања буџета",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                
-                                Spacer(modifier = Modifier.width(8.dp))
-                                
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            }
+                            SettingsItem(
+                                icon = Icons.Default.AccountBalance,
+                                title = "Подешавања буџета",
+                                onClick = {
+                                    navController.navigate(Screen.BudgetSettings.route)
+                                }
+                            )
 
                             // За подешавања обавештења
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        showSnackbar("Подешавања обавештења ће бити доступна ускоро")
-                                    }
-                                    .padding(vertical = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Notifications,
-                                    contentDescription = "Подешавања обавештења",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                
-                                Spacer(modifier = Modifier.width(16.dp))
-                                
-                                Text(
-                                    text = "Подешавања обавештења",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                
-                                Spacer(modifier = Modifier.width(8.dp))
-                                
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            }
+                            SettingsItem(
+                                icon = Icons.Default.Notifications,
+                                title = "Подешавања обавештења",
+                                onClick = {
+                                    showSnackbar("Подешавања обавештења ће бити доступна ускоро")
+                                }
+                            )
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(24.dp))
-                    
+
                     // Дугме за одјаву
                     Button(
-                        onClick = { 
+                        onClick = {
                             authViewModel.signOut()
                             // Ne koristimo recreateActivity jer LaunchedEffect
                             // već prati promene u authState
@@ -522,21 +372,22 @@ private fun ThemeOption(
         Icon(
             imageVector = icon,
             contentDescription = title,
-            tint = if (selected) MaterialTheme.colorScheme.primary 
-                   else MaterialTheme.colorScheme.onSurfaceVariant
+            tint = if (selected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(24.dp)
         )
-        
+
         Spacer(modifier = Modifier.width(16.dp))
-        
+
         Text(
             text = title,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (selected) MaterialTheme.colorScheme.primary 
-                   else MaterialTheme.colorScheme.onSurface
+            color = if (selected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurface
         )
-        
+
         Spacer(modifier = Modifier.weight(1f))
-        
+
         if (selected) {
             Icon(
                 imageVector = Icons.Default.Check,
@@ -547,12 +398,73 @@ private fun ThemeOption(
     }
 }
 
+@Composable
+fun SettingsItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    trailingText: String? = null,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp) // Смањујемо висину на 64dp за све ставке
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp), // Уклањамо вертикални падинг
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(24.dp)
+        )
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(
+            modifier = Modifier
+                .weight(1f),
+            verticalArrangement = Arrangement.Center // Центрирамо садржај вертикално
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge
+            )
+
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+
+        if (trailingText != null) {
+            Text(
+                text = trailingText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        )
+    }
+}
+
 // Funkcija za ponovno kreiranje aktivnosti
 private fun recreateActivity(context: Context) {
     (context as? Activity)?.let { activity ->
         val intent = Intent(activity, MainActivity::class.java)
         activity.finish()
         activity.startActivity(intent)
-
     }
-} 
+}

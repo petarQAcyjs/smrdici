@@ -18,8 +18,10 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-class HomeViewModel(context: Context) : ViewModel() {
-    private val eventRepository = EventRepository(context)
+class HomeViewModel(private val context: Context) : ViewModel() {
+    // Лења иницијализација EventRepository
+    private val eventRepository by lazy { EventRepository.getInstance(context) }
+    
     private val _todayEvents = MutableStateFlow<List<Event>>(emptyList())
     val todayEvents: StateFlow<List<Event>> = _todayEvents
     
@@ -30,6 +32,7 @@ class HomeViewModel(context: Context) : ViewModel() {
     private val auth = FirebaseAuth.getInstance()
     
     init {
+        // Учитавамо догађаје само када је HomeViewModel активан
         loadTodayEvents()
         
         // Периодично освежавање да би се ажурирали догађаји који су прошли

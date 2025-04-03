@@ -591,7 +591,7 @@ class CalendarViewModel @Inject constructor(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(CalendarViewModel::class.java)) {
-                return CalendarViewModel(EventRepository(context), FirebaseAuth.getInstance()) as T
+                return CalendarViewModel(EventRepository.getInstance(context), FirebaseAuth.getInstance()) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

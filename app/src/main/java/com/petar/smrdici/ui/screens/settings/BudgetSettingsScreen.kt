@@ -21,15 +21,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,7 +50,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,12 +63,19 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BudgetSettingsScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
-    budgetSettingsViewModel: BudgetSettingsViewModel = viewModel(factory = BudgetSettingsViewModel.Factory())
+    budgetSettingsViewModel: BudgetSettingsViewModel = viewModel(factory = BudgetSettingsViewModel.Factory(LocalContext.current))
 ) {
+    // Спречавамо непотребно учитавање EventRepository-а
+    DisposableEffect(Unit) {
+        // Ништа не радимо, само спречавамо непотребно учитавање
+        onDispose { }
+    }
+    
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
@@ -93,20 +103,44 @@ fun BudgetSettingsScreen(
     val customPeriodStartDay by budgetSettingsViewModel.customPeriodStartDay.collectAsState()
     val accounts by budgetSettingsViewModel.accounts.collectAsState()
     
+    // Мапирамо Period енумерацију на стрингове за приказ
+    val periodStrings = mapOf(
+        Period.DAILY to "Дневно",
+        Period.WEEKLY to "Недељно",
+        Period.MONTHLY to "Месечно",
+        Period.YEARLY to "Годишње",
+        Period.CUSTOM to "Прилагођено",
+        Period.ALL to "Све"
+    )
+    
+    // Мапирамо Currency енумерацију на стрингове за приказ
+    val currencyStrings = mapOf(
+        Currency.RSD to "Динар (RSD)",
+        Currency.EUR to "Евро (EUR)",
+        Currency.USD to "Долар (USD)"
+    )
+    
+    // Стање за падајуће меније
+    var currencyExpanded by remember { mutableStateOf(false) }
+    var periodExpanded by remember { mutableStateOf(false) }
+    var customPeriodExpanded by remember { mutableStateOf(false) }
+    
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            AppHeader(
+                title = "Подешавања буџета",
+                user = user,
+                navController = navController,
+                showBackButton = true
+            )
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            AppHeader(
-                title = "Подешавања буџета",
-                user = user,
-                navController = navController
-            )
-            
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -115,38 +149,32 @@ fun BudgetSettingsScreen(
             ) {
                 // Картица за валуту
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
                         Text(
                             text = "Валута",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 16.dp)
+                            style = MaterialTheme.typography.titleMedium
                         )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
                         
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { showCurrencyDialog = true }
+                                .clickable { currencyExpanded = true }
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.AttachMoney,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            
-                            Spacer(modifier = Modifier.width(16.dp))
-                            
                             Text(
-                                text = "${currency.code} (${currency.symbol})",
+                                text = currency.value,
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.weight(1f)
                             )
@@ -156,6 +184,22 @@ fun BudgetSettingsScreen(
                                 contentDescription = "Промени валуту"
                             )
                         }
+                        
+                        DropdownMenu(
+                            expanded = currencyExpanded,
+                            onDismissRequest = { currencyExpanded = false }
+                        ) {
+                            Currency.values().forEach { currencyOption ->
+                                DropdownMenuItem(
+                                    text = { Text(currencyOption.value) },
+                                    onClick = {
+                                        budgetSettingsViewModel.setCurrency(currencyOption)
+                                        currencyExpanded = false
+                                        showSnackbar("Валута промењена на ${currencyOption.value}")
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
                 
@@ -163,36 +207,30 @@ fun BudgetSettingsScreen(
                 
                 // Картица за период
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
                         Text(
                             text = "Период буџета",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 16.dp)
+                            style = MaterialTheme.typography.titleMedium
                         )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
                         
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { showPeriodDialog = true }
+                                .clickable { periodExpanded = true }
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.CalendarMonth,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            
-                            Spacer(modifier = Modifier.width(16.dp))
-                            
                             Text(
                                 text = period.value,
                                 style = MaterialTheme.typography.bodyLarge,
@@ -205,38 +243,131 @@ fun BudgetSettingsScreen(
                             )
                         }
                         
-                        // Ако је изабран прилагођени период, приказујемо додатне опције
-                        if (period == Period.CUSTOM) {
-                            HorizontalDivider(
+                        DropdownMenu(
+                            expanded = periodExpanded,
+                            onDismissRequest = { periodExpanded = false }
+                        ) {
+                            Period.values().forEach { periodOption ->
+                                DropdownMenuItem(
+                                    text = { Text(periodOption.value) },
+                                    onClick = {
+                                        budgetSettingsViewModel.setPeriod(periodOption)
+                                        periodExpanded = false
+                                        showSnackbar("Период промењен на ${periodOption.value}")
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Ако је изабран прилагођени период, приказујемо додатне опције
+                if (period == Period.CUSTOM) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = "Дан почетка периода",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            Text(
+                                text = "Изаберите дан у месецу када почиње ваш буџетски период:",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        if (customPeriodStartDay > 1) {
+                                            budgetSettingsViewModel.setCustomPeriodStartDay(customPeriodStartDay - 1)
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Remove,
+                                        contentDescription = "Смањи",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .padding(horizontal = 16.dp)
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "$customPeriodStartDay",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                                
+                                IconButton(
+                                    onClick = {
+                                        if (customPeriodStartDay < 28) {
+                                            budgetSettingsViewModel.setCustomPeriodStartDay(customPeriodStartDay + 1)
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Повећај",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Додајемо брзе изборе за уобичајене дане
+                            Text(
+                                text = "Брзи избор:",
+                                style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
                             
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showCustomPeriodDialog = true }
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.DateRange,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                
-                                Spacer(modifier = Modifier.width(16.dp))
-                                
-                                Text(
-                                    text = "Почиње ${customPeriodStartDay}. у месецу",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                
-                                Icon(
-                                    imageVector = Icons.Default.ArrowDropDown,
-                                    contentDescription = "Промени датум почетка"
-                                )
+                                for (day in listOf(1, 5, 10, 15, 20, 25)) {
+                                    QuickDateButton(
+                                        day = day,
+                                        selectedDay = customPeriodStartDay,
+                                        onClick = {
+                                            budgetSettingsViewModel.setCustomPeriodStartDay(day)
+                                        }
+                                    )
+                                }
                             }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            Text(
+                                text = "Трансакције ће бити груписане од ${customPeriodStartDay}. дана у месецу до ${customPeriodStartDay - 1}. дана следећег месеца.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }

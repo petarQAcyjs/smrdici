@@ -1,124 +1,225 @@
 package com.petar.smrdici.ui.screens.budget
 
+import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.Timestamp
-import com.petar.smrdici.data.model.Transaction
-import com.petar.smrdici.data.model.TransactionType
-import com.petar.smrdici.data.repository.TransactionRepository
+import com.petar.smrdici.data.model.Account
+import com.petar.smrdici.data.model.Expense
+import com.petar.smrdici.data.model.Income
+import com.petar.smrdici.data.repository.ExpenseRepository
+import com.petar.smrdici.data.repository.IncomeRepository
+import com.petar.smrdici.ui.screens.settings.BudgetSettingsViewModel
+import com.petar.smrdici.ui.screens.settings.Period
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.util.Date
+import java.util.*
 
-class BudgetViewModel : ViewModel() {
-    private val repository = TransactionRepository()
+class BudgetViewModel(
+    private val expenseRepository: ExpenseRepository,
+    private val incomeRepository: IncomeRepository,
+    private val settingsViewModel: BudgetSettingsViewModel
+) : ViewModel() {
     
-    private val _uiState = MutableStateFlow<BudgetUiState>(BudgetUiState.Loading)
-    val uiState: StateFlow<BudgetUiState> = _uiState
+    // UI стање
+    private val _uiState = MutableStateFlow(BudgetUiState())
+    val uiState: StateFlow<BudgetUiState> = _uiState.asStateFlow()
     
-    private val _transactions = MutableStateFlow<List<Transaction>>(emptyList())
-    val transactions: StateFlow<List<Transaction>> = _transactions
+    // Стање за период
+    private val _selectedPeriodIndex = MutableStateFlow(2) // Подразумевано месечно
+    val selectedPeriodIndex: StateFlow<Int> = _selectedPeriodIndex.asStateFlow()
     
-    // Форма за унос нове трансакције
-    private val _transactionFormState = MutableStateFlow(TransactionFormState())
-    val transactionFormState: StateFlow<TransactionFormState> = _transactionFormState
+    // Стање за период као Period објекат
+    private val _selectedPeriod = MutableStateFlow(Period.MONTHLY)
+    val selectedPeriod: StateFlow<Period> = _selectedPeriod.asStateFlow()
+    
+    // Остала стања из оригиналаног ViewModel-а
+    private val _expenses = MutableStateFlow<List<Expense>>(emptyList())
+    val expenses: StateFlow<List<Expense>> = _expenses.asStateFlow()
+    
+    private val _incomes = MutableStateFlow<List<Income>>(emptyList())
+    val incomes: StateFlow<List<Income>> = _incomes.asStateFlow()
+    
+    // Додајемо ове променљиве у BudgetViewModel
+    private val _accounts = MutableStateFlow<List<Account>>(emptyList())
+    val accounts: StateFlow<List<Account>> = _accounts.asStateFlow()
+    
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading = _isLoading.asStateFlow()
     
     init {
-        loadTransactions()
+        // Учитавамо трансакције
+        loadExpenses()
+        loadIncomes()
+        
+        // Пратимо промене периода из подешавања
+        viewModelScope.launch {
+            settingsViewModel.period.collectLatest { period ->
+                val index = when (period) {
+                    Period.DAILY -> 0
+                    Period.WEEKLY -> 1
+                    Period.MONTHLY -> 2
+                    Period.YEARLY -> 3
+                    Period.CUSTOM -> 4
+                    Period.ALL -> 5
+                }
+                Log.d("BudgetViewModel", "Ажурирам период из подешавања: $period, индекс: $index")
+                if (_selectedPeriodIndex.value != index) {
+                    _selectedPeriodIndex.value = index
+                    _selectedPeriod.value = period
+                    Log.d("BudgetViewModel", "Учитавам трансакције за период: $index")
+                    loadTransactions()
+                }
+            }
+        }
+    }
+    
+    fun updatePeriodIndex(index: Int) {
+        if (_selectedPeriodIndex.value != index) {
+            _selectedPeriodIndex.value = index
+            
+            // Ажурирамо и подешавања
+            val period = when (index) {
+                0 -> Period.DAILY
+                1 -> Period.WEEKLY
+                2 -> Period.MONTHLY
+                3 -> Period.YEARLY
+                4 -> Period.CUSTOM
+                5 -> Period.ALL
+                else -> Period.MONTHLY
+            }
+            
+            _selectedPeriod.value = period
+            
+            // Ажурирамо подешавања
+            viewModelScope.launch {
+                settingsViewModel.setPeriod(period)
+                // Поново учитај податке са новим периодом
+                loadTransactions()
+            }
+        }
     }
     
     private fun loadTransactions() {
+        loadExpenses()
+        loadIncomes()
+    }
+    
+    private fun loadExpenses() {
         viewModelScope.launch {
-            repository.getTransactionsForCurrentUser()
-                .catch { e ->
-                    _uiState.value = BudgetUiState.Error("Failed to load transactions")
+            _isLoading.value = true
+            
+            // Користимо постојећу методу getAllExpenses и филтрирамо резултате
+            expenseRepository.getAllExpenses().collect { allExpenses ->
+                val filteredExpenses = when (_selectedPeriod.value) {
+                    Period.ALL -> allExpenses
+                    else -> {
+                        val (startDate, endDate) = calculatePeriodDates(_selectedPeriod.value)
+                        allExpenses.filter { expense ->
+                            val expenseDate = expense.date?.toDate()
+                            expenseDate != null && expenseDate >= startDate && expenseDate <= endDate
+                        }
+                    }
                 }
-                .collect { transactions ->
-                    _transactions.value = transactions
-                    calculateBudgetSummary(transactions)
-                }
-        }
-    }
-    
-    private fun calculateBudgetSummary(transactions: List<Transaction>) {
-        val totalIncome = transactions
-            .filter { it.type == TransactionType.INCOME }
-            .sumOf { it.amount }
-            
-        val totalExpense = transactions
-            .filter { it.type == TransactionType.EXPENSE }
-            .sumOf { it.amount }
-            
-        val balance = totalIncome - totalExpense
-        
-        _uiState.value = BudgetUiState.Success(transactions)
-    }
-    
-    // Ажурирање форме за унос трансакције
-    fun updateTransactionForm(update: (TransactionFormState) -> TransactionFormState) {
-        _transactionFormState.value = update(_transactionFormState.value)
-    }
-    
-    // Додавање нове трансакције
-    fun addTransaction() {
-        viewModelScope.launch {
-            val form = _transactionFormState.value
-            
-            if (!form.isValid) {
-                return@launch
+                
+                _expenses.value = filteredExpenses
+                _isLoading.value = false
             }
-            
-            val transaction = Transaction(
-                amount = form.amount.toDoubleOrNull() ?: 0.0,
-                description = form.description,
-                category = form.category,
-                type = form.type,
-                date = Timestamp(Date(form.date))
-            )
-            
-            repository.addTransaction(transaction)
-                .onSuccess {
-                    // Ресетујемо форму
-                    _transactionFormState.value = TransactionFormState()
-                }
-                .onFailure { e ->
-                    _uiState.value = BudgetUiState.Error("Failed to add transaction")
-                }
         }
     }
     
-    // Брисање трансакције
-    fun deleteTransaction(transactionId: String) {
-        viewModelScope.launch {
-            repository.deleteTransaction(transactionId)
-                .onFailure { e ->
-                    _uiState.value = BudgetUiState.Error("Failed to delete transaction")
+    private fun calculatePeriodDates(period: Period): Pair<Date, Date> {
+        val calendar = Calendar.getInstance()
+        val endDate = calendar.time
+        
+        calendar.apply {
+            when (period) {
+                Period.DAILY -> {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
                 }
+                Period.WEEKLY -> {
+                    set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                Period.MONTHLY -> {
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                Period.YEARLY -> {
+                    set(Calendar.DAY_OF_YEAR, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                Period.CUSTOM -> {
+                    // Користимо прилагођени датум почетка периода
+                    val customDay = settingsViewModel.customPeriodStartDay.value
+                    
+                    // Ако је данашњи дан пре прилагођеног дана, идемо на прошли месец
+                    if (get(Calendar.DAY_OF_MONTH) < customDay) {
+                        add(Calendar.MONTH, -1)
+                    }
+                    
+                    // Постављамо дан на прилагођени дан
+                    set(Calendar.DAY_OF_MONTH, customDay)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                Period.ALL -> {
+                    // За ALL враћамо веома стари датум као почетак
+                    set(Calendar.YEAR, 2000)
+                    set(Calendar.MONTH, 0)
+                    set(Calendar.DAY_OF_MONTH, 1)
+                }
+            }
+        }
+        
+        val startDate = calendar.time
+        return Pair(startDate, endDate)
+    }
+    
+    private fun loadIncomes() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            incomeRepository.getAllIncomes().collect { incomeList ->
+                _incomes.value = incomeList
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    // Фабрика за креирање ViewModel-а
+    class Factory(private val context: Context) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(BudgetViewModel::class.java)) {
+                val expenseRepository = ExpenseRepository.getInstance()
+                val incomeRepository = IncomeRepository.getInstance()
+                val settingsViewModel = BudgetSettingsViewModel.Factory(context)
+                    .create(BudgetSettingsViewModel::class.java)
+                return BudgetViewModel(expenseRepository, incomeRepository, settingsViewModel) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
 }
 
-// Стање корисничког интерфејса
-sealed class BudgetUiState {
-    object Loading : BudgetUiState()
-    object Empty : BudgetUiState()
-    data class Success(val transactions: List<Transaction>) : BudgetUiState()
-    data class Error(val message: String) : BudgetUiState()
-}
-
-// Стање форме за унос трансакције
-data class TransactionFormState(
-    val amount: String = "",
-    val description: String = "",
-    val category: String = "",
-    val type: TransactionType = TransactionType.EXPENSE,
-    val date: Long = System.currentTimeMillis()
-) {
-    val isValid: Boolean
-        get() = amount.isNotBlank() && 
-                amount.toDoubleOrNull() != null && 
-                description.isNotBlank() && 
-                category.isNotBlank()
-} 
+// UI стање за буџет
+data class BudgetUiState(
+    val isLoading: Boolean = false,
+    val expenses: List<Expense> = emptyList(),
+    val incomes: List<Income> = emptyList(),
+    val accounts: List<Account> = emptyList(),
+    val error: String? = null
+) 

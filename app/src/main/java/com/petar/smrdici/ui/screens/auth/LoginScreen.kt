@@ -27,6 +27,7 @@ import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.navigation.Screen
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.DisposableEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +61,12 @@ fun LoginScreen(
                 popUpTo(Screen.Login.route) { inclusive = true }
             }
         }
+    }
+    
+    // Спречавамо непотребно учитавање EventRepository-а
+    DisposableEffect(Unit) {
+        // Ништа не радимо, само спречавамо непотребно учитавање
+        onDispose { }
     }
     
     Scaffold(

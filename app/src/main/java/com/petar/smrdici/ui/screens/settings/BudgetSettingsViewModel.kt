@@ -1,18 +1,24 @@
 package com.petar.smrdici.ui.screens.settings
 
+import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.data.model.AccountType
+import com.petar.smrdici.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 // Енумерација за валуте
-enum class Currency(val code: String, val symbol: String) {
-    RSD("RSD", "РСД"),
-    EUR("EUR", "€"),
-    USD("USD", "$"),
-    GBP("GBP", "£")
+enum class Currency(val code: String, val symbol: String, val value: String) {
+    RSD("RSD", "РСД", "Динар (RSD)"),
+    EUR("EUR", "€", "Евро (EUR)"),
+    USD("USD", "$", "Долар (USD)"),
+    GBP("GBP", "£", "Фунта (GBP)")
 }
 
 // Енумерација за периоде
@@ -21,19 +27,21 @@ enum class Period(val value: String) {
     WEEKLY("Недељно"),
     MONTHLY("Месечно"),
     YEARLY("Годишње"),
-    CUSTOM("Прилагођено")
+    CUSTOM("Прилагођено"),
+    ALL("Све")
 }
 
-class BudgetSettingsViewModel : ViewModel() {
+class BudgetSettingsViewModel(private val context: Context) : ViewModel() {
+    private val settingsRepository = SettingsRepository.getInstance(context)
+    
     private val _currency = MutableStateFlow(Currency.RSD)
     val currency: StateFlow<Currency> = _currency
     
-    private val _period = MutableStateFlow(Period.MONTHLY)
-    val period: StateFlow<Period> = _period
+    // Користимо период из репозиторијума
+    val period: StateFlow<Period> = settingsRepository.period
     
-    // Додајемо подршку за прилагођени датум почетка периода
-    private val _customPeriodStartDay = MutableStateFlow(1)
-    val customPeriodStartDay: StateFlow<Int> = _customPeriodStartDay
+    // Користимо прилагођени период из репозиторијума
+    val customPeriodStartDay: StateFlow<Int> = settingsRepository.customPeriodStartDay
     
     // Додајемо подршку за рачуне
     private val _accounts = MutableStateFlow<List<Account>>(emptyList())
@@ -77,14 +85,14 @@ class BudgetSettingsViewModel : ViewModel() {
     
     // Функција за промену периода
     fun setPeriod(period: Period) {
-        _period.value = period
-        // Овде бисмо сачували подешавања у SharedPreferences или Datastore
+        Log.d("BudgetSettingsViewModel", "Постављам период: $period")
+        settingsRepository.setPeriod(period)
     }
     
     // Функција за промену прилагођеног датума почетка периода
     fun setCustomPeriodStartDay(day: Int) {
-        _customPeriodStartDay.value = day
-        // Овде бисмо сачували подешавања у SharedPreferences или Datastore
+        Log.d("BudgetSettingsViewModel", "Постављам дан почетка периода: $day")
+        settingsRepository.setCustomPeriodStartDay(day)
     }
     
     // Функција за додавање новог рачуна
@@ -158,11 +166,11 @@ class BudgetSettingsViewModel : ViewModel() {
     }
     
     // Factory класа за креирање ViewModel-а
-    class Factory : ViewModelProvider.Factory {
+    class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(BudgetSettingsViewModel::class.java)) {
-                return BudgetSettingsViewModel() as T
+                return BudgetSettingsViewModel(context) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
