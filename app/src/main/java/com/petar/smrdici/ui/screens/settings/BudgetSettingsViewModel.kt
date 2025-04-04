@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 
 // Енумерација за валуте
 enum class Currency(val code: String, val symbol: String, val value: String) {
@@ -33,6 +35,8 @@ enum class Period(val value: String) {
 
 class BudgetSettingsViewModel(private val context: Context) : ViewModel() {
     private val settingsRepository = SettingsRepository.getInstance(context)
+    private val auth = FirebaseAuth.getInstance()
+    private val firestore = FirebaseFirestore.getInstance()
     
     private val _currency = MutableStateFlow(Currency.RSD)
     val currency: StateFlow<Currency> = _currency

@@ -1,15 +1,17 @@
 package com.petar.smrdici.data.model
 
+import androidx.annotation.Keep
 import java.util.UUID
 
+@Keep
 data class Account(
-    val id: String = "",
-    val name: String = "",
-    val balance: Double = 0.0,
-    val currency: String = "RSD",
-    val color: Int = 0,
-    val isDefault: Boolean = false,
-    val type: AccountType = AccountType.CASH
+    @field:JvmField val id: String = "",
+    @field:JvmField val name: String = "",
+    @field:JvmField val balance: Double = 0.0,
+    @field:JvmField val currency: String = "RSD",
+    @field:JvmField val color: Int = 0,
+    @field:JvmField val isDefault: Boolean = false,
+    @field:JvmField val type: AccountType = AccountType.CASH
 )
 
 enum class AccountType {

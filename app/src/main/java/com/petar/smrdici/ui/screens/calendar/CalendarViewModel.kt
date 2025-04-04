@@ -1,32 +1,28 @@
 package com.petar.smrdici.ui.screens.calendar
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.petar.smrdici.data.model.Event
-import com.petar.smrdici.data.model.EventColor
 import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.data.repository.EventRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
-import android.util.Log
-import java.text.SimpleDateFormat
 import java.util.Locale
 import javax.inject.Inject
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.ListenerRegistration
 
 class CalendarViewModel @Inject constructor(
     private val eventRepository: EventRepository,

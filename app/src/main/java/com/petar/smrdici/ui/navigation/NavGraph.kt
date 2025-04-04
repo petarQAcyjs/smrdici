@@ -16,6 +16,7 @@ import com.petar.smrdici.ui.screens.lists.ListsScreen
 import com.petar.smrdici.ui.screens.profile.ProfileScreen
 import com.petar.smrdici.ui.screens.calendar.AddEventScreen
 import com.petar.smrdici.ui.screens.settings.BudgetSettingsScreen
+import com.petar.smrdici.ui.screens.editAccount.EditAccountScreen
 
 @Composable
 fun NavGraph(
@@ -79,6 +80,31 @@ fun NavGraph(
         
         composable(Screen.BudgetSettings.route) {
             BudgetSettingsScreen(navController = navController)
+        }
+        
+        composable(
+            route = Screen.EditAccount.route,
+            arguments = listOf(
+                navArgument("accountId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val accountId = backStackEntry.arguments?.getString("accountId") ?: ""
+            EditAccountScreen(
+                navController = navController,
+                accountId = accountId
+            )
+        }
+        
+        // Додајте ову руту за тестирање
+        composable("edit_account/{accountId}") { backStackEntry ->
+            val accountId = backStackEntry.arguments?.getString("accountId") ?: ""
+            EditAccountScreen(
+                navController = navController,
+                accountId = accountId
+            )
         }
     }
 } 

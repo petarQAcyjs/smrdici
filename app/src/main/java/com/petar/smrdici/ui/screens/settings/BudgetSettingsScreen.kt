@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,7 +69,8 @@ import kotlinx.coroutines.launch
 fun BudgetSettingsScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
-    budgetSettingsViewModel: BudgetSettingsViewModel = viewModel(factory = BudgetSettingsViewModel.Factory(LocalContext.current))
+    budgetSettingsViewModel: BudgetSettingsViewModel = viewModel(factory = BudgetSettingsViewModel.Factory(LocalContext.current)),
+    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory(LocalContext.current))
 ) {
     // Спречавамо непотребно учитавање EventRepository-а
     DisposableEffect(Unit) {
@@ -96,12 +98,13 @@ fun BudgetSettingsScreen(
     var showCurrencyDialog by remember { mutableStateOf(false) }
     var showPeriodDialog by remember { mutableStateOf(false) }
     var showCustomPeriodDialog by remember { mutableStateOf(false) }
+    var showAddAccountDialog by remember { mutableStateOf(false) }
     
     // Добијамо вредности из ViewModel-а
     val currency by budgetSettingsViewModel.currency.collectAsState()
     val period by budgetSettingsViewModel.period.collectAsState()
     val customPeriodStartDay by budgetSettingsViewModel.customPeriodStartDay.collectAsState()
-    val accounts by budgetSettingsViewModel.accounts.collectAsState()
+    val accounts by accountViewModel.accounts.collectAsState()
     
     // Мапирамо Period енумерацију на стрингове за приказ
     val periodStrings = mapOf(
@@ -124,6 +127,10 @@ fun BudgetSettingsScreen(
     var currencyExpanded by remember { mutableStateOf(false) }
     var periodExpanded by remember { mutableStateOf(false) }
     var customPeriodExpanded by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(Unit) {
+        accountViewModel.refreshAccounts()
+    }
     
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -376,13 +383,15 @@ fun BudgetSettingsScreen(
                 
                 // Картица за управљање рачунима
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
                         Text(
                             text = "Управљање рачунима",
@@ -401,15 +410,27 @@ fun BudgetSettingsScreen(
                             )
                         } else {
                             accounts.forEach { account ->
+                                // Додајте логовање
+                                logAccountDetails(account)
+                                
                                 AccountItem(
                                     account = account,
                                     onClick = {
-                                        // Овде ћемо додати навигацију на екран за уређивање рачуна
-                                        showSnackbar("Уређивање рачуна ће бити доступно ускоро")
+                                        // Додајте логовање
+                                        android.util.Log.d("BudgetSettings", "Navigating to edit account: ${account.id}")
+                                        
+                                        if (account.id.isNotEmpty()) {
+                                            navController.navigate("edit_account/${account.id}")
+                                        } else {
+                                            showSnackbar("Рачун нема валидан ID")
+                                        }
                                     },
                                     onSetDefault = {
-                                        budgetSettingsViewModel.setDefaultAccount(account.id)
-                                        showSnackbar("${account.name} је постављен као подразумевани рачун")
+                                        accountViewModel.setDefaultAccount(account.id) { success ->
+                                            if (success) {
+                                                showSnackbar("${account.name} је сада подразумевани рачун")
+                                            }
+                                        }
                                     }
                                 )
                                 
@@ -424,25 +445,16 @@ fun BudgetSettingsScreen(
                         // Дугме за додавање новог рачуна
                         TextButton(
                             onClick = {
-                                // Овде ћемо додати навигацију на екран за додавање новог рачуна
-                                showSnackbar("Додавање новог рачуна ће бити доступно ускоро")
+                                showAddAccountDialog = true
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 16.dp)
+                            modifier = Modifier.align(Alignment.End)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,
-                                contentDescription = "Додај рачун",
-                                tint = MaterialTheme.colorScheme.primary
+                                contentDescription = null
                             )
-                            
-                            Spacer(modifier = Modifier.width(8.dp))
-                            
-                            Text(
-                                text = "Додај нови рачун",
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Додај рачун")
                         }
                     }
                 }
@@ -468,6 +480,16 @@ fun BudgetSettingsScreen(
                         showSnackbar("Увоз трансакција ће бити доступан ускоро") 
                     }
                 )
+
+                // За тестирање, додајте дугме које ће директно навигирати на екран за уређивање рачуна
+                TextButton(
+                    onClick = {
+                        // Користите фиксни ID за тестирање
+                        navController.navigate("edit_account/test_id")
+                    }
+                ) {
+                    Text("Тест навигације")
+                }
             }
         }
     }
@@ -669,6 +691,21 @@ fun BudgetSettingsScreen(
             }
         )
     }
+
+    // Додајте дијалог за додавање новог рачуна
+    if (showAddAccountDialog) {
+        AddAccountDialog(
+            onDismiss = { showAddAccountDialog = false },
+            onAddAccount = { account ->
+                accountViewModel.addAccount(account)
+                // Освежавамо листу рачуна
+                accountViewModel.refreshAccounts()
+                
+                showAddAccountDialog = false
+                showSnackbar("Рачун успешно додат")
+            }
+        )
+    }
 }
 
 @Composable
@@ -703,11 +740,14 @@ private fun AccountItem(
     onClick: () -> Unit,
     onSetDefault: () -> Unit
 ) {
+    // Додајте логовање
+    android.util.Log.d("AccountItem", "Account ID: ${account.id}")
+    
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Индикатор боје рачуна
@@ -774,4 +814,9 @@ private fun AccountItem(
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
         )
     }
+}
+
+// Додајте ову функцију за дебаговање
+private fun logAccountDetails(account: Account) {
+    android.util.Log.d("BudgetSettings", "Account: ${account.name}, ID: ${account.id}, Default: ${account.isDefault}")
 } 
