@@ -61,12 +61,12 @@ class EventRepository private constructor(private val context: Context) {
                 .await()
                 .documents
                 .mapNotNull { doc ->
-                    try {
+                try {
                         doc.toObject(Event::class.java)?.copy(id = doc.id)
-                    } catch (e: Exception) {
+                } catch (e: Exception) {
                         Log.e("EventRepository", "Грешка при конверзији документа", e)
-                        null
-                    }
+                    null
+                }
                 }
             
             // 2. Учитавамо локалне промене
@@ -180,7 +180,7 @@ class EventRepository private constructor(private val context: Context) {
                 
                 Log.d("EventRepository", "Догађај успешно ажуриран у бази")
             } ?: throw IllegalStateException("Event ID cannot be null")
-
+            
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("EventRepository", "Грешка при ажурирању догађаја у бази", e)

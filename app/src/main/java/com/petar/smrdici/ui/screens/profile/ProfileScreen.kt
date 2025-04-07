@@ -41,7 +41,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -77,12 +76,6 @@ fun ProfileScreen(
     homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(LocalContext.current)),
     themeViewModel: ThemeViewModel = viewModel(factory = ThemeViewModelFactory(LocalContext.current))
 ) {
-    // Спречавамо непотребно учитавање EventRepository-а
-    DisposableEffect(Unit) {
-        // Ништа не радимо, само спречавамо непотребно учитавање
-        onDispose { }
-    }
-
     val authState by authViewModel.authState.collectAsState()
     val themeMode by themeViewModel.themeMode.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
@@ -207,12 +200,6 @@ fun ProfileScreen(
                                     is SyncStatus.Syncing -> "Синхронизација у току..."
                                     is SyncStatus.Success -> "Синхронизација успешна"
                                     is SyncStatus.Error -> "Грешка: ${(syncStatus as SyncStatus.Error).message}"
-                                    else -> null
-                                },
-                                trailingText = when (syncStatus) {
-                                    is SyncStatus.Syncing -> null
-                                    is SyncStatus.Success -> null
-                                    is SyncStatus.Error -> null
                                     else -> null
                                 },
                                 onClick = { homeViewModel.syncEvents() }

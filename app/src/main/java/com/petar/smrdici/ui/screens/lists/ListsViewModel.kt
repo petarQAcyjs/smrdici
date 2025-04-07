@@ -1,6 +1,5 @@
 package com.petar.smrdici.ui.screens.lists
 
-import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -10,16 +9,13 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.ShoppingList
 import com.petar.smrdici.data.model.ShoppingItem
-import com.petar.smrdici.data.repository.ListsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.*
 import kotlinx.coroutines.delay
 
-class ListsViewModel(
-    private val listsRepository: ListsRepository
-) : ViewModel() {
+class ListsViewModel : ViewModel() {
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     
@@ -32,15 +28,7 @@ class ListsViewModel(
     // Стање за праћење листа које су тренутно у процесу брисања
     private val _deletingListIds = MutableStateFlow<Set<String>>(emptySet())
     val deletingListIds: StateFlow<Set<String>> = _deletingListIds
-    
-    // Форма за унос нове листе
-    private val _listFormState = MutableStateFlow(ListFormState())
-    val listFormState: StateFlow<ListFormState> = _listFormState
-    
-    // Форма за унос нове ставке
-    private val _itemFormState = MutableStateFlow(ItemFormState())
-    val itemFormState: StateFlow<ItemFormState> = _itemFormState
-    
+
     init {
         loadLists()
     }
@@ -57,7 +45,7 @@ class ListsViewModel(
                 
                 // Постављамо стање учитавања само ако немамо претходне податке
                 if (currentLists.isEmpty()) {
-                _uiState.value = ListsUiState.Loading
+                    _uiState.value = ListsUiState.Loading
                 }
                 
                 // Додајемо логер за праћење
@@ -87,8 +75,8 @@ class ListsViewModel(
                             
                             // Обрађујемо све документе и додајемо их у мапу
                             allDocs.forEach { doc ->
-                            try {
-                                val list = doc.toObject(ShoppingList::class.java)
+                                try {
+                                    val list = doc.toObject(ShoppingList::class.java)
                                     if (list != null) {
                                         list.id = doc.id
                                         
@@ -105,8 +93,8 @@ class ListsViewModel(
                                         
                                         uniqueListsMap[doc.id] = list
                                     }
-                            } catch (e: Exception) {
-                                Log.e("ListsViewModel", "Грешка при обради листе", e)
+                                } catch (e: Exception) {
+                                    Log.e("ListsViewModel", "Грешка при обради листе", e)
                                 }
                             }
                             
@@ -148,7 +136,7 @@ class ListsViewModel(
                     } else {
                         _uiState.value = ListsUiState.Error(e.message ?: "Грешка при учитавању листа")
                     }
-                    }
+                }
             } catch (e: Exception) {
                 Log.e("ListsViewModel", "Општа грешка", e)
                 
@@ -160,7 +148,7 @@ class ListsViewModel(
                 if (currentLists.isNotEmpty()) {
                     _uiState.value = ListsUiState.Success(currentLists)
                 } else {
-                _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
+                    _uiState.value = ListsUiState.Error(e.message ?: "Непозната грешка")
                 }
             }
         }
@@ -202,61 +190,7 @@ class ListsViewModel(
             }
         }
     }
-    
-    // Избор листе
-    fun selectList(list: ShoppingList) {
-        _selectedList.value = list
-    }
-    
-    // Поништавање избора листе
-    fun clearSelectedList() {
-        _selectedList.value = null
-    }
-    
-    // Ажурирање форме за унос листе
-    fun updateListForm(update: (ListFormState) -> ListFormState) {
-        _listFormState.value = update(_listFormState.value)
-    }
-    
-    // Ажурирање форме за унос ставке
-    fun updateItemForm(update: (ItemFormState) -> ItemFormState) {
-        _itemFormState.value = update(_itemFormState.value)
-    }
-    
-    // Додавање нове листе
-    fun addShoppingList() {
-        viewModelScope.launch {
-            val form = _listFormState.value
-            
-            if (!form.isValid) {
-                return@launch
-            }
-            
-            val userId = auth.currentUser?.uid ?: return@launch
-            val familyId = "default" // Подразумевана породица за дељење
-            
-            val newList = ShoppingList(
-                title = form.title,
-                createdBy = userId,
-                familyId = familyId,
-                createdAt = Timestamp.now(),
-                items = emptyList(),
-                isCompleted = false
-            )
-            
-            firestore.collection("shopping_lists")
-                .add(newList)
-                .addOnSuccessListener { documentReference ->
-                    Log.d("ListsViewModel", "Листа додата са ID: ${documentReference.id}")
-                    loadLists() // Поново учитавамо листе
-                }
-                .addOnFailureListener { e ->
-                    Log.e("ListsViewModel", "Грешка при додавању листе", e)
-                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању листе")
-                }
-        }
-    }
-    
+
     // Брисање листе
     fun deleteShoppingList(listId: String) {
         viewModelScope.launch {
@@ -315,46 +249,7 @@ class ListsViewModel(
             }
         }
     }
-    
-    // Додавање нове ставке у листу
-    fun addItemToList() {
-        viewModelScope.launch {
-            val form = _itemFormState.value
-            val currentList = _selectedList.value
-            
-            if (!form.isValid || currentList == null) {
-                return@launch
-            }
-            
-            // Креирамо нову ставку
-            val newItem = ShoppingItem(
-                id = UUID.randomUUID().toString(),
-                name = form.name,
-                quantity = form.quantity,
-                isCompleted = false,
-                note = ""
-            )
-            
-            // Додајемо нову ставку у листу постојећих ставки
-            val updatedItems = currentList.items + newItem
-            
-            // Креирамо ажурирану листу
-            val updatedList = currentList.copy(
-                items = updatedItems
-            )
-            
-            // Ажурирамо листу у Firestore-у
-            firestore.collection("shopping_lists").document(currentList.id ?: "")
-                .set(updatedList)
-                .addOnSuccessListener {
-                    _selectedList.value = updatedList
-                    _itemFormState.value = ItemFormState()
-                }
-                .addOnFailureListener { e ->
-                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању ставке")
-                }
-        }
-    }
+
     
     // Функција за додавање ставке у листу - ажурирана да прихвата listId
     fun addItemToList(listId: String, name: String, quantity: Int = 1) {
@@ -391,16 +286,6 @@ class ListsViewModel(
             } catch (e: Exception) {
                 _uiState.value = ListsUiState.Error(e.message ?: "Грешка при додавању ставке")
             }
-        }
-    }
-    
-    // Стара верзија за компатибилност ако је потребно
-    fun addItemToList(name: String, quantity: Int = 1) {
-        viewModelScope.launch {
-            val currentList = _selectedList.value ?: return@launch
-            
-            // Прослеђујемо на нову функцију
-            addItemToList(currentList.id ?: return@launch, name, quantity)
         }
     }
     
@@ -503,86 +388,39 @@ class ListsViewModel(
         }
     }
     
-    // Додајемо функцију за промену статуса ставке
-    fun toggleItemStatus(listId: String, itemId: String) {
-        viewModelScope.launch {
-            val currentList = _selectedList.value ?: return@launch
-            
-            // Ажурирамо статус ставке
-            val updatedItems = currentList.items.map { item ->
-                if (item.id == itemId) {
-                    item.copy(isCompleted = !item.isCompleted)
-                } else {
-                    item
-                }
-            }
-            
-            // Креирамо ажурирану листу
-            val updatedList = currentList.copy(items = updatedItems)
-            
-            // Ажурирамо листу у Firestore-у
-            firestore.collection("shopping_lists").document(listId)
-                .set(updatedList)
-                .addOnSuccessListener {
-                    _selectedList.value = updatedList
-                }
-                .addOnFailureListener { e ->
-                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању ставке")
-                }
-        }
-    }
-    
     // Функција за брисање ставке из листе
-    fun deleteItem(listId: String, itemId: String) {
+    fun deleteItem(itemId: String) {
         viewModelScope.launch {
             try {
-                // Проверавамо да ли је ставка већ у процесу брисања
-                if (_deletingListIds.value.contains(itemId)) {
-                    Log.w("ListsViewModel", "Ставка $itemId је већ у процесу брисања")
-                    return@launch
-                }
-                
-                // Додајемо ID ставке у листу оних које се бришу
-                _deletingListIds.value += itemId
-                
-                // Чувамо тренутно стање за случај поништавања
+                // Чувамо копију ставке пре брисања за случај да корисник жели да је врати
                 val currentList = _selectedList.value ?: return@launch
-                val originalItems = currentList.items
+                val itemToDelete = currentList.items.find { it.id == itemId }
                 
-                // Проналазимо ставку коју треба обрисати
-                val itemToDelete = originalItems.find { it.id == itemId } ?: run {
-                    Log.e("ListsViewModel", "Ставка са ID-ем $itemId није пронађена")
-                    // Уклањамо ID ставке из листе оних које се бришу
-                    _deletingListIds.value -= itemId
-                    return@launch
+                if (itemToDelete != null) {
+                    // Креирамо нову листу ставки без обрисане ставке
+                    val updatedItems = currentList.items.filter { it.id != itemId }
+                    
+                    // Ажурирамо локалну листу одмах
+                    _selectedList.value = currentList.copy(items = updatedItems)
+                    
+                    // Затим бришемо из базе података
+                    // Додајемо проверу да ли је ID листе нулабилан
+                    val listId = currentList.id
+                    if (listId != null && listId.isNotEmpty()) {
+                        firestore.collection("shopping_lists").document(listId)
+                            .update("items", updatedItems)
+                            .addOnSuccessListener {
+                                Log.d("ListsViewModel", "Ставка $itemId успешно обрисана")
+                            }
+                            .addOnFailureListener { e ->
+                                Log.e("ListsViewModel", "Грешка при брисању ставке", e)
+                            }
+                    } else {
+                        Log.e("ListsViewModel", "Грешка: ID листе је null или празан")
+                    }
                 }
-                
-                // Креирамо нову листу ставки без обрисане ставке
-                val updatedItems = originalItems.filter { it.id != itemId }
-                
-                // Проактивно ажурирамо UI пре завршетка операције у бази
-                _selectedList.value = currentList.copy(items = updatedItems)
-                
-                // Ажурирамо листу у Firestore-у
-                firestore.collection("shopping_lists").document(listId)
-                    .update("items", updatedItems)
-                    .addOnSuccessListener {
-                        Log.d("ListsViewModel", "Ставка $itemId успешно обрисана")
-                        
-                        // Уклањамо ID ставке из листе оних које се бришу
-                        _deletingListIds.value -= itemId
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e("ListsViewModel", "Грешка приликом брисања ставке: ${e.message}")
-                        
-                        // Враћамо првобитно стање у случају грешке
-                        _selectedList.value = currentList.copy(items = originalItems)
-                        
-                        // Уклањамо ID ставке из листе оних које се бришу
-                        _deletingListIds.value -= itemId
-                    }
             } catch (e: Exception) {
-                Log.e("ListsViewModel", "Општа грешка приликом брисања ставке: ${e.message}")
+                Log.e("ListsViewModel", "Грешка при брисању ставке", e)
             }
         }
     }
@@ -698,80 +536,42 @@ class ListsViewModel(
         }
     }
     
-    // Функција за враћање избрисане ставке
-    fun restoreItem(itemId: String, listId: String, originalItem: ShoppingItem) {
+    // Функција за враћање обрисане ставке
+    fun restoreItem(itemId: String, item: ShoppingItem) {
         viewModelScope.launch {
             try {
-                // Проверавамо да ли је ставка већ у процесу брисања или враћања
-                if (_deletingListIds.value.contains(itemId)) {
-                    Log.w("ListsViewModel", "Ставка $itemId је у процесу брисања, не можемо је вратити")
+                val currentList = _selectedList.value ?: return@launch
+                
+                // Проверавамо да ли ставка са истим ID-ем већ постоји у листи
+                val itemExists = currentList.items.any { it.id == itemId }
+                if (itemExists) {
+                    Log.w("ListsViewModel", "Ставка $itemId већ постоји у листи, не можемо је вратити")
                     return@launch
                 }
                 
-                // Чувамо тренутни UI стање
-                val currentState = _selectedList.value
-                val currentItems = currentState?.items ?: emptyList()
+                // Креирамо нову листу ставки са враћеном ставком
+                val updatedItems = currentList.items.toMutableList()
+                updatedItems.add(item)
                 
-                // Правимо копију ставке са истим ID-ем
-                val itemToRestore = originalItem
+                // Ажурирамо локалну листу одмах
+                _selectedList.value = currentList.copy(items = updatedItems)
                 
-                // Проактивно ажурирамо UI - додајемо ставку назад у листу
-                if (currentState != null) {
-                    val updatedItems = currentItems + listOf(itemToRestore)
-                    _selectedList.value = currentState.copy(items = updatedItems)
+                // Затим ажурирамо базу података
+                val listIdNonNull = currentList.id
+                if (listIdNonNull != null && listIdNonNull.isNotEmpty()) {
+                    firestore.collection("shopping_lists").document(listIdNonNull)
+                        .update("items", updatedItems)
+                        .addOnSuccessListener {
+                            Log.d("ListsViewModel", "Ставка $itemId успешно враћена")
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e("ListsViewModel", "Грешка при враћању ставке", e)
+                        }
+                } else {
+                    Log.e("ListsViewModel", "Грешка: ID листе је null или празан")
                 }
-                
-                // Добављамо најновију верзију листе из Firestore-а
-                firestore.collection("shopping_lists").document(listId).get()
-                    .addOnSuccessListener { document ->
-                        if (document != null && document.exists()) {
-                            val list = document.toObject(ShoppingList::class.java)
-                            if (list != null) {
-                                // Додајемо ставку назад у листу
-                                val updatedItems = list.items.toMutableList()
-                                updatedItems.add(itemToRestore)
-                                
-                                // Ажурирамо листу у Firestore-у
-                                firestore.collection("shopping_lists").document(listId)
-                                    .update("items", updatedItems)
-                                    .addOnSuccessListener {
-                                        Log.d("ListsViewModel", "Ставка $itemId успешно враћена")
-                                    }
-                                    .addOnFailureListener { e ->
-                                        Log.e("ListsViewModel", "Грешка приликом враћања ставке ${itemId}: ${e.message}")
-                                        
-                                        // У случају грешке, враћамо оригинално стање UI-а
-                                        if (currentState != null) {
-                                            _selectedList.value = currentState
-                                        }
-                                    }
-                            } else {
-                                Log.e("ListsViewModel", "Листа постоји али није могла бити претворена у објекат")
-                                
-                                // У случају грешке, враћамо оригинално стање UI-а
-                                if (currentState != null) {
-                                    _selectedList.value = currentState
-                                }
-                            }
-                        } else {
-                            Log.e("ListsViewModel", "Листа не постоји")
-                            
-                            // У случају грешке, враћамо оригинално стање UI-а
-                            if (currentState != null) {
-                                _selectedList.value = currentState
-                            }
-                        }
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e("ListsViewModel", "Грешка приликом добављања листе: ${e.message}")
-                        
-                        // У случају грешке, враћамо оригинално стање UI-а
-                        if (currentState != null) {
-                            _selectedList.value = currentState
-                        }
-                    }
             } catch (e: Exception) {
-                Log.e("ListsViewModel", "Општа грешка приликом враћања ставке: ${e.message}")
+                Log.e("ListsViewModel", "Грешка при враћању ставке", e)
             }
         }
     }
@@ -781,14 +581,13 @@ class ListsViewModel(
         _uiState.value = newState
     }
     
-    // Додајемо Factory класу за креирање ListsViewModel са Context параметром
-    class Factory(private val context: Context) : ViewModelProvider.Factory {
+    // Додајемо Factory класу за креирање ListsViewModel
+    @Suppress("UNUSED_PARAMETER")
+    class Factory() : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ListsViewModel::class.java)) {
-                return ListsViewModel(
-                    ListsRepository(context)
-                ) as T
+                return ListsViewModel() as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
@@ -830,21 +629,4 @@ sealed class ListsUiState {
     data object Loading : ListsUiState()
     data class Success(val lists: List<ShoppingList>) : ListsUiState()
     data class Error(val message: String) : ListsUiState()
-}
-
-// Стање форме за унос листе
-data class ListFormState(
-    val title: String = ""
-) {
-    val isValid: Boolean
-        get() = title.isNotBlank()
-}
-
-// Стање форме за унос ставке
-data class ItemFormState(
-    val name: String = "",
-    val quantity: Int = 1
-) {
-    val isValid: Boolean
-        get() = name.isNotBlank() && quantity > 0
 } 

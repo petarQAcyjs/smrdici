@@ -41,7 +41,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,7 +67,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -80,8 +78,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.ShoppingList
-import com.petar.smrdici.ui.auth.AuthState
-import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -91,18 +87,12 @@ import kotlin.math.roundToInt
 @Composable
 fun ListsScreen(
     navController: NavController,
-    authViewModel: AuthViewModel = viewModel(),
-    listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory(LocalContext.current))
+    listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory())
 ) {
-    val authState by authViewModel.authState.collectAsState()
     val listsUiState by listsViewModel.uiState.collectAsState()
     // Пратимо тренутне листе које се бришу
     val deletingListIds by listsViewModel.deletingListIds.collectAsState()
     val isDeletionInProgress = deletingListIds.isNotEmpty()
-    
-    val user = if (authState is AuthState.Authenticated) {
-        (authState as AuthState.Authenticated).user
-    } else null
     
     // Додајемо корутински опсег за Compose компоненту
     val coroutineScope = rememberCoroutineScope()
@@ -384,55 +374,6 @@ fun PredefinedListCard(
 }
 
 @Composable
-fun CustomListItem(
-    title: String,
-    isCompleted: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = null
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Икона за статус (чекирано или не)
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(if (isCompleted) Color(0xFF4CAF50) else Color.LightGray),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isCompleted) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Завршено",
-                        tint = Color.White
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            // Наслов листе
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium
-            )
-        }
-    }
-}
-
-@Composable
 fun AddListDialog(
     onDismiss: () -> Unit,
     onListAdded: () -> Unit,
@@ -493,101 +434,6 @@ fun AddListDialog(
 }
 
 @Composable
-fun ShoppingListItem(
-    list: ShoppingList,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .clickable(onClick = onClick),
-        border = null,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = list.title,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                
-                Text(
-                    text = "${list.items.size} ставки",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            
-            TextButton(
-                onClick = onDelete
-            ) {
-                Text("Обриши")
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AddItemDialog(
-    formState: ItemFormState,
-    onFormChanged: (ItemFormState) -> Unit,
-    onAddItem: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Додај нову ставку") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = formState.name,
-                    onValueChange = { onFormChanged(formState.copy(name = it)) },
-                    label = { Text("Назив ставке") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                OutlinedTextField(
-                    value = formState.quantity.toString(),
-                    onValueChange = { 
-                        val quantity = it.toIntOrNull() ?: 1
-                        onFormChanged(formState.copy(quantity = quantity)) 
-                    },
-                    label = { Text("Количина") },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                    )
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onAddItem,
-                enabled = formState.isValid
-            ) {
-                Text("Додај")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Откажи")
-            }
-        }
-    )
-}
-
-@Composable
 fun SwipeToDeleteListItem(
     list: ShoppingList,
     onClick: () -> Unit,
@@ -629,9 +475,6 @@ fun SwipeToDeleteListItem(
     
     val view = LocalView.current
     
-    // Додајемо корутински опсег
-    val coroutineScope = rememberCoroutineScope()
-    
     // Додајемо стање за праћење клика на чекбокс
     var isCheckboxClicked by remember { mutableStateOf(false) }
     
@@ -654,8 +497,8 @@ fun SwipeToDeleteListItem(
     
     // Стање за превлачење
     val draggableState = rememberDraggableState { delta ->
-        // Само дозвољавамо превлачење ако брисање није већ потврђено, ако елемент није већ избрисан и ако глобално брисање није закључано
-        if (!confirmDelete && !isDeleted && !isDeletionLocked && !isBeingDeleted) {
+        // Само дозвољавамо превлачење ако брисање није већ потврђено и ако елемент није већ избрисан
+        if (!confirmDelete && !isDeleted && !isDeletionLocked) {
             offsetX += delta
             
             // Хаптичка повратна информација када пређемо први праг
@@ -673,7 +516,7 @@ fun SwipeToDeleteListItem(
     
     // Када је елемент потпуно одбачен, позивамо onDelete само једном
     LaunchedEffect(confirmDelete) {
-        if (confirmDelete && !isDeleted && !isDeletionLocked && !isBeingDeleted) {
+        if (confirmDelete && !isDeleted && !isDeletionLocked) {
             // Бележимо дебаг информацију
             Log.d("SwipeToDeleteListItem", "Брисање листе: ${list.id}")
             
@@ -687,16 +530,13 @@ fun SwipeToDeleteListItem(
             delay(300)
             
             // Позивамо функцију брисања само једном
-            // Овде је битно да се onDelete позове само једном!
-            if (!isBeingDeleted) {  // Додатна провера пре брисања
-                onDelete()
-            }
+            onDelete()
         }
     }
     
     // Када је чекбокс кликнут, приказујемо анимацију и затим позивамо toggleListStatus
     LaunchedEffect(isCheckboxClicked) {
-        if (isCheckboxClicked && !isDeletionLocked && !isBeingDeleted) {
+        if (isCheckboxClicked && !isDeletionLocked) {
             try {
                 // Oдмах ажурирамо локално стање за бољи UX
                 localCompletedState = !localCompletedState
@@ -722,20 +562,8 @@ fun SwipeToDeleteListItem(
         }
     }
     
-    // Пратимо промену својства isDeletionLocked или isBeingDeleted
-    LaunchedEffect(isDeletionLocked, isBeingDeleted) {
-        if (isDeletionLocked || isBeingDeleted) {
-            // Ако је глобално брисање закључано и ова компонента је у процесу брисања,
-            // поништавамо брисање и враћамо компоненту у првобитно стање
-            if (offsetX > 0 && !isDeleted) {
-                offsetX = 0f
-                confirmDelete = false
-            }
-        }
-    }
-    
     AnimatedVisibility(
-        visible = show && !isBeingDeleted,
+        visible = show,
         exit = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }) + fadeOut()
     ) {
         Card(
@@ -773,7 +601,7 @@ fun SwipeToDeleteListItem(
                         .draggable(
                             state = draggableState,
                             orientation = Orientation.Horizontal,
-                            enabled = !isDeletionLocked && !isBeingDeleted, // Онемогућавамо превлачење ако је брисање закључано
+                            enabled = !isDeletionLocked, // Онемогућавамо превлачење ако је брисање закључано
                             onDragStopped = {
                                 // Ако не пређемо праг, враћамо елемент назад
                                 if (offsetX <= deleteThreshold && !isDeleted) {
@@ -797,9 +625,9 @@ fun SwipeToDeleteListItem(
                                 else MaterialTheme.colorScheme.surfaceVariant
                             )
                             .clickable(
-                                enabled = !isDeletionLocked && !isBeingDeleted,
+                                enabled = !isDeletionLocked,
                                 onClick = {
-                                    if (!isDeleted && !confirmDelete && !isDeletionLocked && !isBeingDeleted) {
+                                    if (!isDeleted && !confirmDelete) {
                                         isCheckboxClicked = true
                                         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                                     }
@@ -834,7 +662,7 @@ fun SwipeToDeleteListItem(
                         modifier = Modifier
                             .weight(1f)
                             .clickable(
-                                enabled = !isDeletionLocked && !isDeleted && !confirmDelete && !isBeingDeleted, // Онемогућавамо клик ако је брисање закључано
+                                enabled = !isDeletionLocked && !isDeleted && !confirmDelete,
                                 onClick = onClick
                             )
                     )
