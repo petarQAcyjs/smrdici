@@ -4,16 +4,13 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.data.model.AccountType
 import com.petar.smrdici.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 
 // Енумерација за валуте
 enum class Currency(val code: String, val symbol: String, val value: String) {
@@ -33,8 +30,7 @@ enum class Period(val value: String) {
     ALL("Све")
 }
 
-class BudgetSettingsViewModel(private val context: Context) : ViewModel() {
-    private val settingsRepository = SettingsRepository.getInstance(context)
+class BudgetSettingsViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
     
@@ -174,7 +170,9 @@ class BudgetSettingsViewModel(private val context: Context) : ViewModel() {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(BudgetSettingsViewModel::class.java)) {
-                return BudgetSettingsViewModel(context) as T
+                // Kreiramo repository u factory metodi umesto da skladištimo context
+                val settingsRepository = SettingsRepository.getInstance(context)
+                return BudgetSettingsViewModel(settingsRepository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

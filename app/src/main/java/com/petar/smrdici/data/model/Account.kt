@@ -1,7 +1,6 @@
 package com.petar.smrdici.data.model
 
 import androidx.annotation.Keep
-import java.util.UUID
 
 @Keep
 data class Account(

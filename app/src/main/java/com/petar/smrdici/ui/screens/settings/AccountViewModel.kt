@@ -1,6 +1,5 @@
 package com.petar.smrdici.ui.screens.settings
 
-import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -9,16 +8,14 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.data.model.AccountType
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
-class AccountViewModel(private val context: Context) : ViewModel() {
+class AccountViewModel : ViewModel() {
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     
@@ -60,10 +57,10 @@ class AccountViewModel(private val context: Context) : ViewModel() {
                                     balance = (data["balance"] as? Number)?.toDouble() ?: 0.0,
                                     currency = data["currency"] as? String ?: "RSD",
                                     color = (data["color"] as? Number)?.toInt() ?: 0,
-                                    isDefault = data["isDefault"] as? Boolean ?: false,
+                                    isDefault = (data["isDefault"] as? Boolean) == true,
                                     type = try {
                                         AccountType.valueOf((data["type"] as? String) ?: AccountType.CASH.name)
-                                    } catch (e: Exception) {
+                                    } catch (_: Exception) {
                                         AccountType.CASH
                                     }
                                 )
@@ -179,10 +176,10 @@ class AccountViewModel(private val context: Context) : ViewModel() {
                                 balance = (data["balance"] as? Number)?.toDouble() ?: 0.0,
                                 currency = data["currency"] as? String ?: "RSD",
                                 color = (data["color"] as? Number)?.toInt() ?: 0,
-                                isDefault = data["isDefault"] as? Boolean ?: false,
+                                isDefault = (data["isDefault"] as? Boolean) == true,
                                 type = try {
                                     AccountType.valueOf((data["type"] as? String) ?: AccountType.CASH.name)
-                                } catch (e: Exception) {
+                                } catch (_: Exception) {
                                     AccountType.CASH
                                 }
                             )
@@ -218,7 +215,7 @@ class AccountViewModel(private val context: Context) : ViewModel() {
                     val newAccountId = UUID.randomUUID().toString()
                     val newAccount = account.copy(id = newAccountId)
                     
-                    android.util.Log.d("AccountViewModel", "Adding account: ${newAccount.name}, ID: ${newAccountId}")
+                    Log.d("AccountViewModel", "Adding account: ${newAccount.name}, ID: $newAccountId")
                     
                     // Ако је ово први рачун или је означен као подразумевани
                     if (_accounts.value.isEmpty() || newAccount.isDefault) {
@@ -234,13 +231,13 @@ class AccountViewModel(private val context: Context) : ViewModel() {
                         .set(newAccount)
                         .await()
                     
-                    android.util.Log.d("AccountViewModel", "Account added successfully")
+                    Log.d("AccountViewModel", "Account added successfully")
                     
                     // Ажурирамо локалну листу рачуна
                     loadAccounts()
                 }
             } catch (e: Exception) {
-                android.util.Log.e("AccountViewModel", "Error adding account", e)
+                Log.e("AccountViewModel", "Error adding account", e)
             } finally {
                 _isLoading.value = false
             }
@@ -293,7 +290,7 @@ class AccountViewModel(private val context: Context) : ViewModel() {
                     .get()
                     .await()
                 
-                val isDefault = accountDoc.getBoolean("isDefault") ?: false
+                val isDefault = accountDoc.getBoolean("isDefault") == true
                 
                 // Ако је подразумевани, не дозвољавамо брисање
                 if (isDefault && _accounts.value.size > 1) {
@@ -412,12 +409,12 @@ class AccountViewModel(private val context: Context) : ViewModel() {
         loadAccounts()
     }
     
-    // Factory класа за креирање ViewModel-а
-    class Factory(private val context: Context) : ViewModelProvider.Factory {
+    // Factory klasа za kreiranje ViewModel-a
+    class Factory : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
-                return AccountViewModel(context) as T
+                return AccountViewModel() as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

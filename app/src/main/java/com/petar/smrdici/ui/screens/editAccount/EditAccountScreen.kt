@@ -63,7 +63,7 @@ import kotlinx.coroutines.launch
 fun EditAccountScreen(
     navController: NavController,
     accountId: String,
-    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory(LocalContext.current))
+    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory())
 ) {
     LaunchedEffect(accountId) {
         accountViewModel.getAccountById(accountId)

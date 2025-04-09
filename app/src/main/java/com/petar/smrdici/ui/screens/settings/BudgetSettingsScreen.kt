@@ -70,7 +70,7 @@ fun BudgetSettingsScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
     budgetSettingsViewModel: BudgetSettingsViewModel = viewModel(factory = BudgetSettingsViewModel.Factory(LocalContext.current)),
-    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory(LocalContext.current))
+    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory())
 ) {
     // Спречавамо непотребно учитавање EventRepository-а
     DisposableEffect(Unit) {

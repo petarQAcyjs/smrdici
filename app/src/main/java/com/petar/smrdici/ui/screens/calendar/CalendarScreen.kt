@@ -25,13 +25,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -48,11 +51,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -63,7 +67,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,42 +74,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
-import com.petar.smrdici.ui.auth.AuthState
-import com.petar.smrdici.ui.auth.AuthViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberTimePickerState
-import androidx.compose.material.ExperimentalMaterialApi
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun CalendarScreen(
     navController: NavController,
-    authViewModel: AuthViewModel = viewModel(),
     calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModel.Factory(LocalContext.current))
 ) {
-    val authState by authViewModel.authState.collectAsState()
     val calendarUiState by calendarViewModel.uiState.collectAsState()
     val eventFormState by calendarViewModel.eventFormState.collectAsState()
     val selectedDate by calendarViewModel.selectedDate.collectAsState()
     val events by calendarViewModel.events.collectAsState()
     val editingEvent by calendarViewModel.editingEvent.collectAsState()
     val datesWithEvents by calendarViewModel.datesWithEvents.collectAsState()
-    val user = if (authState is AuthState.Authenticated) {
-        (authState as AuthState.Authenticated).user
-    } else null
     
     var showAddEventDialog by remember { mutableStateOf(false) }
     var selectedEvent by remember { mutableStateOf<Event?>(null) }
@@ -166,7 +157,6 @@ fun CalendarScreen(
             set(Calendar.DAY_OF_MONTH, 1)  // Постављамо на први дан у месецу
         }
         
-        val currentMonth = calendar.get(Calendar.MONTH)
         val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
         
         // Додајемо дане из претходног месеца да попунимо прву недељу
@@ -304,7 +294,6 @@ fun CalendarScreen(
     
     if (showAddEventDialog) {
         AddEventDialog(
-            showDialog = showAddEventDialog,
             eventFormState = eventFormState,
             onEventFormChanged = { field, value -> 
                 calendarViewModel.updateEventFormField(field, value)
@@ -474,82 +463,9 @@ fun EventsList(
                 items(events) { event ->
                     EventItem(
                         event = event,
-                        onClick = { onEventClick(event) },
-                        onLongClick = { /* Додајте акцију за дуги клик */ }
+                        onClick = { onEventClick(event) }
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun EventCard(
-    event: Event,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Индикатор боје догађаја
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .background(
-                        color = Color(android.graphics.Color.parseColor(event.color)),
-                        shape = CircleShape
-                    )
-            )
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = event.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                
-                event.startTime?.toDate()?.let { startTime ->
-                    Text(
-                        text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(startTime),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            
-            // Индикатор особе задужене за догађај
-            val assignee = EventAssignee.entries.find { it.name == event.assignee } ?: EventAssignee.EVERYONE
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .background(
-                        color = Color(android.graphics.Color.parseColor(assignee.color)).copy(alpha = 0.2f),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = assignee.initial,
-                    color = Color(android.graphics.Color.parseColor(assignee.color)),
-                    style = MaterialTheme.typography.labelMedium
-                )
             }
         }
     }
@@ -558,8 +474,7 @@ fun EventCard(
 @Composable
 fun EventItem(
     event: Event,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onClick: () -> Unit
 ) {
     // Нађимо објекат EventAssignee који одговара имену особе из догађаја
     val assignee = EventAssignee.entries.find { it.name == event.assignee } ?: EventAssignee.EVERYONE
@@ -585,15 +500,15 @@ fun EventItem(
                 modifier = Modifier
                     .size(40.dp)
                     .background(
-                        Color(android.graphics.Color.parseColor(event.color)).copy(alpha = 0.3f),
+                        Color(event.color.toColorInt()).copy(alpha = 0.3f),
                         CircleShape
                     )
-                    .border(1.dp, Color(android.graphics.Color.parseColor(event.color)), CircleShape)
+                    .border(1.dp, Color(event.color.toColorInt()), CircleShape)
             ) {
                 // Експлицитан тип String за Text
                 Text(
                     text = assignee.initial,
-                    color = Color(android.graphics.Color.parseColor(event.color)),
+                    color = Color(event.color.toColorInt()),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -644,7 +559,6 @@ fun EventItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEventDialog(
-    showDialog: Boolean,
     eventFormState: EventFormState,
     onEventFormChanged: (String, Any) -> Unit,
     onSaveClick: () -> Unit,
@@ -653,8 +567,6 @@ fun AddEventDialog(
 ) {
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
-
-    if (!showDialog) return
 
     Dialog(
         onDismissRequest = onDismissClick,
@@ -757,7 +669,7 @@ fun AddEventDialog(
                             text = "Изабрана особа: ${currentAssignee.displayName}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
-                            color = Color(android.graphics.Color.parseColor(currentAssignee.color)),
+                            color = Color(currentAssignee.color.toColorInt()),
                             modifier = Modifier.padding(bottom = 8.dp)
                                     )
                                 } else {
@@ -917,7 +829,7 @@ fun AssigneeAvatar(
     }
     
     val borderColor = if (isSelected) {
-        Color(android.graphics.Color.parseColor(assignee.color))
+        Color(assignee.color.toColorInt())
     } else {
         MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
     }
@@ -951,7 +863,7 @@ fun AssigneeAvatar(
             // Експлицитно додајемо типизацију за Text
             Text(
                 text = assignee.initial,
-                color = Color(android.graphics.Color.parseColor(assignee.color)),
+                color = Color(assignee.color.toColorInt()),
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp
             )
@@ -1013,14 +925,14 @@ fun EventDetailsDialog(
                             modifier = Modifier
                                 .size(40.dp)
                                 .background(
-                                    color = Color(android.graphics.Color.parseColor(assignee.color)).copy(alpha = 0.2f),
+                                    color = Color(assignee.color.toColorInt()).copy(alpha = 0.2f),
                                     shape = CircleShape
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = assignee.initial,
-                                color = Color(android.graphics.Color.parseColor(assignee.color)),
+                                color = Color(assignee.color.toColorInt()),
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
@@ -1089,127 +1001,6 @@ fun EventDetailsDialog(
             }
         }
     }
-}
-
-@Composable
-fun DatePickerDialog(
-    selectedDate: Date,
-    onDateSelected: (Date) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val calendar = Calendar.getInstance().apply { time = selectedDate }
-    var year by remember { androidx.compose.runtime.mutableIntStateOf(calendar.get(Calendar.YEAR)) }
-    var month by remember { androidx.compose.runtime.mutableIntStateOf(calendar.get(Calendar.MONTH)) }
-    var day by remember { mutableIntStateOf(calendar.get(Calendar.DAY_OF_MONTH)) }
-    
-    val monthNames = listOf("Јануар", "Фебруар", "Март", "Април", "Мај", "Јун", "Јул", "Август", "Септембар", "Октобар", "Новембар", "Децембар")
-    
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Изаберите датум") },
-        text = {
-            Column {
-                // Приказ за годину
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Година:")
-                    Spacer(modifier = Modifier.weight(1f))
-                    IconButton(onClick = { year -= 1 }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Претходна година")
-                    }
-                    Text(year.toString())
-                    IconButton(onClick = { year += 1 }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, "Следећа година")
-                    }
-                }
-                
-                // Приказ за месец
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Месец:")
-                    Spacer(modifier = Modifier.weight(1f))
-                    IconButton(
-                        onClick = { month = (month - 1).coerceIn(0, 11) }
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Претходни месец")
-                    }
-                    Text(monthNames[month])
-                    IconButton(
-                        onClick = { month = (month + 1).coerceIn(0, 11) }
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, "Следећи месец")
-                    }
-                }
-                
-                // Календар за избор дана
-                val maxDays = Calendar.getInstance().apply {
-                    set(year, month, 1)
-                }.getActualMaximum(Calendar.DAY_OF_MONTH)
-                
-                // Мрежа дана у месецу
-                LazyColumn {
-                    items((1..maxDays).chunked(7)) { weekDays ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            weekDays.forEach { dayOfMonth ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (dayOfMonth == day) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.surface
-                                        )
-                                        .clickable { 
-                                            day = dayOfMonth 
-                                        }
-                                        .border(
-                                            width = 1.dp,
-                                            color = MaterialTheme.colorScheme.outline,
-                                            shape = CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = dayOfMonth.toString(),
-                                        color = if (dayOfMonth == day) MaterialTheme.colorScheme.onPrimary
-                                            else MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    // Креирамо нови датум на основу изабраних вредности
-                    val selectedCalendar = Calendar.getInstance().apply {
-                        set(year, month, day)
-                    }
-                    onDateSelected(selectedCalendar.time)
-                }
-            ) {
-                Text("Изабери")
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss
-            ) {
-                Text("Откажи")
-            }
-        }
-    )
 }
 
 // Помоћна функција за поређење датума

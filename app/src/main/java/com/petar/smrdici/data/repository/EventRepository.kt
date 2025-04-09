@@ -4,7 +4,6 @@ import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
-import android.database.Cursor
 import android.net.Uri
 import android.provider.CalendarContract
 import android.util.Log
@@ -14,17 +13,16 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.Event
-import com.petar.smrdici.data.model.EventAssignee
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import java.util.*
-import javax.inject.Inject
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class EventRepository private constructor(private val context: Context) {
     private val firestore = FirebaseFirestore.getInstance()
