@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.screens.calendar
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.EventColor
@@ -27,7 +29,8 @@ data class EventTime(
     val hour: Int,
     val minute: Int
 ) {
-    fun formatted(): String = String.format("%02d:%02d", hour, minute)
+    @SuppressLint("DefaultLocale")
+    fun formatted(): String = String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
     
     companion object {
         fun fromDate(date: Date): EventTime {
@@ -205,7 +208,7 @@ fun AddEventScreen(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(Color(android.graphics.Color.parseColor(eventColor.colorHex)))
+                            .background(Color(eventColor.colorHex.toColorInt()))
                             .clickable { calendarViewModel.updateEventField("color", eventColor.colorHex) }
                             .then(
                                 if (formState.color == eventColor.colorHex) {

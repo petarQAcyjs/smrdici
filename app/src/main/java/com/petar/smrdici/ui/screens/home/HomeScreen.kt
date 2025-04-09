@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,6 +47,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.airbnb.lottie.compose.LottieAnimation
@@ -75,7 +77,6 @@ fun HomeScreen(
     val coroutineScope = rememberCoroutineScope()
     val authState by authViewModel.authState.collectAsState()
     val todayEvents by homeViewModel.todayEvents.collectAsState()
-    val syncStatus by homeViewModel.syncStatus.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     
     var isRefreshing by remember { mutableStateOf(false) }
@@ -96,8 +97,8 @@ fun HomeScreen(
     } else null
 
     // Додајемо стање за ручно праћење гестова
-    var dragStartY by remember { mutableStateOf(0f) }
-    var dragCurrentY by remember { mutableStateOf(0f) }
+    var dragStartY by remember { mutableFloatStateOf(0f) }
+    var dragCurrentY by remember { mutableFloatStateOf(0f) }
 
     Scaffold(
         topBar = {
@@ -364,7 +365,7 @@ fun EventItemCompact(
             modifier = Modifier
                 .size(12.dp)
                 .clip(CircleShape)
-                .background(Color(android.graphics.Color.parseColor(event.color)))
+                .background(Color(event.color.toColorInt()))
         )
         
         Spacer(modifier = Modifier.width(8.dp))
