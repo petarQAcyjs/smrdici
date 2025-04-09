@@ -47,7 +47,6 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import com.petar.smrdici.ui.screens.settings.BudgetSettingsViewModel
-import com.petar.smrdici.ui.screens.settings.Currency
 import androidx.compose.ui.platform.LocalContext
 
 @Composable
@@ -193,14 +192,10 @@ fun BudgetScreen(
             when (selectedTabIndex) {
                 0 -> ExpensesTab(
                     expenses = expenses,
-                    accounts = accounts,
-                    currency = currency,
                     selectedPeriod = periodStrings[selectedPeriodIndex]
                 )
                 1 -> IncomesTab(
                     incomes = incomes,
-                    accounts = accounts,
-                    currency = currency,
                     selectedPeriod = periodStrings[selectedPeriodIndex]
                 )
                 2 -> ChartsTab()
@@ -212,8 +207,6 @@ fun BudgetScreen(
 @Composable
 fun ExpensesTab(
     expenses: List<Expense>,
-    accounts: List<Account>,
-    currency: Currency,
     selectedPeriod: String
 ) {
     if (expenses.isEmpty()) {
@@ -244,8 +237,6 @@ fun ExpensesTab(
 @Composable
 fun IncomesTab(
     incomes: List<Income>,
-    accounts: List<Account>,
-    currency: Currency,
     selectedPeriod: String
 ) {
     if (incomes.isEmpty()) {

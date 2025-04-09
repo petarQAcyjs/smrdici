@@ -196,7 +196,7 @@ fun BudgetSettingsScreen(
                             expanded = currencyExpanded,
                             onDismissRequest = { currencyExpanded = false }
                         ) {
-                            Currency.values().forEach { currencyOption ->
+                            Currency.entries.forEach { currencyOption ->
                                 DropdownMenuItem(
                                     text = { Text(currencyOption.value) },
                                     onClick = {
@@ -254,7 +254,7 @@ fun BudgetSettingsScreen(
                             expanded = periodExpanded,
                             onDismissRequest = { periodExpanded = false }
                         ) {
-                            Period.values().forEach { periodOption ->
+                            Period.entries.forEach { periodOption ->
                                 DropdownMenuItem(
                                     text = { Text(periodOption.value) },
                                     onClick = {

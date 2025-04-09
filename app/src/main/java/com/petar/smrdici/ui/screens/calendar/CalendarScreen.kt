@@ -66,7 +66,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,7 +89,7 @@ import java.util.Locale
 @Composable
 fun CalendarScreen(
     navController: NavController,
-    calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModel.Factory(LocalContext.current))
+    calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModel.Factory())
 ) {
     val calendarUiState by calendarViewModel.uiState.collectAsState()
     val eventFormState by calendarViewModel.eventFormState.collectAsState()
@@ -130,6 +129,8 @@ fun CalendarScreen(
     // Ефекат за учитавање догађаја када се промени selectedDate
     LaunchedEffect(selectedDate.time) {
         Log.d("CalendarScreen", "Изабрани датум промењен: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(selectedDate)}")
+        
+        // Директno učitavamo događaje za izabrani datum
         calendarViewModel.loadEventsForDate(selectedDate)
     }
     

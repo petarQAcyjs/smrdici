@@ -11,7 +11,7 @@ class IncomeRepository private constructor() {
         return flowOf(emptyList())
     }
     
-    fun addIncome(income: Income) {
+    fun addIncome() {
         // Имплементација додавања прихода
     }
     

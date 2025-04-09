@@ -29,7 +29,7 @@ class ExpenseRepository private constructor() {
         return _expenses.asStateFlow()
     }
     
-    fun addExpense(expense: Expense) {
+    fun addExpense() {
         // Имплементација додавања расхода
     }
     

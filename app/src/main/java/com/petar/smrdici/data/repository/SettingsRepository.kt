@@ -3,6 +3,7 @@ package com.petar.smrdici.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import androidx.core.content.edit
 import com.petar.smrdici.ui.screens.settings.Period
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,13 +22,13 @@ class SettingsRepository private constructor(context: Context) {
     
     fun setPeriod(period: Period) {
         Log.d("SettingsRepository", "Чувам период: $period")
-        sharedPreferences.edit().putString(KEY_PERIOD, period.name).apply()
+        sharedPreferences.edit { putString(KEY_PERIOD, period.name) }
         _period.value = period
     }
     
     fun setCustomPeriodStartDay(day: Int) {
         Log.d("SettingsRepository", "Чувам дан почетка периода: $day")
-        sharedPreferences.edit().putInt(KEY_CUSTOM_PERIOD_START_DAY, day).apply()
+        sharedPreferences.edit { putInt(KEY_CUSTOM_PERIOD_START_DAY, day) }
         _customPeriodStartDay.value = day
     }
     

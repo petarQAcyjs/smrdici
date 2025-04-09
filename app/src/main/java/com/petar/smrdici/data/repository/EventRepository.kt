@@ -1,55 +1,30 @@
 package com.petar.smrdici.data.repository
 
-import android.content.ContentResolver
-import android.content.ContentUris
-import android.content.ContentValues
-import android.content.Context
-import android.net.Uri
-import android.provider.CalendarContract
 import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.Event
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 
-class EventRepository private constructor(private val context: Context) {
-    private val firestore = FirebaseFirestore.getInstance()
-    private val auth = FirebaseAuth.getInstance()
+// Класа је измењена да прима зависности кроз конструктор уместо да их креира интерно
+class EventRepository(
+    private val firestore: FirebaseFirestore,
+    private val auth: FirebaseAuth
+) {
     private val eventsCollection = firestore.collection("calendar_events")
-    private val prefs = context.getSharedPreferences("event_migration", Context.MODE_PRIVATE)
-    private var eventsListener: ListenerRegistration? = null
     
     // Додајемо кеширање
     private var cachedEvents: List<Event> = emptyList()
     private var lastFetchTime: Long = 0
-    private val CACHE_DURATION = 5 * 60 * 1000 // 5 минута
-    
-    private val PAGE_SIZE = 20
-    
-    private fun shouldRefreshCache(): Boolean {
-        return System.currentTimeMillis() - lastFetchTime > CACHE_DURATION || cachedEvents.isEmpty()
-    }
-    
-    // Добијање тренутног корисника
-    private val currentUserId: String
-        get() = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
     
     // Функција за синхронизацију догађаја
     suspend fun syncEvents(): Result<Unit> {
         return try {
-            val userId = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
+            auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
             val batch = firestore.batch()
             
             // 1. Прво учитавамо све догађаје из базе
@@ -91,48 +66,10 @@ class EventRepository private constructor(private val context: Context) {
         }
     }
     
-    // Функција за додавање догађаја у локални календар
-    suspend fun addEventToCalendar(event: Event): Long {
-        return withContext(Dispatchers.IO) {
-            val contentResolver: ContentResolver = context.contentResolver
-            val values = ContentValues().apply {
-                put(CalendarContract.Events.TITLE, event.title)
-                put(CalendarContract.Events.DESCRIPTION, event.description)
-                event.startTime?.let { put(CalendarContract.Events.DTSTART, it.seconds * 1000) }
-                event.endTime?.let { put(CalendarContract.Events.DTEND, it.seconds * 1000) }
-                put(CalendarContract.Events.CALENDAR_ID, 1) // Подразумевани календар
-                put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
-            }
-            
-            val uri: Uri? = contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
-            
-            uri?.let { ContentUris.parseId(it) } ?: -1
-        }
-    }
-    
-    // Функција за брисање догађаја из Firebase-а
-    suspend fun deleteEventFromFirebase(eventId: String): Boolean {
-        val userId = auth.currentUser?.uid ?: return false
-        
-        return try {
-            firestore.collection("users")
-                .document(userId)
-                .collection("events")
-                .document(eventId)
-                .delete()
-                .await()
-            
-            true
-        } catch (e: Exception) {
-            Log.e("EventRepository", "Грешка при брисању догађаја из Firebase-а", e)
-            false
-        }
-    }
-    
     // Додавање новог догађаја
     suspend fun addEvent(event: Event): Result<String> {
         return try {
-            val userId = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
+            val currentUserId = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
             
             val eventData = mapOf(
                 "title" to event.title,
@@ -143,7 +80,7 @@ class EventRepository private constructor(private val context: Context) {
                 "location" to event.location,
                 "color" to event.color,
                 "assignee" to event.assignee,
-                "createdBy" to userId,
+                "createdBy" to currentUserId,
                 "createdAt" to Timestamp.now()
             )
             
@@ -200,120 +137,7 @@ class EventRepository private constructor(private val context: Context) {
         }
     }
     
-    // Добијање свих догађаја за породицу
-    fun getEventsForFamily(familyId: String): Flow<List<Event>> = callbackFlow {
-        val userId = auth.currentUser?.uid
-        
-        if (userId == null) {
-            trySend(emptyList<Event>())
-            close()
-            return@callbackFlow
-        }
-        
-        val listener = firestore.collection("users")
-            .document(userId)
-            .collection("events")
-            .whereEqualTo("familyId", familyId)
-            .orderBy("startTime", Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("EventRepository", "Грешка при праћењу породичних догађаја", error)
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                
-                val events = snapshot?.documents?.mapNotNull { doc ->
-                    try {
-                        val event = doc.toObject(Event::class.java)
-                        event?.id = doc.id
-                        event
-                    } catch (e: Exception) {
-                        Log.e("EventRepository", "Грешка при обради догађаја", e)
-                        null
-                    }
-                } ?: emptyList()
-                
-                // Сортирамо догађаје локално уместо у упиту
-                val sortedEvents = events.sortedBy { it.startTime?.seconds }
-                
-                trySend(sortedEvents)
-            }
-        
-        awaitClose { listener.remove() }
-    }
-    
-    // Функција за праћење догађаја
-    fun observeEvents(startDate: Date, endDate: Date): Flow<List<Event>> = callbackFlow {
-        eventsListener?.remove()
-        
-        val startTimestamp = Timestamp(startDate)
-        val endTimestamp = Timestamp(endDate)
-        
-        eventsListener = eventsCollection
-            .whereGreaterThanOrEqualTo("startTime", startTimestamp)
-            .whereLessThanOrEqualTo("startTime", endTimestamp)
-            .orderBy("startTime", Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("EventRepository", "Грешка при праћењу догађаја", error)
-                    return@addSnapshotListener
-                }
-
-                val events = snapshot?.documents
-                    ?.mapNotNull { doc ->
-                        try {
-                            doc.toObject(Event::class.java)?.copy(id = doc.id)
-                        } catch (e: Exception) {
-                            Log.e("EventRepository", "Грешка при конверзији документа", e)
-                            null
-                        }
-                    } ?: emptyList()
-
-                trySend(events)
-            }
-
-        awaitClose {
-            eventsListener?.remove()
-            eventsListener = null
-        }
-    }.flowOn(Dispatchers.IO)
-    
-    // Додајте ову функцију у EventRepository
-    suspend fun removeDuplicates() {
-        val userId = auth.currentUser?.uid ?: return
-        
-        val events = eventsCollection
-            .get()
-            .await()
-            .documents
-            .mapNotNull { it.toObject(Event::class.java)?.copy(id = it.id) }
-        
-        // Групишемо догађаје по јединственом кључу (наслов + време + додељена особа)
-        val uniqueEvents = events.groupBy { 
-            "${it.title}${it.startTime}${it.assignee}" 
-        }
-        
-        // За сваку групу дупликата, задржавамо само најстарији
-        uniqueEvents.forEach { (_, duplicates) ->
-            if (duplicates.size > 1) {
-                // Сортирамо по ID-у да бисмо задржали најстарији
-                val sortedDuplicates = duplicates.sortedBy { it.id }
-                // Задржавамо први, бришемо остале
-                sortedDuplicates.drop(1).forEach { duplicate ->
-                    duplicate.id?.let { id ->
-                        try {
-                            eventsCollection.document(id).delete().await()
-                            Log.d("EventRepository", "Обрисан дупликат: ${duplicate.title}")
-                        } catch (e: Exception) {
-                            Log.e("EventRepository", "Грешка при брисању дупликата: ${duplicate.title}", e)
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Додајте ову функцију у EventRepository
+    // Функција за функцију cleanupDatabase() и функцију за помоћне методе
     suspend fun cleanupDatabase() {
         try {
             Log.d("EventRepository", "Почињем чишћење базе...")
@@ -343,7 +167,7 @@ class EventRepository private constructor(private val context: Context) {
             
             // 3. За сваку групу, задржавамо најстарији документ (са најмањим ID-ом)
             var deletedCount = 0
-            eventGroups.forEach { (key, events) ->
+            eventGroups.forEach { (_, events) ->
                 if (events.size > 1) {
                     // Сортирамо по ID-у и задржавамо први
                     val sortedEvents = events.sortedBy { it.id }
@@ -379,7 +203,7 @@ class EventRepository private constructor(private val context: Context) {
             Log.d("EventRepository", "\n=== УЧИТАВАЊЕ ДОГАЂАЈА ИЗ БАЗЕ ===")
             Log.d("EventRepository", "Тражим догађаје између ${formatDate(startDate)} и ${formatDate(endDate)}")
             
-            val userId = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
+            auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
             
             // Прво учитајмо СВЕ догађаје да видимо шта имамо
             val allEvents = eventsCollection
@@ -451,37 +275,6 @@ class EventRepository private constructor(private val context: Context) {
         return emptyList()
     }
 
-    // Додајемо функцију за учитавање догађаја по странама
-    suspend fun getEventsPaginated(startDate: Date, lastEvent: Event? = null): Result<List<Event>> {
-        return try {
-            var query = eventsCollection
-                .whereGreaterThanOrEqualTo("startTime", startDate)
-                .orderBy("startTime", Query.Direction.ASCENDING)
-                .limit(PAGE_SIZE.toLong())
-            
-            // Ако имамо последњи догађај, почињемо од њега
-            lastEvent?.let { last ->
-                query = query.startAfter(last.startTime)
-            }
-            
-            val snapshot = query.get().await()
-            
-            val events = snapshot.documents.mapNotNull { doc ->
-                try {
-                    doc.toObject(Event::class.java)?.copy(id = doc.id)
-                } catch (e: Exception) {
-                    Log.e("EventRepository", "Грешка при конверзији документа", e)
-                    null
-                }
-            }
-            
-            Result.success(events)
-        } catch (e: Exception) {
-            Log.e("EventRepository", "Грешка при учитавању догађаја", e)
-            Result.failure(e)
-        }
-    }
-
     private fun formatDate(date: Date?): String {
         return date?.let { 
             java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(it) 
@@ -489,23 +282,12 @@ class EventRepository private constructor(private val context: Context) {
     }
 
     companion object {
-        @Volatile
-        private var instance: EventRepository? = null
-        
-        fun getInstance(context: Context): EventRepository {
-            return instance ?: synchronized(this) {
-                instance ?: EventRepository(context).also { instance = it }
-            }
-        }
-        
-        // Додајте методу за проверу да ли је репозиторијум већ иницијализован
-        fun isInitialized(): Boolean {
-            return instance != null
-        }
-        
-        // Додајте методу за ресетовање инстанце (користи се за тестирање)
-        fun reset() {
-            instance = null
+        // Помоћна factory метода за креирање инстанце репозиторијума
+        fun create(): EventRepository {
+            return EventRepository(
+                FirebaseFirestore.getInstance(),
+                FirebaseAuth.getInstance()
+            )
         }
     }
 } 

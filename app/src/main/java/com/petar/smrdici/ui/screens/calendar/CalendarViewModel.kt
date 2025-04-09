@@ -1,22 +1,17 @@
 package com.petar.smrdici.ui.screens.calendar
 
-import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.data.repository.EventRepository
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -28,10 +23,6 @@ class CalendarViewModel @Inject constructor(
     private val eventRepository: EventRepository,
     private val auth: FirebaseAuth
 ) : ViewModel() {
-    private val firestore = FirebaseFirestore.getInstance()
-    private val eventsCollection = firestore.collection("calendar_events")
-    private var eventsListener: ListenerRegistration? = null
-    
     private val _uiState = MutableStateFlow<CalendarUiState>(CalendarUiState.Loading)
     val uiState: StateFlow<CalendarUiState> = _uiState
     
@@ -55,16 +46,6 @@ class CalendarViewModel @Inject constructor(
     val datesWithEvents: StateFlow<Set<Date>> = _datesWithEvents
     
     private var eventsJob: Job? = null
-    
-    private var lastLogTime = 0L
-    private fun shouldLog(): Boolean {
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastLogTime > 1000) { // 1 секунда између логова
-            lastLogTime = currentTime
-            return true
-        }
-        return false
-    }
     
     init {
         viewModelScope.launch {
@@ -228,21 +209,6 @@ class CalendarViewModel @Inject constructor(
                 Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
                 _uiState.value = CalendarUiState.Error("Грешка при учитавању догађаја")
             }
-        }
-    }
-    
-    private fun updateFilteredEvents() {
-        val filteredEvents = filterEventsForDate(_selectedDate.value, _allEvents.value)
-        _events.value = filteredEvents.distinctBy { "${it.title}${it.startTime}${it.assignee}" }
-        _uiState.value = CalendarUiState.Success(filteredEvents)
-        
-        if (shouldLog()) {
-            Log.d("CalendarViewModel", "Изабран датум: ${formatDate(_selectedDate.value)}, приказујем ${filteredEvents.size} догађаја од укупно ${_allEvents.value.size}")
-        }
-        
-        // Ажурирамо датум у форми за догађај
-        updateEventForm { form ->
-            form.copy(date = _selectedDate.value)
         }
     }
     
@@ -426,43 +392,6 @@ class CalendarViewModel @Inject constructor(
         }
     }
     
-    // Функција за учитавање догађаја за одређени период
-    private fun loadEventsForPeriod(startDate: Date, endDate: Date) {
-        viewModelScope.launch {
-            try {
-                Log.d("CalendarViewModel", "Учитавање догађаја за период ${
-                    SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(startDate)
-                } - ${
-                    SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(endDate)
-                }")
-                
-                eventRepository.observeEvents(startDate, endDate)
-                    .catch { e ->
-                        if (e is CancellationException) {
-                            Log.d("CalendarViewModel", "Учитавање догађаја отказано")
-                            return@catch
-                        }
-                        Log.e("CalendarViewModel", "Грешка при учитавању догађаја за период", e)
-                        _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при учитавању догађаја")
-                    }
-                    .collect { allEvents ->
-                        _allEvents.value = allEvents
-                        _events.value = allEvents
-                        _uiState.value = CalendarUiState.Success(allEvents)
-                        
-                        Log.d("CalendarViewModel", "Учитано ${allEvents.size} догађаја за период")
-                    }
-            } catch (e: Exception) {
-                if (e is CancellationException) {
-                    Log.d("CalendarViewModel", "Учитавање догађаја отказано")
-                    return@launch
-                }
-                Log.e("CalendarViewModel", "Грешка при учитавању догађаја за период", e)
-                _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при учитавању догађаја")
-            }
-        }
-    }
-    
     // Функција за учитавање догађаја за одређени датум
     fun loadEventsForDate(date: Date) {
         viewModelScope.launch {
@@ -561,33 +490,17 @@ class CalendarViewModel @Inject constructor(
         }
     }
     
-    // Додајемо нову функцију за освежавање података
-    fun refresh() {
-        viewModelScope.launch {
-            try {
-                Log.d("CalendarViewModel", "Освежавам податке...")
-                loadEvents()
-            } catch (e: Exception) {
-                if (e is CancellationException) {
-                    Log.d("CalendarViewModel", "Освежавање отказано")
-                    return@launch
-                }
-                Log.e("CalendarViewModel", "Неочекивана грешка при освежавању", e)
-            }
-        }
-    }
-
     override fun onCleared() {
         super.onCleared()
         eventsJob?.cancel()
     }
     
-    // Додајемо Factory класу за креирање CalendarViewModel са Context параметром
-    class Factory(private val context: Context) : ViewModelProvider.Factory {
+    // Додајемо Factory класу за креирање CalendarViewModel
+    class Factory() : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(CalendarViewModel::class.java)) {
-                return CalendarViewModel(EventRepository.getInstance(context), FirebaseAuth.getInstance()) as T
+                return CalendarViewModel(EventRepository.create(), FirebaseAuth.getInstance()) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
