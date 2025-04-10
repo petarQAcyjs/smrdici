@@ -12,9 +12,14 @@ sealed class Screen(val route: String) {
     
     object EditAccount : Screen("edit_account/{accountId}")
     
+    object AddAccount : Screen("add_account")
+    
     object Budget : Screen("budget")
     object Profile : Screen("profile")
     object AddEvent : Screen("add_event")
     object AddExpense : Screen("add_expense")
     object AddIncome : Screen("add_income")
+    
+    object ExpenseCategories : Screen("expense_categories")
+    object IncomeCategories : Screen("income_categories")
 } 

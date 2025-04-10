@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.repository.EventRepository
 import kotlinx.coroutines.delay
@@ -17,7 +18,9 @@ import java.util.Locale
 
 class HomeViewModel() : ViewModel() {
     // Лења иницијализација EventRepository
-    private val eventRepository by lazy { EventRepository.create() }
+    private val eventRepository by lazy { 
+        EventRepository(FirebaseFirestore.getInstance(), FirebaseAuth.getInstance()) 
+    }
     
     private val _todayEvents = MutableStateFlow<List<Event>>(emptyList())
     val todayEvents: StateFlow<List<Event>> = _todayEvents
@@ -70,37 +73,39 @@ class HomeViewModel() : ViewModel() {
                 
                 // Учитавамо све догађаје за данас
                 eventRepository.getEvents(startOfDay, endOfDay)
-                    .onSuccess { events ->
-                        Log.d("HomeViewModel", "Учитано ${events.size} догађаја")
-                        
-                        // Филтрирамо само будуће догађаје
-                        val currentTime = Calendar.getInstance().time
-                        val activeEvents = events.filter { event ->
-                            val endTime = event.endTime?.toDate() ?: Date(Long.MAX_VALUE)
-                            endTime >= currentTime
-                        }
-                        
-                        Log.d("HomeViewModel", """
-                            Филтрирање догађаја:
-                            - Укупно догађаја: ${events.size}
-                            - Активних догађаја: ${activeEvents.size}
-                            - Тренутно време: ${formatDate(currentTime)}
-                        """.trimIndent())
-                        
-                        activeEvents.forEach { event ->
+                    .fold(
+                        onSuccess = { events ->
+                            Log.d("HomeViewModel", "Учитано ${events.size} догађаја")
+                            
+                            // Филтрирамо само будуће догађаје
+                            val currentTime = Calendar.getInstance().time
+                            val activeEvents = events.filter { event ->
+                                val eventEndTime = event.endTime?.toDate() ?: Date(Long.MAX_VALUE)
+                                eventEndTime >= currentTime
+                            }
+                            
                             Log.d("HomeViewModel", """
-                                Активан догађај:
-                                - Наслов: ${event.title}
-                                - Почетак: ${formatDate(event.startTime?.toDate())}
-                                - Крај: ${formatDate(event.endTime?.toDate())}
+                                Филтрирање догађаја:
+                                - Укупно догађаја: ${events.size}
+                                - Активних догађаја: ${activeEvents.size}
+                                - Тренутно време: ${formatDate(currentTime)}
                             """.trimIndent())
+                            
+                            activeEvents.forEach { event ->
+                                Log.d("HomeViewModel", """
+                                    Активан догађај:
+                                    - Наслов: ${event.title}
+                                    - Почетак: ${formatDate(event.startTime?.toDate())}
+                                    - Крај: ${formatDate(event.endTime?.toDate())}
+                                """.trimIndent())
+                            }
+                            
+                            _todayEvents.value = activeEvents
+                        },
+                        onFailure = { e ->
+                            Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
                         }
-                        
-                        _todayEvents.value = activeEvents
-                    }
-                    .onFailure { e ->
-                        Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
-                    }
+                    )
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
             }
@@ -125,14 +130,16 @@ class HomeViewModel() : ViewModel() {
                 _syncStatus.value = SyncStatus.Syncing
                 
                 eventRepository.syncEvents()
-                    .onSuccess {
-                        _syncStatus.value = SyncStatus.Success
-                        refreshEvents()
-                    }
-                    .onFailure { e ->
-                        Log.e("HomeViewModel", "Грешка при синхронизацији", e)
-                        _syncStatus.value = SyncStatus.Error(e.message ?: "Грешка при синхронизацији")
-                    }
+                    .fold(
+                        onSuccess = {
+                            _syncStatus.value = SyncStatus.Success
+                            refreshEvents()
+                        },
+                        onFailure = { e ->
+                            Log.e("HomeViewModel", "Грешка при синхронизацији", e)
+                            _syncStatus.value = SyncStatus.Error(e.message ?: "Грешка при синхронизацији")
+                        }
+                    )
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Грешка при синхронизацији", e)
                 _syncStatus.value = SyncStatus.Error(e.message ?: "Непозната грешка")

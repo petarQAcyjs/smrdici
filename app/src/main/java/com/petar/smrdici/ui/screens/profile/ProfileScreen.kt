@@ -254,6 +254,10 @@ fun ProfileScreen(
                                     }
                                 )
 
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+
                                 // За подешавања обавештења
                                 SettingsItem(
                                     icon = Icons.Default.Notifications,

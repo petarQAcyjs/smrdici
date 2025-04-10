@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.data.repository.EventRepository
@@ -70,17 +71,19 @@ class CalendarViewModel @Inject constructor(
                 val endDate = calendar.time
                 
                 eventRepository.getEvents(startDate, endDate)
-                    .onSuccess { events ->
-                        _events.value = events
-                        updateDatesWithEvents(events)
-                        // Филтрирамо догађаје за изабрани датум
-                        val eventsForSelectedDate = filterEventsForDate(_selectedDate.value, events)
-                        _uiState.value = CalendarUiState.Success(eventsForSelectedDate)
-                    }
-                    .onFailure { e ->
-                        Log.e("CalendarViewModel", "Грешка при иницијалном учитавању", e)
-                        _uiState.value = CalendarUiState.Error("Грешка при учитавању догађаја")
-                    }
+                    .fold(
+                        onSuccess = { events ->
+                            _events.value = events
+                            updateDatesWithEvents(events)
+                            // Филтрирамо догађаје за изабрани датум
+                            val eventsForSelectedDate = filterEventsForDate(_selectedDate.value, events)
+                            _uiState.value = CalendarUiState.Success(eventsForSelectedDate)
+                        },
+                        onFailure = { e ->
+                            Log.e("CalendarViewModel", "Грешка при иницијалном учитавању", e)
+                            _uiState.value = CalendarUiState.Error("Грешка при учитавању догађаја")
+                        }
+                    )
             } catch (e: Exception) {
                 Log.e("CalendarViewModel", "Грешка при иницијализацији", e)
                 _uiState.value = CalendarUiState.Error("Грешка при иницијализацији")
@@ -190,21 +193,23 @@ class CalendarViewModel @Inject constructor(
                 
                 // Учитавамо догађаје за цео месец
                 eventRepository.getEvents(startDate, endDate)
-                    .onSuccess { events ->
-                        Log.d("CalendarViewModel", "Учитано ${events.size} догађаја из репозиторијума")
-                        Log.d("CalendarViewModel", "Догађаји пре филтрирања:")
-                        events.forEach { event ->
-                            Log.d("CalendarViewModel", "- ${event.title} (${formatDate(event.startTime?.toDate())})")
+                    .fold(
+                        onSuccess = { events ->
+                            Log.d("CalendarViewModel", "Учитано ${events.size} догађаја из репозиторијума")
+                            Log.d("CalendarViewModel", "Догађаји пре филтрирања:")
+                            events.forEach { event ->
+                                Log.d("CalendarViewModel", "- ${event.title} (${formatDate(event.startTime?.toDate())})")
+                            }
+                            _events.value = events
+                            updateDatesWithEvents(events)
+                            val eventsForSelectedDate = filterEventsForDate(_selectedDate.value, events)
+                            _uiState.value = CalendarUiState.Success(eventsForSelectedDate)
+                        },
+                        onFailure = { e ->
+                            Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
+                            _uiState.value = CalendarUiState.Error("Грешка при учитавању догађаја")
                         }
-                        _events.value = events
-                        updateDatesWithEvents(events)
-                        val eventsForSelectedDate = filterEventsForDate(_selectedDate.value, events)
-                        _uiState.value = CalendarUiState.Success(eventsForSelectedDate)
-                    }
-                    .onFailure { e ->
-                        Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
-                        _uiState.value = CalendarUiState.Error("Грешка при учитавању догађаја")
-                    }
+                    )
             } catch (e: Exception) {
                 Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
                 _uiState.value = CalendarUiState.Error("Грешка при учитавању догађаја")
@@ -496,11 +501,14 @@ class CalendarViewModel @Inject constructor(
     }
     
     // Додајемо Factory класу за креирање CalendarViewModel
-    class Factory() : ViewModelProvider.Factory {
+    class Factory : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(CalendarViewModel::class.java)) {
-                return CalendarViewModel(EventRepository.create(), FirebaseAuth.getInstance()) as T
+                return CalendarViewModel(
+                    EventRepository(FirebaseFirestore.getInstance(), FirebaseAuth.getInstance()),
+                    FirebaseAuth.getInstance()
+                ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
@@ -542,14 +550,16 @@ class CalendarViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 eventRepository.syncEvents()
-                    .onSuccess {
-                        loadEvents() // Освежи приказ
-                        Log.d("CalendarViewModel", "Синхронизација успешно завршена")
-                    }
-                    .onFailure { e ->
-                        Log.e("CalendarViewModel", "Грешка при синхронизацији", e)
-                        _uiState.value = CalendarUiState.Error("Грешка при синхронизацији")
-                    }
+                    .fold(
+                        onSuccess = {
+                            loadEvents() // Освежи приказ
+                            Log.d("CalendarViewModel", "Синхронизација успешно завршена")
+                        },
+                        onFailure = { e ->
+                            Log.e("CalendarViewModel", "Грешка при синхронизацији", e)
+                            _uiState.value = CalendarUiState.Error("Грешка при синхронизацији")
+                        }
+                    )
             } catch (e: Exception) {
                 Log.e("CalendarViewModel", "Грешка при синхронизацији", e)
                 _uiState.value = CalendarUiState.Error("Грешка при синхронизацији")

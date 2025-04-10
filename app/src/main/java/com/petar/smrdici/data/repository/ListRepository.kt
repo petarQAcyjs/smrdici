@@ -4,146 +4,149 @@ import android.content.Context
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.petar.smrdici.data.model.Account
+import com.petar.smrdici.data.model.ShoppingList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
-class AccountRepository private constructor(private val context: Context) {
+class ListRepository private constructor(private val context: Context) {
     
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     
-    private val _accounts = MutableStateFlow<List<Account>>(emptyList())
-    val accounts: Flow<List<Account>> = _accounts.asStateFlow()
+    private val _lists = MutableStateFlow<List<ShoppingList>>(emptyList())
+    val lists: Flow<List<ShoppingList>> = _lists.asStateFlow()
     
     init {
-        loadAccounts()
+        loadLists()
     }
     
-    fun loadAccounts() {
+    private fun loadLists() {
         val userId = auth.currentUser?.uid ?: return
         
         firestore.collection("users").document(userId)
-            .collection("accounts")
+            .collection("lists")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e(TAG, "Грешка при учитавању рачуна", error)
+                    Log.e(TAG, "Грешка при учитавању листа", error)
                     return@addSnapshotListener
                 }
                 
-                val accountsList = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(Account::class.java)?.copy(id = doc.id)
+                val listsList = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(ShoppingList::class.java)?.copy(id = doc.id)
                 } ?: emptyList()
                 
-                _accounts.value = accountsList
+                _lists.value = listsList
             }
     }
     
-    suspend fun getAllAccounts(): List<Account> {
+    suspend fun getAllLists(): List<ShoppingList> {
         return try {
             val userId = auth.currentUser?.uid ?: return emptyList()
             
             val snapshot = firestore.collection("users").document(userId)
-                .collection("accounts")
+                .collection("lists")
                 .get()
                 .await()
             
             snapshot.documents.mapNotNull { doc ->
-                doc.toObject(Account::class.java)?.copy(id = doc.id)
+                doc.toObject(ShoppingList::class.java)?.copy(id = doc.id)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Грешка при добављању свих рачуна", e)
+            Log.e(TAG, "Грешка при добављању свих листа", e)
             emptyList()
         }
     }
     
-    suspend fun addAccount(account: Account) {
+    suspend fun addList(list: ShoppingList) {
         try {
             val userId = auth.currentUser?.uid ?: return
             
-            val accountData = account.copy(
-                id = account.id.ifEmpty { UUID.randomUUID().toString() }
+            val listData = list.copy(
+                id = list.id?.ifEmpty { UUID.randomUUID().toString() } ?: UUID.randomUUID().toString()
             )
             
             firestore.collection("users").document(userId)
-                .collection("accounts")
-                .document(accountData.id)
-                .set(accountData)
+                .collection("lists")
+                .document(listData.id ?: "")
+                .set(listData)
                 .await()
             
-            loadAccounts()
+            loadLists()
         } catch (e: Exception) {
-            Log.e(TAG, "Грешка при додавању рачуна", e)
+            Log.e(TAG, "Грешка при додавању листе", e)
         }
     }
     
-    suspend fun updateAccount(account: Account) {
+    suspend fun updateList(list: ShoppingList) {
         try {
             val userId = auth.currentUser?.uid ?: return
             
             firestore.collection("users").document(userId)
-                .collection("accounts")
-                .document(account.id)
-                .set(account)
+                .collection("lists")
+                .document(list.id ?: "")
+                .set(list)
                 .await()
             
-            loadAccounts()
+            loadLists()
         } catch (e: Exception) {
-            Log.e(TAG, "Грешка при ажурирању рачуна", e)
+            Log.e(TAG, "Грешка при ажурирању листе", e)
         }
     }
     
-    suspend fun deleteAccount(accountId: String) {
+    suspend fun deleteList(listId: String) {
         try {
             val userId = auth.currentUser?.uid ?: return
             
             firestore.collection("users").document(userId)
-                .collection("accounts")
-                .document(accountId)
+                .collection("lists")
+                .document(listId)
                 .delete()
                 .await()
             
-            loadAccounts()
+            loadLists()
         } catch (e: Exception) {
-            Log.e(TAG, "Грешка при брисању рачуна", e)
+            Log.e(TAG, "Грешка при брисању листе", e)
         }
     }
     
-    suspend fun deleteAllAccounts() {
+    suspend fun deleteAllLists() {
         try {
             val userId = auth.currentUser?.uid ?: return
             
             val snapshot = firestore.collection("users").document(userId)
-                .collection("accounts")
+                .collection("lists")
                 .get()
                 .await()
             
+            val batch = firestore.batch()
             for (document in snapshot.documents) {
-                firestore.collection("users").document(userId)
-                    .collection("accounts")
-                    .document(document.id)
-                    .delete()
-                    .await()
+                batch.delete(
+                    firestore.collection("users").document(userId)
+                        .collection("lists")
+                        .document(document.id)
+                )
             }
             
-            loadAccounts()
+            batch.commit().await()
+            
+            loadLists()
         } catch (e: Exception) {
-            Log.e(TAG, "Грешка при брисању свих рачуна", e)
+            Log.e(TAG, "Грешка при брисању свих листа", e)
         }
     }
     
     companion object {
-        private const val TAG = "AccountRepository"
+        private const val TAG = "ListRepository"
         
         @Volatile
-        private var instance: AccountRepository? = null
+        private var instance: ListRepository? = null
         
-        fun getInstance(context: Context): AccountRepository {
+        fun getInstance(context: Context): ListRepository {
             return instance ?: synchronized(this) {
-                instance ?: AccountRepository(context).also { instance = it }
+                instance ?: ListRepository(context).also { instance = it }
             }
         }
     }

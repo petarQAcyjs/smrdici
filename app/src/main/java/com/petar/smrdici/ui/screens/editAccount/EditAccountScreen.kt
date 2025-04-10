@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -69,6 +70,7 @@ fun EditAccountScreen(
     }
     val account by accountViewModel.currentAccount.collectAsState()
     val isLoading by accountViewModel.isLoading.collectAsState()
+    val accounts by accountViewModel.accounts.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     
@@ -89,6 +91,10 @@ fun EditAccountScreen(
             isDefault = it.isDefault
         }
     }
+    
+    // Додајемо избор валуте
+    var currencyExpanded by remember { mutableStateOf(false) }
+    var selectedCurrency by remember { mutableStateOf(account?.currency ?: "RSD") }
     
     Scaffold(
         topBar = {
@@ -149,6 +155,61 @@ fun EditAccountScreen(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
+                
+                // Додајемо избор валуте
+                Text(
+                    text = "Валута",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { currencyExpanded = true }
+                        .padding(vertical = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = when (selectedCurrency) {
+                                "RSD" -> "Динар (RSD)"
+                                "EUR" -> "Евро (EUR)"
+                                "USD" -> "Долар (USD)"
+                                "GBP" -> "Фунта (GBP)"
+                                else -> "Динар (RSD)"
+                            },
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Избор валуте"
+                        )
+                    }
+                    
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = currencyExpanded,
+                        onDismissRequest = { currencyExpanded = false }
+                    ) {
+                        listOf(
+                            Pair("RSD", "Динар (RSD)"),
+                            Pair("EUR", "Евро (EUR)"),
+                            Pair("USD", "Долар (USD)"),
+                            Pair("GBP", "Фунта (GBP)")
+                        ).forEach { (code, name) ->
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(name) },
+                                onClick = {
+                                    selectedCurrency = code
+                                    currencyExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 
                 // Избор типа рачуна
                 Text(
@@ -267,7 +328,8 @@ fun EditAccountScreen(
                             balance = balance.toDoubleOrNull() ?: 0.0,
                             type = selectedType,
                             color = selectedColor,
-                            isDefault = isDefault
+                            isDefault = isDefault,
+                            currency = selectedCurrency
                         )
                         
                         updatedAccount?.let {
@@ -293,26 +355,43 @@ fun EditAccountScreen(
     
     // Дијалог за потврду брисања
     if (showDeleteDialog) {
+        // Pomoćne boolean varijable umesto direktnog poređenja
+        val hasMultipleAccounts = accounts.size >= 2
+        val canDeleteDefault = !isDefault || !hasMultipleAccounts
+        
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Брисање рачуна") },
-            text = { Text("Да ли сте сигурни да желите да обришете овај рачун?") },
+            text = { 
+                if (isDefault && hasMultipleAccounts) {
+                    Text("Није могуће обрисати подразумевани рачун. Молимо прво означите други рачун као подразумевани.")
+                } else {
+                    Text("Да ли сте сигурни да желите да обришете овај рачун? Све трансакције повезане са овим рачуном такође ће бити обрисане.")
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
-                        accountViewModel.deleteAccount(accountId) { success ->
-                            coroutineScope.launch {
-                                if (success) {
-                                    snackbarHostState.showSnackbar("Рачун успешно обрисан")
-                                    navController.navigateUp()
-                                } else {
-                                    snackbarHostState.showSnackbar("Грешка при брисању рачуна")
+                        if (canDeleteDefault) {
+                            accountViewModel.deleteAccount(accountId) { success ->
+                                coroutineScope.launch {
+                                    if (success) {
+                                        snackbarHostState.showSnackbar("Рачун успешно обрисан")
+                                        navController.navigateUp()
+                                    } else {
+                                        snackbarHostState.showSnackbar("Грешка при брисању рачуна")
+                                    }
                                 }
+                            }
+                        } else {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Није могуће обрисати подразумевани рачун")
                             }
                         }
                         showDeleteDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    enabled = canDeleteDefault
                 ) {
                     Text("Обриши")
                 }

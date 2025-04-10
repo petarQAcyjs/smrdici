@@ -88,7 +88,7 @@ fun AddAccountDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                Text("Тип рачуна", style = MaterialTheme.typography.bodyMedium)
+                Text("Тип рачуна", style = MaterialTheme.typography.titleMedium)
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
@@ -96,24 +96,59 @@ fun AddAccountDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    AccountType.entries.forEach { type ->
-                        com.petar.smrdici.ui.screens.editAccount.AccountTypeChip(
-                            type = type,
-                            isSelected = selectedType == type,
-                            onClick = { selectedType = type }
-                        )
-                    }
+                    com.petar.smrdici.ui.screens.editAccount.AccountTypeChip(
+                        type = AccountType.CASH,
+                        isSelected = selectedType == AccountType.CASH,
+                        onClick = { selectedType = AccountType.CASH }
+                    )
+                    
+                    com.petar.smrdici.ui.screens.editAccount.AccountTypeChip(
+                        type = AccountType.BANK,
+                        isSelected = selectedType == AccountType.BANK,
+                        onClick = { selectedType = AccountType.BANK }
+                    )
+                    
+                    com.petar.smrdici.ui.screens.editAccount.AccountTypeChip(
+                        type = AccountType.CREDIT_CARD,
+                        isSelected = selectedType == AccountType.CREDIT_CARD,
+                        onClick = { selectedType = AccountType.CREDIT_CARD }
+                    )
                 }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text("Боја", style = MaterialTheme.typography.bodyMedium)
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    com.petar.smrdici.ui.screens.editAccount.AccountTypeChip(
+                        type = AccountType.SAVINGS,
+                        isSelected = selectedType == AccountType.SAVINGS,
+                        onClick = { selectedType = AccountType.SAVINGS }
+                    )
+                    
+                    com.petar.smrdici.ui.screens.editAccount.AccountTypeChip(
+                        type = AccountType.INVESTMENT,
+                        isSelected = selectedType == AccountType.INVESTMENT,
+                        onClick = { selectedType = AccountType.INVESTMENT }
+                    )
+                    
+                    com.petar.smrdici.ui.screens.editAccount.AccountTypeChip(
+                        type = AccountType.OTHER,
+                        isSelected = selectedType == AccountType.OTHER,
+                        onClick = { selectedType = AccountType.OTHER }
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text("Боја", style = MaterialTheme.typography.titleMedium)
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     accountColors.forEachIndexed { index, color ->
                         com.petar.smrdici.ui.screens.editAccount.ColorChip(

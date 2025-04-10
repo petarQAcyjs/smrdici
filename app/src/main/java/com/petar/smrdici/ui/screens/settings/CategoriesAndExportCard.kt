@@ -162,12 +162,12 @@ fun ExportImportCard(onExportClick: () -> Unit, onImportClick: () -> Unit) {
                 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Извоз трансакција",
+                        text = "Извоз података",
                         style = MaterialTheme.typography.bodyLarge
                     )
                     
                     Text(
-                        text = "Извезите трансакције у CSV формату",
+                        text = "Сачувајте резервну копију свих података у JSON формату",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -203,12 +203,12 @@ fun ExportImportCard(onExportClick: () -> Unit, onImportClick: () -> Unit) {
                 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Увоз трансакција",
+                        text = "Увоз података",
                         style = MaterialTheme.typography.bodyLarge
                     )
                     
                     Text(
-                        text = "Увезите трансакције из CSV формата",
+                        text = "Вратите претходно извезене податке из JSON формата",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )

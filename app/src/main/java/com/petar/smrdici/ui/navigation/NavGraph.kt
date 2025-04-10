@@ -8,6 +8,8 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.petar.smrdici.ui.components.MainLayout
 import com.petar.smrdici.ui.screens.auth.LoginScreen
+import com.petar.smrdici.ui.screens.budget.AddExpenseScreen
+import com.petar.smrdici.ui.screens.budget.AddIncomeScreen
 import com.petar.smrdici.ui.screens.budget.BudgetScreen
 import com.petar.smrdici.ui.screens.calendar.CalendarScreen
 import com.petar.smrdici.ui.screens.home.HomeScreen
@@ -17,6 +19,9 @@ import com.petar.smrdici.ui.screens.profile.ProfileScreen
 import com.petar.smrdici.ui.screens.calendar.AddEventScreen
 import com.petar.smrdici.ui.screens.settings.BudgetSettingsScreen
 import com.petar.smrdici.ui.screens.editAccount.EditAccountScreen
+import com.petar.smrdici.ui.screens.addAccount.AddAccountScreen
+import com.petar.smrdici.ui.screens.settings.ExpenseCategoriesScreen
+import com.petar.smrdici.ui.screens.settings.IncomeCategoriesScreen
 
 @Composable
 fun NavGraph(
@@ -65,6 +70,14 @@ fun NavGraph(
             AddEventScreen(navController = navController)
         }
         
+        composable(route = Screen.AddExpense.route) {
+            AddExpenseScreen(navController = navController)
+        }
+        
+        composable(route = Screen.AddIncome.route) {
+            AddIncomeScreen(navController = navController)
+        }
+        
         composable(
             route = Screen.ListDetails.route,
             arguments = listOf(
@@ -98,6 +111,10 @@ fun NavGraph(
             )
         }
         
+        composable(Screen.AddAccount.route) {
+            AddAccountScreen(navController = navController)
+        }
+        
         // Додајте ову руту за тестирање
         composable("edit_account/{accountId}") { backStackEntry ->
             val accountId = backStackEntry.arguments?.getString("accountId") ?: ""
@@ -105,6 +122,14 @@ fun NavGraph(
                 navController = navController,
                 accountId = accountId
             )
+        }
+        
+        composable(Screen.ExpenseCategories.route) {
+            ExpenseCategoriesScreen(navController = navController)
+        }
+        
+        composable(Screen.IncomeCategories.route) {
+            IncomeCategoriesScreen(navController = navController)
         }
     }
 } 

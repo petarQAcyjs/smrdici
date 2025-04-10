@@ -94,4 +94,7 @@ dependencies {
 
     // Додајемо или ажурирамо зависност за Material3
     implementation(libs.androidx.material3.library)
+    
+    // Gson за JSON сeријализацију
+    implementation("com.google.code.gson:gson:2.10.1")
 }

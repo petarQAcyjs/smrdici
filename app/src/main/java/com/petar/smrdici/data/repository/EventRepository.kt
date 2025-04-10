@@ -1,5 +1,6 @@
 package com.petar.smrdici.data.repository
 
+import android.content.Context
 import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -137,6 +138,51 @@ class EventRepository(
         }
     }
     
+    // Добављање свих догађаја за извоз/увоз
+    suspend fun getAllEvents(): List<Event> {
+        return try {
+            val currentUserId = auth.currentUser?.uid ?: return emptyList()
+            
+            val snapshot = eventsCollection
+                .orderBy("startTime", Query.Direction.ASCENDING)
+                .get()
+                .await()
+                
+            snapshot.documents.mapNotNull { doc ->
+                try {
+                    doc.toObject(Event::class.java)?.copy(id = doc.id)
+                } catch (e: Exception) {
+                    Log.e("EventRepository", "Грешка при читању догађаја ${doc.id}", e)
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("EventRepository", "Грешка при добављању свих догађаја", e)
+            emptyList()
+        }
+    }
+    
+    // Брисање свих догађаја (за операцију увоза)
+    suspend fun deleteAllEvents() {
+        try {
+            val currentUserId = auth.currentUser?.uid ?: return
+            
+            val snapshot = eventsCollection
+                .get()
+                .await()
+                
+            val batch = firestore.batch()
+            for (document in snapshot.documents) {
+                batch.delete(eventsCollection.document(document.id))
+            }
+            
+            batch.commit().await()
+            Log.d("EventRepository", "Сви догађаји су обрисани")
+        } catch (e: Exception) {
+            Log.e("EventRepository", "Грешка при брисању свих догађаја", e)
+        }
+    }
+    
     // Функција за функцију cleanupDatabase() и функцију за помоћне методе
     suspend fun cleanupDatabase() {
         try {
@@ -198,40 +244,20 @@ class EventRepository(
         }
     }
     
+    // Помоћна функција за добављање локалних промена
+    // Ово би требало да буде имплементирано за рад ван мреже
+    private fun getLocalChanges(): List<Event> {
+        // Овде бисмо имплементирали локални кеш са Room или неком другом базом
+        return emptyList()
+    }
+    
+    // Добављање догађаја између два датума
     suspend fun getEvents(startDate: Date, endDate: Date): Result<List<Event>> {
         return try {
-            Log.d("EventRepository", "\n=== УЧИТАВАЊЕ ДОГАЂАЈА ИЗ БАЗЕ ===")
-            Log.d("EventRepository", "Тражим догађаје између ${formatDate(startDate)} и ${formatDate(endDate)}")
+            val userId = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
             
-            auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
-            
-            // Прво учитајмо СВЕ догађаје да видимо шта имамо
-            val allEvents = eventsCollection
-                .orderBy("startTime", Query.Direction.ASCENDING)
-                .get()
-                .await()
-            
-            Log.d("EventRepository", "Укупно пронађено ${allEvents.size()} догађаја у бази")
-            allEvents.documents.forEach { doc ->
-                val event = doc.toObject(Event::class.java)
-                Log.d("EventRepository", """
-                    Догађај из базе:
-                    - ID: ${doc.id}
-                    - Наслов: ${event?.title}
-                    - Време: ${formatDate(event?.startTime?.toDate())}
-                    - Assignee: ${event?.assignee}
-                """.trimIndent())
-            }
-            
-            // Сада применимо филтер
-            val startTimestamp = Timestamp(startDate.time / 1000, 0)
-            val endTimestamp = Timestamp(endDate.time / 1000, 0)
-            
-            Log.d("EventRepository", """
-                Филтрирам по времену:
-                - Start timestamp: ${startTimestamp.seconds}
-                - End timestamp: ${endTimestamp.seconds}
-            """.trimIndent())
+            val startTimestamp = Timestamp(startDate)
+            val endTimestamp = Timestamp(endDate)
             
             val snapshot = eventsCollection
                 .whereGreaterThanOrEqualTo("startTime", startTimestamp)
@@ -242,52 +268,33 @@ class EventRepository(
                 
             val events = snapshot.documents.mapNotNull { doc ->
                 try {
-                    val event = doc.toObject(Event::class.java)?.copy(id = doc.id)
-                    Log.d("EventRepository", """
-                        Конвертован догађај:
-                        - ID: ${doc.id}
-                        - Наслов: ${event?.title}
-                        - Време: ${formatDate(event?.startTime?.toDate())}
-                    """.trimIndent())
-                    event
+                    doc.toObject(Event::class.java)?.copy(id = doc.id)
                 } catch (e: Exception) {
-                    Log.e("EventRepository", "Грешка при конверзији документа ${doc.id}", e)
+                    Log.e("EventRepository", "Грешка при читању догађаја ${doc.id}", e)
                     null
                 }
             }
             
-            Log.d("EventRepository", "Након филтрирања пронађено ${events.size} догађаја")
-            events.forEach { event ->
-                Log.d("EventRepository", "- ${event.title} (${formatDate(event.startTime?.toDate())})")
-            }
-            Log.d("EventRepository", "============================\n")
-            
             Result.success(events)
         } catch (e: Exception) {
-            Log.e("EventRepository", "Грешка при учитавању догађаја", e)
+            Log.e("EventRepository", "Грешка при добављању догађаја", e)
             Result.failure(e)
         }
     }
     
-    // Помоћна функција за добављање локалних промена
-    private fun getLocalChanges(): List<Event> {
-        // TODO: Имплементирати логику за праћење локалних промена
-        return emptyList()
-    }
-
-    private fun formatDate(date: Date?): String {
-        return date?.let { 
-            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(it) 
-        } ?: "null"
-    }
-
     companion object {
-        // Помоћна factory метода за креирање инстанце репозиторијума
-        fun create(): EventRepository {
-            return EventRepository(
-                FirebaseFirestore.getInstance(),
-                FirebaseAuth.getInstance()
-            )
+        private const val TAG = "EventRepository"
+        
+        @Volatile
+        private var instance: EventRepository? = null
+        
+        fun getInstance(context: Context): EventRepository {
+            return instance ?: synchronized(this) {
+                instance ?: EventRepository(
+                    FirebaseFirestore.getInstance(),
+                    FirebaseAuth.getInstance()
+                ).also { instance = it }
+            }
         }
     }
 } 
