@@ -19,6 +19,14 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Искључујемо учитавање native библиотеке libpenguin.so
+        ndk {
+            abiFilters.add("armeabi-v7a")
+            abiFilters.add("arm64-v8a")
+            abiFilters.add("x86")
+            abiFilters.add("x86_64")
+        }
     }
 
     buildTypes {
@@ -48,6 +56,18 @@ android {
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.6"
+    }
+    
+    // Додајемо конфигурацију за спречавање покушаја учитавања непостојећих .dm фајлова
+    packaging {
+        resources {
+            excludes.add("META-INF/LICENSE")
+            excludes.add("META-INF/LICENSE.txt")
+            excludes.add("META-INF/NOTICE")
+            excludes.add("META-INF/NOTICE.txt")
+            excludes.add("META-INF/*.kotlin_module")
+            excludes.add("**/*.dm")
+        }
     }
 }
 
@@ -97,4 +117,8 @@ dependencies {
     
     // Gson за JSON сeријализацију
     implementation("com.google.code.gson:gson:2.10.1")
+    
+    // Додатне зависности за решавање проблема са Google API
+    implementation("com.google.android.gms:play-services-auth:20.7.0")
+    implementation("com.google.android.gms:play-services-base:18.3.0")
 }

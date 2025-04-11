@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.google.firebase.Timestamp
 import com.petar.smrdici.data.model.Expense
@@ -59,7 +60,10 @@ import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.screens.settings.AccountViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -70,15 +74,16 @@ import java.util.Locale
 fun AddExpenseScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
-    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory())
+    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory()),
+    budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current))
 ) {
     // Спречавамо непотребно учитавање EventRepository-а
-    DisposableEffect(Unit) {
-        onDispose { }
-    }
+    // DisposableEffect(Unit) {
+    //    onDispose { }
+    // }
     
-    // Добијамо приступ репозиторијуму
-    val expenseRepository = ExpenseRepository.getInstance()
+    // Нема потребе директно приступати репозиторијуму, користимо budgetViewModel
+    // val expenseRepository = ExpenseRepository.getInstance()
     
     // Стање за форму
     var amount by remember { mutableStateOf("") }
@@ -190,37 +195,67 @@ fun AddExpenseScreen(
         }
         
         isLoading = true
-        scope.launch {
+        
+        // Креирамо нови објекат расхода
+        val expense = Expense(
+            amount = amount.toDouble(),
+            description = description,
+            category = selectedCategory?.name ?: ExpenseCategory.OTHER.name,
+            date = Timestamp(Date(selectedDate)),
+            accountId = selectedAccountId
+        )
+        
+        Log.d("AddExpenseScreen", "Чувам расход: $expense")
+        
+        // Користимо viewModelScope уместо локалног scope-а из композиције
+        // Ово спречава отказивање корутине када се композиција промени
+        budgetViewModel.viewModelScope.launch {
             try {
-                // Креирамо нови објекат расхода
-                val expense = Expense(
-                    amount = amount.toDouble(),
-                    description = description,
-                    category = selectedCategory?.name ?: ExpenseCategory.OTHER.name,
-                    date = Timestamp(Date(selectedDate)),
-                    accountId = selectedAccountId
-                )
-                
-                Log.d("AddExpenseScreen", "Чувам расход: $expense")
-                
-                // Чувамо расход у бази података
-                val result = expenseRepository.addExpense(expense)
-                
-                if (result.isSuccess) {
-                    Log.d("AddExpenseScreen", "Расход је успешно сачуван")
-                    snackbarHostState.showSnackbar("Расход је успешно сачуван")
+                // Дефинишемо променљиву резултата пре NonCancellable контекста
+                val result = withContext(NonCancellable) {
+                    // Користимо NonCancellable контекст да спречимо отказивање операције чувања
+                    // Ово је важно за операције које морају да се заврше и не смеју бити прекинуте
+                    // чак и ако се корутина отказује (нпр. због навигације)
                     
-                    // Враћамо се на претходни екран
-                    navController.popBackStack()
-                } else {
-                    Log.e("AddExpenseScreen", "Грешка при чувању расхода", result.exceptionOrNull())
-                    snackbarHostState.showSnackbar("Грешка при чувању расхода: ${result.exceptionOrNull()?.message}")
+                    // Користимо budgetViewModel уместо директног приступа репозиторијуму
+                    val saveResult = budgetViewModel.addExpense(expense)
+                    
+                    if (saveResult.isSuccess) {
+                        Log.d("AddExpenseScreen", "Расход је успешно сачуван")
+                    } else {
+                        Log.e("AddExpenseScreen", "Грешка при чувању расхода", saveResult.exceptionOrNull())
+                    }
+                    
+                    // Враћамо резултат из NonCancellable блока
+                    saveResult
+                }
+                
+                // UI ажурирања извршавамо на главној нити, ван NonCancellable контекста
+                withContext(Dispatchers.Main) {
+                    if (result.isSuccess) {
+                        snackbarHostState.showSnackbar("Расход је успешно сачуван")
+                        // Враћамо се на претходни екран
+                        navController.popBackStack()
+                    } else {
+                        snackbarHostState.showSnackbar("Грешка при чувању расхода: ${result.exceptionOrNull()?.message}")
+                    }
+                    
+                    isLoading = false
                 }
             } catch (e: Exception) {
-                Log.e("AddExpenseScreen", "Грешка при чувању расхода", e)
-                snackbarHostState.showSnackbar("Грешка при чувању расхода: ${e.message}")
-            } finally {
-                isLoading = false
+                // Обрађујемо изузетке, али игноришемо JobCancellationException који се нормално дешава при навигацији
+                if (e is kotlinx.coroutines.CancellationException) {
+                    // Само логујемо, не приказујемо грешку кориснику јер је успешно сачувано
+                    Log.d("AddExpenseScreen", "Корутина је отказана након успешног чувања")
+                } else {
+                    // За остале грешке показујемо поруку
+                    Log.e("AddExpenseScreen", "Грешка при чувању расхода", e)
+                    
+                    withContext(Dispatchers.Main + NonCancellable) {
+                        snackbarHostState.showSnackbar("Грешка при чувању расхода: ${e.message}")
+                        isLoading = false
+                    }
+                }
             }
         }
     }

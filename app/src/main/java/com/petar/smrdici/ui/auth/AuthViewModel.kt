@@ -3,6 +3,7 @@ package com.petar.smrdici.ui.auth
 
 import android.content.Context
 import android.content.IntentSender
+import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -24,38 +25,58 @@ class AuthViewModel : ViewModel() {
 
     private lateinit var oneTapClient: SignInClient
     private lateinit var signInRequest: BeginSignInRequest
+    
+    private val TAG = "AuthViewModel"
 
     init {
         checkCurrentUser()
     }
 
     fun initGoogleSignIn(context: Context) {
-        oneTapClient = Identity.getSignInClient(context)
-        
-        // Конфигурација захтева за пријаву
-        signInRequest = BeginSignInRequest.builder()
-            .setGoogleIdTokenRequestOptions(
-                BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
-                    .setSupported(true)
-                    .setServerClientId("683999597671-0l004ln7l16meoo26ogk4mvcojndnsk7.apps.googleusercontent.com") // OAuth Client ID
-                    .setFilterByAuthorizedAccounts(false)
-                    .build()
-            )
-            .build()
+        try {
+            // Добијамо ApplicationContext уместо Activity context-а
+            // како бисмо избегли потенцијалне SecurityException грешке
+            val appContext = context.applicationContext
+            
+            oneTapClient = Identity.getSignInClient(appContext)
+            
+            // Конфигурација захтева за пријаву
+            signInRequest = BeginSignInRequest.builder()
+                .setGoogleIdTokenRequestOptions(
+                    BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
+                        .setSupported(true)
+                        .setServerClientId("683999597671-0l004ln7l16meoo26ogk4mvcojndnsk7.apps.googleusercontent.com") // OAuth Client ID
+                        .setFilterByAuthorizedAccounts(false)
+                        .build()
+                )
+                .build()
+                
+            Log.d(TAG, "Google Sign-In успешно иницијализован")
+        } catch (e: Exception) {
+            Log.e(TAG, "Грешка при иницијализацији Google Sign-In", e)
+        }
     }
 
-    fun beginSignIn(onSuccess: (IntentSender) -> Unit, onFailure: (Exception) -> Unit) {
-        viewModelScope.launch {
-            try {
-                _authState.value = AuthState.Loading
-                
-                // Користимо нови метод за започињање пријаве
-                val result = oneTapClient.beginSignIn(signInRequest).await()
-                onSuccess(result.pendingIntent.intentSender)
-            } catch (e: Exception) {
-                onFailure(e)
-                _authState.value = AuthState.Error(e.message ?: "Грешка приликом покретања пријаве")
+    fun beginGoogleSignIn(context: Context, onSuccess: (IntentSender) -> Unit, onError: (String) -> Unit) {
+        try {
+            // Добијамо ApplicationContext и овде
+            val appContext = context.applicationContext
+            
+            _authState.value = AuthState.Loading
+            viewModelScope.launch {
+                try {
+                    val result = oneTapClient.beginSignIn(signInRequest).await()
+                    onSuccess(result.pendingIntent.intentSender)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Грешка при Google пријављивању", e)
+                    _authState.value = AuthState.Error(e.message ?: "Грешка при Google пријави")
+                    onError(e.message ?: "Грешка при Google пријави")
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Грешка при покретању Google Sign-In", e)
+            _authState.value = AuthState.Error(e.message ?: "Неочекивана грешка")
+            onError(e.message ?: "Неочекивана грешка")
         }
     }
 

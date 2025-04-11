@@ -1,0 +1,51 @@
+name: Dev Request
+description: Make the Ivy Wallet dev experience better.
+labels: ["dev"]
+body:
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Please confirm the following
+      options:
+        - label: I checked [the current issues](https://github.com/Ivy-Apps/ivy-wallet/issues) for duplicate issues.
+          required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What would you like to improve?
+      description: "I want to:"
+      placeholder: |
+        - a
+        - b
+        - c
+    validations:
+      required: true
+  - type: textarea
+    id: because
+    attributes:
+      label: Because...
+      description: Why do we need this?
+      placeholder: |
+        - d
+        - e
+        - f
+    validations:
+      required: true
+  - type: textarea
+    id: other
+    attributes:
+      label: Description
+      description: Share your thoughts in free format.
+    validations:
+      required: false
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Success Criteria
+      description: Describe the requirements of the task.
+      placeholder: |
+        - Requirement 1
+        - Requirement 2
+        - Requirement 3
+    validations:
+      required: false

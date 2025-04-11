@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ExperimentalMaterialApi
@@ -30,6 +31,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -59,12 +61,14 @@ import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.verticalScroll
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -74,9 +78,11 @@ fun HomeScreen(
     homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory())
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     val authState by authViewModel.authState.collectAsState()
     val todayEvents by homeViewModel.todayEvents.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val syncStatus by homeViewModel.syncStatus.collectAsState()
+    val scrollState = rememberScrollState()
     
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
@@ -85,65 +91,49 @@ fun HomeScreen(
             coroutineScope.launch {
                 isRefreshing = true
                 homeViewModel.syncEvents()
-                delay(1000)
-                isRefreshing = false
             }
         }
     )
+    
+    LaunchedEffect(syncStatus) {
+        when (syncStatus) {
+            is SyncStatus.Success, is SyncStatus.Error, is SyncStatus.Idle -> {
+                isRefreshing = false
+            }
+            else -> {}
+        }
+        
+        if (syncStatus is SyncStatus.Error) {
+            (syncStatus as SyncStatus.Error).message.let { errorMsg ->
+                snackbarHostState.showSnackbar("Грешка: $errorMsg")
+            }
+        }
+    }
     
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
 
-    // Додајемо стање за ручно праћење гестова
-    var dragStartY by remember { mutableFloatStateOf(0f) }
-    var dragCurrentY by remember { mutableFloatStateOf(0f) }
-
-    Scaffold(
-        topBar = {
-            AppHeader(
-                title = "Почетна",
-                user = user,
-                navController = navController
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .pullRefresh(pullRefreshState)
-                // Додајемо експлицитну подршку за гест повлачења
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures(
-                        onDragStart = { dragStartY = it.y },
-                        onDragEnd = {
-                            if (dragCurrentY - dragStartY > 100f) {
-                                // Повлачење надоле
-                                coroutineScope.launch {
-                                    isRefreshing = true
-                                    homeViewModel.syncEvents()
-                                    delay(1000)
-                                    isRefreshing = false
-                                }
-                            }
-                            dragStartY = 0f
-                            dragCurrentY = 0f
-                        },
-                        onDragCancel = {
-                            dragStartY = 0f
-                            dragCurrentY = 0f
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            dragCurrentY = change.position.y
-                        }
-                    )
-                }
-        ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pullRefresh(pullRefreshState)
+    ) {
+        Scaffold(
+            topBar = {
+                AppHeader(
+                    title = "Почетна",
+                    user = user,
+                    navController = navController
+                )
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) { paddingValues ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(paddingValues)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -151,7 +141,7 @@ fun HomeScreen(
                 TodayActivitiesCard(
                     events = todayEvents,
                     onEventClick = { event ->
-                        event.id?.let { eventId ->
+                        event.id?.let { _ ->
                             navController.navigate(Screen.Calendar.route)
                         }
                     },
@@ -167,44 +157,43 @@ fun HomeScreen(
                         .weight(1f),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Box(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        NavigationCard(
-                            title = "Листе",
-                            iconResId = R.drawable.ic_list,
-                            onClick = { navController.navigate(Screen.Lists.route) }
-                        )
-                    }
+                    NavigationCard(
+                        title = "Листе",
+                        iconResId = R.drawable.ic_list,
+                        onClick = { navController.navigate(Screen.Lists.route) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    )
                     
-                    Box(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        NavigationCard(
-                            title = "Календар",
-                            iconResId = R.drawable.ic_calendar,
-                            onClick = { navController.navigate(Screen.Calendar.route) }
-                        )
-                    }
+                    NavigationCard(
+                        title = "Календар",
+                        iconResId = R.drawable.ic_calendar,
+                        onClick = { navController.navigate(Screen.Calendar.route) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    )
                     
-                    Box(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        NavigationCard(
-                            title = "Буџет",
-                            iconResId = R.drawable.ic_budget,
-                            onClick = { navController.navigate(Screen.Budget.route) }
-                        )
-                    }
+                    NavigationCard(
+                        title = "Буџет",
+                        iconResId = R.drawable.ic_budget,
+                        onClick = { navController.navigate(Screen.Budget.route) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    )
                 }
+                
+                Spacer(modifier = Modifier.height(40.dp))
             }
-            
-            PullRefreshIndicator(
-                refreshing = isRefreshing,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
         }
+        
+        StandardPullRefreshIndicator(
+            refreshing = isRefreshing,
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 }
 
@@ -212,11 +201,11 @@ fun HomeScreen(
 fun NavigationCard(
     title: String,
     iconResId: Int,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = modifier
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(

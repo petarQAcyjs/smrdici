@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
+import java.util.NoSuchElementException
 
 class AccountRepository private constructor(private val context: Context) {
     
@@ -93,6 +94,51 @@ class AccountRepository private constructor(private val context: Context) {
             loadAccounts()
         } catch (e: Exception) {
             Log.e(TAG, "Грешка при ажурирању рачуна", e)
+        }
+    }
+    
+    /**
+     * Ажурира баланс рачуна након додавања трошка или прихода
+     * @param accountId ID рачуна чији се баланс ажурира
+     * @param amount износ за који се мења баланс (може бити позитиван или негативан)
+     * @return успешно ажурирање или грешка
+     */
+    suspend fun updateAccountBalance(accountId: String, amount: Double): Result<Account> {
+        return try {
+            Log.d(TAG, "Ажурирам баланс рачуна: $accountId за износ: $amount")
+            val userId = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
+            
+            // Прво добављамо тренутно стање рачуна
+            val docRef = firestore.collection("users").document(userId)
+                .collection("accounts")
+                .document(accountId)
+            
+            val docSnapshot = docRef.get().await()
+            
+            if (!docSnapshot.exists()) {
+                return Result.failure(NoSuchElementException("Рачун са ID: $accountId није пронађен"))
+            }
+            
+            // Конвертујемо у објекат Account
+            val account = docSnapshot.toObject(Account::class.java)
+                ?: return Result.failure(IllegalStateException("Не могу да конвертујем документ у Account"))
+            
+            // Додатно постављамо ID
+            account.id = accountId
+            
+            // Ажурирамо баланс
+            val updatedAccount = account.copy(balance = account.balance + amount)
+            
+            // Чувамо назад у Firestore
+            docRef.set(updatedAccount).await()
+            
+            // Освежавамо локални кеш
+            loadAccounts()
+            
+            Result.success(updatedAccount)
+        } catch (e: Exception) {
+            Log.e(TAG, "Грешка при ажурирању баланса рачуна", e)
+            Result.failure(e)
         }
     }
     

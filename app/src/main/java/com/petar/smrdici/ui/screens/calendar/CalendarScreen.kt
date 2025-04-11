@@ -78,6 +78,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
+import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -286,7 +287,7 @@ fun CalendarScreen(
             Icon(Icons.Default.Add, "Додај догађај")
         }
 
-        PullRefreshIndicator(
+        StandardPullRefreshIndicator(
             refreshing = isRefreshing,
             state = pullRefreshState,
             modifier = Modifier.align(Alignment.TopCenter)

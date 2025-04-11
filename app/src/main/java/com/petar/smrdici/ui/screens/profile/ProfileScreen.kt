@@ -57,7 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.petar.smrdici.MainActivity
+import com.petar.smrdici.ui.MainActivity
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -481,7 +481,7 @@ fun SettingsItem(
 // Funkcija za ponovno kreiranje aktivnosti
 private fun recreateActivity(context: Context) {
     (context as? Activity)?.let { activity ->
-        val intent = Intent(activity, MainActivity::class.java)
+        val intent = Intent(activity, com.petar.smrdici.ui.MainActivity::class.java)
         activity.finish()
         activity.startActivity(intent)
     }

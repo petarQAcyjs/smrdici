@@ -1,5 +1,6 @@
 package com.petar.smrdici.data.repository
 
+import android.content.Context
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -21,6 +22,13 @@ class IncomeRepository private constructor() {
     
     private val _incomes = MutableStateFlow<List<Income>>(emptyList())
     
+    // Референца на AccountRepository
+    private var accountRepository: AccountRepository? = null
+    
+    fun setAccountRepository(accountRepo: AccountRepository) {
+        this.accountRepository = accountRepo
+    }
+    
     // Добијање тренутног корисника
     private val currentUserId: String
         get() = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
@@ -40,6 +48,9 @@ class IncomeRepository private constructor() {
             
             // Чувамо приход у бази података
             userIncomesCollection.document(incomeId).set(incomeToAdd).await()
+            
+            // Ажурирамо баланс рачуна (повећавамо га)
+            accountRepository?.updateAccountBalance(income.accountId, income.amount)
             
             // Ажурирамо локални кеш
             refreshIncomes()
@@ -84,8 +95,17 @@ class IncomeRepository private constructor() {
                 return Result.failure(IllegalArgumentException("Невалидан ID прихода"))
             }
             
+            // Прво налазимо приход да бисмо добили износ и ID рачуна
+            val incomeDoc = userIncomesCollection.document(incomeId).get().await()
+            val income = incomeDoc.toObject(Income::class.java)
+            
             // Бришемо приход из базе података
             userIncomesCollection.document(incomeId).delete().await()
+            
+            // Ако смо успешно добавили приход, враћамо баланс рачуна (смањујемо га)
+            if (income != null) {
+                accountRepository?.updateAccountBalance(income.accountId, -income.amount)
+            }
             
             // Ажурирамо локални кеш
             refreshIncomes()
@@ -199,7 +219,26 @@ class IncomeRepository private constructor() {
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e("IncomeRepository", "Грешка при слушању прихода за период", error)
-                    close(error)
+                    
+                    // Проверавамо да ли је грешка везана за недостајући индекс
+                    if (error.message?.contains("FAILED_PRECONDITION") == true && 
+                        error.message?.contains("The query requires an index") == true) {
+                        
+                        // Извлачимо URL за креирање индекса из поруке о грешци
+                        val indexUrl = error.message?.let { msg ->
+                            val urlPattern = "https://console\\.firebase\\.google\\.com[^\\s]+".toRegex()
+                            val matchResult = urlPattern.find(msg)
+                            matchResult?.value
+                        }
+                        
+                        Log.e("IncomeRepository", "Потребно је креирати индекс у Firebase конзоли. " +
+                               "Користите следећи линк: $indexUrl")
+                        
+                        // Шаљемо празну листу уместо да затворимо flow са грешком
+                        trySend(emptyList())
+                    } else {
+                        close(error)
+                    }
                     return@addSnapshotListener
                 }
                 
@@ -232,7 +271,26 @@ class IncomeRepository private constructor() {
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e("IncomeRepository", "Грешка при слушању прихода за рачун", error)
-                    close(error)
+                    
+                    // Проверавамо да ли је грешка везана за недостајући индекс
+                    if (error.message?.contains("FAILED_PRECONDITION") == true && 
+                        error.message?.contains("The query requires an index") == true) {
+                        
+                        // Извлачимо URL за креирање индекса из поруке о грешци
+                        val indexUrl = error.message?.let { msg ->
+                            val urlPattern = "https://console\\.firebase\\.google\\.com[^\\s]+".toRegex()
+                            val matchResult = urlPattern.find(msg)
+                            matchResult?.value
+                        }
+                        
+                        Log.e("IncomeRepository", "Потребно је креирати индекс у Firebase конзоли. " +
+                               "Користите следећи линк: $indexUrl")
+                        
+                        // Шаљемо празну листу уместо да затворимо flow са грешком
+                        trySend(emptyList())
+                    } else {
+                        close(error)
+                    }
                     return@addSnapshotListener
                 }
                 
@@ -290,6 +348,14 @@ class IncomeRepository private constructor() {
         fun getInstance(): IncomeRepository {
             return instance ?: synchronized(this) {
                 instance ?: IncomeRepository().also { instance = it }
+            }
+        }
+        
+        fun initialize(context: Context) {
+            if (instance == null) {
+                instance = IncomeRepository()
+                // Повезујемо са AccountRepository
+                instance?.setAccountRepository(AccountRepository.getInstance(context))
             }
         }
     }

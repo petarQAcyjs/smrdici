@@ -1,4 +1,18 @@
 <resources>
     <string name="app_name">Smrdici</string>
     <!-- Неискоришћени string ресурси су уклоњени -->
+    
+    <!-- Stringovi za BudgetBattery -->
+    <string name="left_to_spend">Preostalo za potrošnju</string>
+    <string name="budget_exceeded_by">Budžet prekoračen za</string>
+    
+    <!-- Stringovi za budžet -->
+    <string name="total_budget">Ukupni budžet</string>
+    <string name="category_budget">Budžet za kategoriju</string>
+    <string name="multi_category_budget">Budžet za više kategorija (%1$s)</string>
+    <string name="budgets">Budžeti</string>
+    <string name="no_budgets">Nema postavljenih budžeta</string>
+    <string name="no_budgets_text">Napravite budžet da biste lakše pratili svoje troškove</string>
+    <string name="budget_exceeded_info">Budžet je prekoračen za %1$s %2$s</string>
+    <string name="total_budget_info">Preostalo ukupno %1$s %2$s u budžetu</string>
 </resources>

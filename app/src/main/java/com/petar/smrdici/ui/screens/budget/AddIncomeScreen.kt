@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.google.firebase.Timestamp
 import com.petar.smrdici.data.model.Income
@@ -59,7 +60,10 @@ import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.screens.settings.AccountViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -69,15 +73,16 @@ import java.util.Locale
 fun AddIncomeScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
-    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory())
+    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory()),
+    budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current))
 ) {
     // Спречавамо непотребно учитавање EventRepository-а
-    DisposableEffect(Unit) {
-        onDispose { }
-    }
+    // DisposableEffect(Unit) {
+    //    onDispose { }
+    // }
     
-    // Добијамо приступ репозиторијуму
-    val incomeRepository = IncomeRepository.getInstance()
+    // Нема потребе директно приступати репозиторијуму, користимо budgetViewModel
+    // val incomeRepository = IncomeRepository.getInstance()
     
     // Стање за форму
     var amount by remember { mutableStateOf("") }
@@ -189,37 +194,69 @@ fun AddIncomeScreen(
         }
         
         isLoading = true
-        scope.launch {
-            try {
-                // Креирамо нови објекат прихода
-                val income = Income(
-                    amount = amount.toDouble(),
-                    description = description,
-                    category = selectedCategory?.name ?: IncomeCategory.OTHER.name,
-                    date = Timestamp(Date(selectedDate)),
-                    accountId = selectedAccountId
-                )
-                
-                Log.d("AddIncomeScreen", "Чувам приход: $income")
-                
-                // Чувамо приход у бази података
-                val result = incomeRepository.addIncome(income)
-                
-                if (result.isSuccess) {
-                    Log.d("AddIncomeScreen", "Приход је успешно сачуван")
-                    snackbarHostState.showSnackbar("Приход је успешно сачуван")
+        
+        try {
+            // Креирамо нови објекат прихода
+            val income = Income(
+                amount = amount.toDouble(),
+                description = description,
+                category = selectedCategory?.name ?: IncomeCategory.OTHER.name,
+                date = Timestamp(Date(selectedDate)),
+                accountId = selectedAccountId
+            )
+            
+            Log.d("AddIncomeScreen", "Чувам приход: $income")
+            
+            // Користимо viewModelScope уместо локалног scope-а из композиције
+            // Ово спречава отказивање корутине када се композиција промени
+            budgetViewModel.viewModelScope.launch {
+                try {
+                    // Дефинишемо променљиву резултата пре NonCancellable контекста
+                    val result = withContext(NonCancellable) {
+                        // Користимо NonCancellable контекст да спречимо отказивање операције чувања
+                        // Ово је важно за операције које морају да се заврше и не смеју бити прекинуте
+                        // чак и ако се корутина отказује (нпр. због навигације)
+                        
+                        // Користимо budgetViewModel уместо директног приступа репозиторијуму
+                        val saveResult = budgetViewModel.addIncome(income)
+                        
+                        if (saveResult.isSuccess) {
+                            Log.d("AddIncomeScreen", "Приход је успешно сачуван")
+                        } else {
+                            Log.e("AddIncomeScreen", "Грешка при чувању прихода", saveResult.exceptionOrNull())
+                        }
+                        
+                        // Враћамо резултат из NonCancellable блока
+                        saveResult
+                    }
                     
-                    // Враћамо се на претходни екран
-                    navController.popBackStack()
-                } else {
-                    Log.e("AddIncomeScreen", "Грешка при чувању прихода", result.exceptionOrNull())
-                    snackbarHostState.showSnackbar("Грешка при чувању прихода: ${result.exceptionOrNull()?.message}")
+                    // UI ажурирања извршавамо на главној нити, ван NonCancellable контекста
+                    withContext(Dispatchers.Main) {
+                        if (result.isSuccess) {
+                            snackbarHostState.showSnackbar("Приход је успешно сачуван")
+                            // Враћамо се на претходни екран
+                            navController.popBackStack()
+                        } else {
+                            snackbarHostState.showSnackbar("Грешка при чувању прихода: ${result.exceptionOrNull()?.message}")
+                        }
+                        
+                        isLoading = false
+                    }
+                } catch (e: Exception) {
+                    Log.e("AddIncomeScreen", "Грешка при чувању прихода", e)
+                    withContext(Dispatchers.Main) {
+                        snackbarHostState.showSnackbar("Грешка при чувању прихода: ${e.message}")
+                        isLoading = false
+                    }
                 }
-            } catch (e: Exception) {
-                Log.e("AddIncomeScreen", "Грешка при чувању прихода", e)
-                snackbarHostState.showSnackbar("Грешка при чувању прихода: ${e.message}")
-            } finally {
-                isLoading = false
+            }
+        } catch (e: Exception) {
+            Log.e("AddIncomeScreen", "Грешка при припреми прихода", e)
+            budgetViewModel.viewModelScope.launch {
+                withContext(Dispatchers.Main) {
+                    snackbarHostState.showSnackbar("Грешка при чувању прихода: ${e.message}")
+                    isLoading = false
+                }
             }
         }
     }

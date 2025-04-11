@@ -82,6 +82,10 @@ import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -312,7 +316,7 @@ fun ListsScreen(
             }
         }
 
-        PullRefreshIndicator(
+        StandardPullRefreshIndicator(
             refreshing = isRefreshing,
             state = pullRefreshState,
             modifier = Modifier.align(Alignment.TopCenter)
