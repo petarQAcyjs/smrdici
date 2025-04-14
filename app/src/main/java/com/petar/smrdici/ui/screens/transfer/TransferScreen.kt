@@ -107,12 +107,13 @@ fun TransferScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Purple40,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -148,7 +149,11 @@ fun TransferScreen(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 4.dp
+                        ),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Row(
                             modifier = Modifier
@@ -250,8 +255,12 @@ fun TransferCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Purple80
-        )
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp
+        ),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
@@ -416,8 +425,11 @@ fun TransferCard(
             // Дугме за трансфер
             Button(
                 onClick = onTransferClick,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = viewModel.sourceAccountId != null && viewModel.destinationAccountId != null && viewModel.amount.isNotEmpty()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                enabled = viewModel.sourceAccountId != null && viewModel.destinationAccountId != null && viewModel.amount.isNotEmpty(),
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
