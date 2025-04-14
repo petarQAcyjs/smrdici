@@ -1,6 +1,5 @@
 package com.petar.smrdici.ui.screens.budget
 
-import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,21 +11,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -53,31 +47,25 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.petar.smrdici.R
 import com.petar.smrdici.data.model.DisplayBudget
-import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.BudgetBattery
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.absoluteValue
 
 @OptIn(ExperimentalMaterialApi::class)
+@Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
 @Composable
 fun BudgetListScreen(
     navController: NavController,
-    authViewModel: AuthViewModel,
     budgetsViewModel: BudgetsViewModel = viewModel(factory = BudgetsViewModel.Factory(LocalContext.current)),
     budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current))
 ) {
@@ -91,18 +79,14 @@ fun BudgetListScreen(
     val errorMessage by budgetsViewModel.errorMessage.collectAsState()
     val expenseBudgets by budgetsViewModel.displayExpenseBudgets.collectAsState()
     val incomeBudgets by budgetsViewModel.displayIncomeBudgets.collectAsState()
-    val totalExpenseBudget by budgetsViewModel.totalExpenseBudget.collectAsState()
-    val totalIncomeBudget by budgetsViewModel.totalIncomeBudget.collectAsState()
     val totalExpenseSpent by budgetsViewModel.totalExpenseSpent.collectAsState()
     val totalIncomeReceived by budgetsViewModel.totalIncomeReceived.collectAsState()
     
     // Stanja iz BudgetViewModel za progress bar budget
     val budgetLimit by budgetViewModel.budgetLimit.collectAsState()
-    val budgetUsagePercent by budgetViewModel.budgetUsagePercent.collectAsState()
-    val totalExpenses by budgetViewModel.expenses.collectAsState()
     
     // UI stanja
-    var selectedTabIndex by remember { mutableStateOf(0) }
+    var selectedTabIndex by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val tabs = listOf("Расходи", "Приходи")
     var isRefreshing by remember { mutableStateOf(false) }
     var showAccountsDropdown by remember { mutableStateOf(false) }
@@ -117,7 +101,7 @@ fun BudgetListScreen(
         1 -> "ove sedmice"
         2 -> "ovog meseca"
         3 -> "ove godine"
-        4 -> "u ovoj periodu"
+        4 -> "u ovom periodu"
         else -> ""
     }
     
@@ -152,10 +136,6 @@ fun BudgetListScreen(
     
     // Lista perioda
     val periodStrings = listOf("Дан", "Недеља", "Месец", "Година", "Период", "Све")
-    
-    // Računamo ukupan preostali budžet
-    val totalRemainingExpenseBudget = totalExpenseBudget - totalExpenseSpent
-    val totalRemainingIncomeBudget = totalIncomeBudget - totalIncomeReceived
     
     val accounts by budgetsViewModel.accounts.collectAsState(initial = emptyList())
     val selectedAccountId by budgetsViewModel.selectedAccountId.collectAsState()
@@ -194,7 +174,7 @@ fun BudgetListScreen(
             }
         }
     ) { paddingValues ->
-        // Box са pullRefresh модификатором око целог садржаја
+        // Box sa pullRefresh модификатором око целог садржаја
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -250,11 +230,7 @@ fun BudgetListScreen(
                                 budgetsViewModel.updatePeriodIndex(index)
                                 budgetViewModel.updatePeriodIndex(index)
                                 
-                                if (budgetLimit > 0) {
-                                    budgetLimitInput = budgetLimit.toString()
-                                } else {
-                                    budgetLimitInput = ""
-                                }
+                                budgetLimitInput = if (budgetLimit > 0) budgetLimit.toString() else ""
                             },
                             modifier = Modifier.padding(horizontal = 2.dp, vertical = 0.dp)
                         ) {
@@ -360,41 +336,17 @@ fun BudgetListScreen(
                                 else -> Color(0xFF4CAF50) // Зелена
                             }
                             
-                            // Кликабилни прогрес бар
-                            Box(
+                            // Заменимо обичан прогрес бар са BudgetBattery компонентом
+                            BudgetBattery(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(16.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF424242))
-                                    .clickable { showBudgetLimitDialog = true }
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(progress.toFloat())
-                                        .height(16.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(progressColor)
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            // Информација о потрошњи
-                            Text(
-                                text = if (budgetLimit > 0) {
-                                    val remaining = budgetLimit - totalExpenseSpent
-                                    val percent = progress * 100
-                                    if (remaining >= 0) {
-                                        "Преостало: ${budgetsViewModel.formatAmount(remaining)} (${percent.toInt()}% искоришћено)"
-                                    } else {
-                                        "Прекорачење: ${budgetsViewModel.formatAmount(remaining.absoluteValue)} (${percent.toInt()}% искоришћено)"
-                                    }
-                                } else {
-                                    "Кликните на траку изнад да подесите буџетски лимит"
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.7f)
+                                    .padding(top = 8.dp, bottom = 8.dp)
+                                    .clickable { showBudgetLimitDialog = true },
+                                expenses = totalExpenseSpent,
+                                budget = budgetLimit,
+                                currency = "РСД",
+                                backgroundNotFilled = Color(0xFF303436),
+                                onClick = { showBudgetLimitDialog = true }
                             )
                         }
                         
@@ -542,7 +494,7 @@ fun BudgetListScreen(
                                     snackbarHostState.showSnackbar("Унесите валидан износ већи од нуле")
                                 }
                             }
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             scope.launch {
                                 snackbarHostState.showSnackbar("Грешка при чувању буџетског лимита")
                             }
@@ -639,59 +591,16 @@ fun BudgetListItem(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Прогрес бар
-            val percentSpent = if (displayBudget.budget.amount > 0) {
-                (displayBudget.spentAmount / displayBudget.budget.amount).coerceIn(0.0, 1.0)
-            } else 0.0
-            
-            val progressColor = when {
-                percentSpent >= 1.0 -> Color.Red
-                percentSpent >= 0.75 -> Color(0xFFFF9800) // Наранџаста
-                percentSpent >= 0.5 -> Color(0xFFFFEB3B) // Жута
-                else -> Color(0xFF4CAF50) // Зелена
-            }
-            
-            // Прогрес бар
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(12.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF424242))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(percentSpent.toFloat())
-                        .height(12.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(progressColor)
-                )
-            }
+            // Заменимо обичан прогрес бар са BudgetBattery компонентом
+            BudgetBattery(
+                modifier = Modifier.fillMaxWidth(),
+                expenses = displayBudget.spentAmount,
+                budget = displayBudget.budget.amount,
+                currency = "РСД",
+                backgroundNotFilled = Color(0xFF303436)
+            )
             
             Spacer(modifier = Modifier.height(8.dp))
-            
-            // Информација о потрошњи
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "${(percentSpent * 100).toInt()}% искоришћено",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-                
-                val remaining = displayBudget.budget.amount - displayBudget.spentAmount
-                Text(
-                    text = if (remaining >= 0) {
-                        "Преостало: ${formatAmount(remaining)}"
-                    } else {
-                        "Прекорачење: ${formatAmount(remaining.absoluteValue)}"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (remaining >= 0) Color.White.copy(alpha = 0.7f) else Color(0xFFF44336)
-                )
-            }
         }
     }
 } 

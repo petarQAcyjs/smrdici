@@ -15,6 +15,7 @@ pluginManagement {
 // Note: dependencyResolutionManagement је означен као @Incubating (експериментални),
 // али је стандардан приступ у модерним Gradle пројектима за управљање зависностима.
 // Упозорење се може игнорисати док функција не постане стабилна у будућим верзијама Gradle-а.
+@Suppress("UnstableApiUsage")
 dependencyResolutionManagement {
     repositories {
         google()

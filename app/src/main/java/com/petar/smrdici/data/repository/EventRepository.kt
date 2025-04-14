@@ -1,6 +1,5 @@
 package com.petar.smrdici.data.repository
 
-import android.content.Context
 import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -9,7 +8,6 @@ import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.Event
 import kotlinx.coroutines.tasks.await
 import java.util.Date
-import java.util.Locale
 
 // Класа је измењена да прима зависности кроз конструктор уместо да их креира интерно
 class EventRepository(
@@ -141,7 +139,8 @@ class EventRepository(
     // Добављање свих догађаја за извоз/увоз
     suspend fun getAllEvents(): List<Event> {
         return try {
-            val currentUserId = auth.currentUser?.uid ?: return emptyList()
+            // Proveravamo samo da li je korisnik prijavljen, ne čuvamo ID
+            auth.currentUser?.uid ?: return emptyList()
             
             val snapshot = eventsCollection
                 .orderBy("startTime", Query.Direction.ASCENDING)
@@ -165,7 +164,8 @@ class EventRepository(
     // Брисање свих догађаја (за операцију увоза)
     suspend fun deleteAllEvents() {
         try {
-            val currentUserId = auth.currentUser?.uid ?: return
+            // Proveravamo samo da li je korisnik prijavljen
+            auth.currentUser?.uid ?: return
             
             val snapshot = eventsCollection
                 .get()
@@ -254,7 +254,8 @@ class EventRepository(
     // Добављање догађаја између два датума
     suspend fun getEvents(startDate: Date, endDate: Date): Result<List<Event>> {
         return try {
-            val userId = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
+            // Proveravamo samo da li je korisnik prijavljen
+            auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
             
             val startTimestamp = Timestamp(startDate)
             val endTimestamp = Timestamp(endDate)
@@ -283,12 +284,10 @@ class EventRepository(
     }
     
     companion object {
-        private const val TAG = "EventRepository"
-        
         @Volatile
         private var instance: EventRepository? = null
         
-        fun getInstance(context: Context): EventRepository {
+        fun getInstance(): EventRepository {
             return instance ?: synchronized(this) {
                 instance ?: EventRepository(
                     FirebaseFirestore.getInstance(),

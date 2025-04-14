@@ -1,6 +1,5 @@
 package com.petar.smrdici.data.repository
 
-import android.content.Context
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -61,29 +60,6 @@ class ExpenseRepository private constructor() {
         }
     }
     
-    // Ажурирање расхода
-    suspend fun updateExpense(expense: Expense): Result<Expense> {
-        return try {
-            Log.d("ExpenseRepository", "Ажурирам расход: ${expense.id}")
-            
-            // Проверавамо да ли расход има валидан ID
-            if (expense.id.isEmpty()) {
-                return Result.failure(IllegalArgumentException("Расход нема валидан ID"))
-            }
-            
-            // Чувамо расход у бази података
-            userExpensesCollection.document(expense.id).set(expense).await()
-            
-            // Ажурирамо локални кеш
-            refreshExpenses()
-            
-            Result.success(expense)
-        } catch (e: Exception) {
-            Log.e("ExpenseRepository", "Грешка при ажурирању расхода", e)
-            Result.failure(e)
-        }
-    }
-    
     // Брисање расхода
     suspend fun deleteExpense(expenseId: String): Result<Unit> {
         return try {
@@ -112,33 +88,6 @@ class ExpenseRepository private constructor() {
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("ExpenseRepository", "Грешка при брисању расхода", e)
-            Result.failure(e)
-        }
-    }
-    
-    // Добијање једног расхода по ID-у
-    suspend fun getExpenseById(expenseId: String): Result<Expense> {
-        return try {
-            Log.d("ExpenseRepository", "Учитавам расход: $expenseId")
-            
-            // Проверавамо да ли је ID валидан
-            if (expenseId.isEmpty()) {
-                return Result.failure(IllegalArgumentException("Невалидан ID расхода"))
-            }
-            
-            // Учитавамо расход из базе података
-            val docSnapshot = userExpensesCollection.document(expenseId).get().await()
-            
-            if (docSnapshot.exists()) {
-                val expense = docSnapshot.toObject(Expense::class.java)
-                    ?: return Result.failure(IllegalStateException("Не могу да претворим документ у Expense објекат"))
-                
-                Result.success(expense)
-            } else {
-                Result.failure(NoSuchElementException("Расход није пронађен"))
-            }
-        } catch (e: Exception) {
-            Log.e("ExpenseRepository", "Грешка при учитавању расхода", e)
             Result.failure(e)
         }
     }
@@ -225,7 +174,7 @@ class ExpenseRepository private constructor() {
                         
                         // Извлачимо URL за креирање индекса из поруке о грешци
                         val indexUrl = error.message?.let { msg ->
-                            val urlPattern = "https://console\\.firebase\\.google\\.com[^\\s]+".toRegex()
+                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
                             val matchResult = urlPattern.find(msg)
                             matchResult?.value
                         }
@@ -277,7 +226,7 @@ class ExpenseRepository private constructor() {
                         
                         // Извлачимо URL за креирање индекса из поруке о грешци
                         val indexUrl = error.message?.let { msg ->
-                            val urlPattern = "https://console\\.firebase\\.google\\.com[^\\s]+".toRegex()
+                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
                             val matchResult = urlPattern.find(msg)
                             matchResult?.value
                         }
@@ -350,11 +299,11 @@ class ExpenseRepository private constructor() {
             }
         }
         
-        fun initialize(context: Context) {
+        fun initialize() {
             if (instance == null) {
                 instance = ExpenseRepository()
                 // Повезујемо са AccountRepository
-                instance?.setAccountRepository(AccountRepository.getInstance(context))
+                instance?.setAccountRepository(AccountRepository.getInstance())
             }
         }
     }

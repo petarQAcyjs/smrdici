@@ -5,11 +5,9 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Budget
-import com.petar.smrdici.data.model.BudgetStatus
 import com.petar.smrdici.data.model.BudgetType
 import com.petar.smrdici.data.model.DisplayBudget
 import com.petar.smrdici.data.model.Expense
@@ -18,26 +16,23 @@ import com.petar.smrdici.data.repository.BudgetRepository
 import com.petar.smrdici.data.repository.ExpenseRepository
 import com.petar.smrdici.data.repository.IncomeRepository
 import com.petar.smrdici.data.repository.RepositoryManager
-import com.petar.smrdici.ui.screens.settings.BudgetSettingsViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 /**
  * ViewModel za upravljanje pojedinačnim budžetom i njegovim detaljima
  */
+@Suppress("unused")
 class BudgetDetailViewModel(
     private val budgetRepository: BudgetRepository,
     private val expenseRepository: ExpenseRepository,
-    private val incomeRepository: IncomeRepository,
-    private val context: Context
+    private val incomeRepository: IncomeRepository
 ) : ViewModel() {
     
-    private val TAG = "BudgetDetailViewModel"
+    private val tag = "BudgetDetailViewModel"
     
     // Trenutni budžet
     private val _currentBudget = MutableStateFlow<Budget?>(null)
@@ -80,7 +75,7 @@ class BudgetDetailViewModel(
                     _isLoading.value = false
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Greška pri učitavanju budžeta", e)
+                Log.e(tag, "Greška pri učitavanju budžeta", e)
                 _errorMessage.value = "Greška pri učitavanju budžeta: ${e.message}"
                 _isLoading.value = false
             }
@@ -126,7 +121,7 @@ class BudgetDetailViewModel(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Greška pri učitavanju transakcija", e)
+                Log.e(tag, "Greška pri učitavanju transakcija", e)
                 _errorMessage.value = "Greška pri učitavanju transakcija: ${e.message}"
                 _isLoading.value = false
             }
@@ -208,109 +203,6 @@ class BudgetDetailViewModel(
     }
     
     /**
-     * Kreira novi budžet
-     */
-    fun createBudget(
-        name: String,
-        amount: Double,
-        categoryIds: List<String>,
-        accountId: String,
-        startDate: Timestamp,
-        endDate: Timestamp,
-        type: BudgetType
-    ) {
-        if (name.isBlank() || amount <= 0) {
-            _errorMessage.value = "Naziv ne može biti prazan i iznos mora biti veći od 0"
-            return
-        }
-        
-        viewModelScope.launch {
-            _isLoading.value = true
-            
-            try {
-                val newBudget = Budget(
-                    id = "", // Generisaće se automatski
-                    name = name,
-                    amount = amount,
-                    categoryIds = categoryIds,
-                    accountId = accountId,
-                    startDate = startDate,
-                    endDate = endDate,
-                    orderId = 0.0, // Postavljamo na kraj
-                    isActive = true,
-                    type = type
-                )
-                
-                val result = budgetRepository.addBudget(newBudget)
-                if (result.isSuccess) {
-                    _currentBudget.value = result.getOrNull()
-                    loadBudget(result.getOrNull()?.id ?: "")
-                } else {
-                    _errorMessage.value = "Greška pri kreiranju budžeta: ${result.exceptionOrNull()?.message}"
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Greška pri kreiranju budžeta", e)
-                _errorMessage.value = "Greška pri kreiranju budžeta: ${e.message}"
-            }
-            
-            _isLoading.value = false
-        }
-    }
-    
-    /**
-     * Ažurira postojeći budžet
-     */
-    fun updateBudget(budget: Budget) {
-        if (budget.name.isBlank() || budget.amount <= 0) {
-            _errorMessage.value = "Naziv ne može biti prazan i iznos mora biti veći od 0"
-            return
-        }
-        
-        viewModelScope.launch {
-            _isLoading.value = true
-            
-            try {
-                val result = budgetRepository.updateBudget(budget)
-                if (result.isSuccess) {
-                    _currentBudget.value = result.getOrNull()
-                    loadBudget(budget.id)
-                } else {
-                    _errorMessage.value = "Greška pri ažuriranju budžeta: ${result.exceptionOrNull()?.message}"
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Greška pri ažuriranju budžeta", e)
-                _errorMessage.value = "Greška pri ažuriranju budžeta: ${e.message}"
-            }
-            
-            _isLoading.value = false
-        }
-    }
-    
-    /**
-     * Briše budžet
-     */
-    fun deleteBudget(budgetId: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            
-            try {
-                val result = budgetRepository.deleteBudget(budgetId)
-                if (result.isSuccess) {
-                    _currentBudget.value = null
-                    _displayBudget.value = null
-                } else {
-                    _errorMessage.value = "Greška pri brisanju budžeta: ${result.exceptionOrNull()?.message}"
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Greška pri brisanju budžeta", e)
-                _errorMessage.value = "Greška pri brisanju budžeta: ${e.message}"
-            }
-            
-            _isLoading.value = false
-        }
-    }
-    
-    /**
      * Factory za kreiranje BudgetDetailViewModel
      */
     class Factory(private val context: Context) : ViewModelProvider.Factory {
@@ -327,8 +219,7 @@ class BudgetDetailViewModel(
                 return BudgetDetailViewModel(
                     budgetRepository = BudgetRepository(firestore, auth),
                     expenseRepository = expenseRepo,
-                    incomeRepository = incomeRepo,
-                    context = context
+                    incomeRepository = incomeRepo
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")

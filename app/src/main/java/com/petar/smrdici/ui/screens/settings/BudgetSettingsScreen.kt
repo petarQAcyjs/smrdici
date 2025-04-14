@@ -1,6 +1,5 @@
 package com.petar.smrdici.ui.screens.settings
 
-import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +27,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -94,8 +94,6 @@ fun BudgetSettingsScreen(
     val coroutineScope = rememberCoroutineScope()
     
     // Пратимо стање процеса извоза/увоза
-    val isExporting by dataExportImportViewModel.isExporting.collectAsState()
-    val isImporting by dataExportImportViewModel.isImporting.collectAsState()
     val exportSuccess by dataExportImportViewModel.exportSuccess.collectAsState()
     val importSuccess by dataExportImportViewModel.importSuccess.collectAsState()
     
@@ -171,27 +169,9 @@ fun BudgetSettingsScreen(
     val customPeriodStartDay by budgetSettingsViewModel.customPeriodStartDay.collectAsState()
     val accounts by accountViewModel.accounts.collectAsState()
     
-    // Мапирамо Period енумерацију на стрингове за приказ
-    val periodStrings = mapOf(
-        Period.DAILY to "Дневно",
-        Period.WEEKLY to "Недељно",
-        Period.MONTHLY to "Месечно",
-        Period.YEARLY to "Годишње",
-        Period.CUSTOM to "Прилагођено",
-        Period.ALL to "Све"
-    )
-    
-    // Мапирамо Currency енумерацију на стрингове за приказ
-    val currencyStrings = mapOf(
-        Currency.RSD to "Динар (RSD)",
-        Currency.EUR to "Евро (EUR)",
-        Currency.USD to "Долар (USD)"
-    )
-    
     // Стање за падајуће меније
     var currencyExpanded by remember { mutableStateOf(false) }
     var periodExpanded by remember { mutableStateOf(false) }
-    var customPeriodExpanded by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
         accountViewModel.refreshAccounts()
@@ -516,18 +496,39 @@ fun BudgetSettingsScreen(
                         }
                         
                         // Дугме за додавање новог рачуна
-                        TextButton(
-                            onClick = {
-                                navController.navigate(Screen.AddAccount.route)
-                            },
-                            modifier = Modifier.align(Alignment.End)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Додај рачун")
+                            // Дугме за трансфер новца
+                            TextButton(
+                                onClick = {
+                                    navController.navigate(Screen.Transfer.route)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.SwapHoriz,
+                                    contentDescription = null
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Трансфер новца")
+                            }
+                            
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            // Дугме за додавање рачуна
+                            TextButton(
+                                onClick = {
+                                    navController.navigate(Screen.AddAccount.route)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = null
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Додај рачун")
+                            }
                         }
                     }
                 }

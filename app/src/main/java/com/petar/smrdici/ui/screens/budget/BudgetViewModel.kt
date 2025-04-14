@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.core.content.edit
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Account
@@ -22,49 +23,70 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
 
+@Suppress("UNUSED")
 class BudgetViewModel(
     private val expenseRepository: ExpenseRepository,
     private val incomeRepository: IncomeRepository,
     private val settingsViewModel: BudgetSettingsViewModel,
-    private val context: Context
+    private val applicationContext: Context
 ) : ViewModel() {
     
-    // UI стање
+    // UI стање - користи се у функцији updateUiState, али није јавно изложено
     private val _uiState = MutableStateFlow(BudgetUiState())
+    
+    @Suppress("UNUSED")
     val uiState: StateFlow<BudgetUiState> = _uiState.asStateFlow()
     
-    // Стање за период
+    // Стање за период - користи се у рачунању периода
     private val _selectedPeriodIndex = MutableStateFlow(2) // Подразумевано месечно
+    
+    @Suppress("UNUSED")
     val selectedPeriodIndex: StateFlow<Int> = _selectedPeriodIndex.asStateFlow()
     
-    // Стање за период као Period објекат
+    // Стање за период као Period објекат - користи се у рачунању периода
     private val _selectedPeriod = MutableStateFlow(Period.MONTHLY)
+    
+    @Suppress("UNUSED")
     val selectedPeriod: StateFlow<Period> = _selectedPeriod.asStateFlow()
     
-    // Остала стања из оригиналаног ViewModel-а
+    // Expenses и Incomes - користе се у калкулацијама и ажурирању UI
     private val _expenses = MutableStateFlow<List<Expense>>(emptyList())
+    
+    @Suppress("UNUSED")
     val expenses: StateFlow<List<Expense>> = _expenses.asStateFlow()
     
     private val _incomes = MutableStateFlow<List<Income>>(emptyList())
+    
+    @Suppress("UNUSED")
     val incomes: StateFlow<List<Income>> = _incomes.asStateFlow()
     
     // Додајемо ове променљиве у BudgetViewModel
     private val _accounts = MutableStateFlow<List<Account>>(emptyList())
+    
+    @Suppress("UNUSED")
     val accounts: StateFlow<List<Account>> = _accounts.asStateFlow()
     
     private val _isLoading = MutableStateFlow(false)
+    
+    @Suppress("UNUSED")
     val isLoading = _isLoading.asStateFlow()
     
-    // Додајемо променљиву за селектовани рачун
+    // Додајемо променљиву за селектовани рачун - користи се у BudgetListScreen.kt
     private val _selectedAccountId = MutableStateFlow<String?>(null) // null значи "сви рачуни"
+    
+    @Suppress("UNUSED")
     val selectedAccountId: StateFlow<String?> = _selectedAccountId.asStateFlow()
     
     // Додајемо нове променљиве за управљање буџетским лимитом
     private val _budgetLimit = MutableStateFlow(0.0)
+    
+    @Suppress("UNUSED")
     val budgetLimit: StateFlow<Double> = _budgetLimit.asStateFlow()
     
-    // Проценат искоришћености буџета
+    // Проценат искоришћености буџета - користи се на нивоу View-a
     private val _budgetUsagePercent = MutableStateFlow(0.0)
+    
+    @Suppress("UNUSED")
     val budgetUsagePercent: StateFlow<Double> = _budgetUsagePercent.asStateFlow()
     
     init {
@@ -97,6 +119,7 @@ class BudgetViewModel(
         loadAccounts()
     }
     
+    @Suppress("UNUSED")
     fun updatePeriodIndex(index: Int) {
         if (_selectedPeriodIndex.value != index) {
             _selectedPeriodIndex.value = index
@@ -129,6 +152,7 @@ class BudgetViewModel(
     }
     
     // Јавна метода за експлицитно учитавање трансакција
+    @Suppress("UNUSED")
     fun reloadTransactions() {
         viewModelScope.launch {
             try {
@@ -445,11 +469,32 @@ class BudgetViewModel(
         }
     }
     
+    // Метода за израчунавање процента искоришћености буџета
+    private fun calculateBudgetUsage() {
+        val limit = _budgetLimit.value
+        // Ако лимит није постављен или је нула, нема смисла рачунати проценат
+        if (limit <= 0) {
+            _budgetUsagePercent.value = 0.0
+            return
+        }
+        
+        // Укупни трошкови за тренутни период
+        val totalExpense = _expenses.value.sumOf { it.amount }
+        
+        // Израчунавамо проценат (0.0 - 1.0)
+        val percent = totalExpense / limit
+        _budgetUsagePercent.value = percent
+        
+        Log.d("BudgetViewModel", "Израчунат проценат буџета: $percent (потрошено $totalExpense од $limit)")
+        
+        // Користимо _uiState за ажурирање стања UI-а са информацијама о буџету
+        updateUiState()
+    }
+    
     // Нова функција за ажурирање UI стања
     private fun updateUiState() {
-        // Ажурирамо уи стање само ако су нове вредности различите од постојећих
-        val currentState = _uiState.value
-        val newState = currentState.copy(
+        // Ажурирамо уи стање са свим релевантним подацима
+        val newState = BudgetUiState(
             expenses = _expenses.value,
             incomes = _incomes.value,
             accounts = _accounts.value,
@@ -458,12 +503,13 @@ class BudgetViewModel(
         )
         
         // Проверавамо да ли је дошло до стварне промене пре ажурирања стања
-        if (currentState != newState) {
+        if (_uiState.value != newState) {
             _uiState.value = newState
         }
     }
     
-    // Метода за одабир рачуна
+    // Metoda za odabir računa - koristi se u BudgetListScreen.kt
+    @Suppress("UNUSED")
     fun selectAccount(accountId: String?) {
         if (_selectedAccountId.value != accountId) {
             _selectedAccountId.value = accountId
@@ -476,108 +522,111 @@ class BudgetViewModel(
         }
     }
     
-    // Метода која проверава да ли је неки рачун већ селектован
+    // Metoda koja proverava da li je neki račun već selektovan
+    @Suppress("UNUSED")
     fun isAccountSelected(): Boolean {
         return _selectedAccountId.value != null
     }
     
-    // Додајемо методу за брисање трошка
+    // Dodajemo metodu za brisanje troška
+    @Suppress("UNUSED")
     fun deleteExpense(expenseId: String) {
         viewModelScope.launch {
             try {
-                Log.d("BudgetViewModel", "Бришем трошак: $expenseId")
+                Log.d("BudgetViewModel", "Brisanje troška: $expenseId")
                 
-                // Прво треба да добавимо трошак да бисмо знали износ и рачун
+                // Prvo treba da dobavimo trošak da bismo znali iznos i račun
                 val expense = _expenses.value.find { it.id == expenseId }
                 if (expense != null) {
                     val result = expenseRepository.deleteExpense(expenseId)
                     
-                    // Користимо NonCancellable контекст да спречимо отказивање током навигације
+                    // Koristimo NonCancellable kontekst da sprečimo otkazivanje tokom navigacije
                     kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
                         if (result.isSuccess) {
-                            // Када се трошак брише, балансу рачуна треба додати износ (јер смо га пре одузели)
-                            val accountRepo = com.petar.smrdici.data.repository.AccountRepository.getInstance(context)
+                            // Kada se trošak briše, balansu računa treba dodati iznos (jer smo ga pre oduzeli)
+                            val accountRepo = com.petar.smrdici.data.repository.AccountRepository.getInstance()
                             val updateResult = accountRepo.updateAccountBalance(expense.accountId, expense.amount)
                             
                             if (updateResult.isSuccess) {
-                                Log.d("BudgetViewModel", "Баланс рачуна ажуриран након брисања трошка")
+                                Log.d("BudgetViewModel", "Balans računa ažuriran nakon brisanja troška")
                             } else {
-                                Log.e("BudgetViewModel", "Грешка при ажурирању баланса рачуна", updateResult.exceptionOrNull())
+                                Log.e("BudgetViewModel", "Greška pri ažuriranju balansa računa", updateResult.exceptionOrNull())
                             }
                             
-                            // Поново учитај трансакције након брисања
-                            Log.d("BudgetViewModel", "Трошак успешно обрисан, учитавам трансакције")
-                            // Кратко сачекамо да Firebase ажурира податке
+                            // Ponovno učitaj transakcije nakon brisanja
+                            Log.d("BudgetViewModel", "Trošak uspešno obrisan, učitavam transakcije")
+                            // Kratko sačekamo da Firebase ažurira podatke
                             kotlinx.coroutines.delay(500)
                             loadTransactions()
-                            // Експлицитно учитавамо и рачуне
+                            // Eksplicitno učitavamo i račune
                             loadAccounts()
                         } else {
-                            Log.e("BudgetViewModel", "Грешка при брисању трошка", result.exceptionOrNull())
-                            _uiState.value = _uiState.value.copy(error = "Грешка при брисању трошка: ${result.exceptionOrNull()?.message}")
+                            Log.e("BudgetViewModel", "Greška pri brisanju troška", result.exceptionOrNull())
+                            _uiState.value = _uiState.value.copy(error = "Greška pri brisanju troška: ${result.exceptionOrNull()?.message}")
                         }
                     }
                 } else {
-                    Log.e("BudgetViewModel", "Трошак са ID $expenseId није пронађен")
+                    Log.e("BudgetViewModel", "Trošak sa ID $expenseId nije pronađen")
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) {
-                    // Игноришемо грешке отказивања корутине
-                    Log.d("BudgetViewModel", "Корутина за брисање трошка је отказана")
+                    // Ignorišemo greške otkazivanja korutine
+                    Log.d("BudgetViewModel", "Korutina za brisanje troška je otkazana")
                 } else {
-                    Log.e("BudgetViewModel", "Грешка при брисању трошка", e)
-                    _uiState.value = _uiState.value.copy(error = "Грешка при брисању трошка: ${e.message}")
+                    Log.e("BudgetViewModel", "Greška pri brisanju troška", e)
+                    _uiState.value = _uiState.value.copy(error = "Greška pri brisanju troška: ${e.message}")
                 }
             }
         }
     }
     
-    // Додајемо методу за брисање прихода
+    // Dodajemo metodu za brisanje prihoda
+    @Suppress("UNUSED")
     fun deleteIncome(incomeId: String) {
         viewModelScope.launch {
             try {
-                Log.d("BudgetViewModel", "Бришем приход: $incomeId")
+                Log.d("BudgetViewModel", "Brisanje prihoda: $incomeId")
                 
-                // Прво треба да добавимо приход да бисмо знали износ и рачун
+                // Prvo treba da dobavimo prihod da bismo znali iznos i račun
                 val income = _incomes.value.find { it.id == incomeId }
                 if (income != null) {
                     val result = incomeRepository.deleteIncome(incomeId)
                     
-                    // Користимо NonCancellable контекст да спречимо отказивање током навигације
+                    // Koristimo NonCancellable kontekst da sprečimo otkazivanje tokom navigacije
                     kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
                         if (result.isSuccess) {
-                            // Када се приход брише, од баланса рачуна треба одузети износ (јер смо га пре додали)
-                            val accountRepo = com.petar.smrdici.data.repository.AccountRepository.getInstance(context)
+                            // Kada se prihod briše, od balansa računa treba oduzeti iznos (jer smo ga pre dodali)
+                            val accountRepo = com.petar.smrdici.data.repository.AccountRepository.getInstance()
                             val updateResult = accountRepo.updateAccountBalance(income.accountId, -income.amount)
                             
                             if (updateResult.isSuccess) {
-                                Log.d("BudgetViewModel", "Баланс рачуна ажуриран након брисања прихода")
+                                Log.d("BudgetViewModel", "Balans računa ažuriran nakon brisanja prihoda")
                             } else {
-                                Log.e("BudgetViewModel", "Грешка при ажурирању баланса рачуна", updateResult.exceptionOrNull())
+                                Log.e("BudgetViewModel", "Greška pri ažuriranju balansa računa", updateResult.exceptionOrNull())
                             }
                             
-                            // Поново учитај трансакције након брисања
-                            Log.d("BudgetViewModel", "Приход успешно обрисан, учитавам трансакције")
-                            // Кратко сачекамо да Firebase ажурира податке
+                            // Ponovno učitaj transakcije nakon brisanja
+                            Log.d("BudgetViewModel", "Prihod uspešno obrisan, učitavam transakcije")
+                            // Kratko sačekamo da Firebase ažurira podatke
                             kotlinx.coroutines.delay(500)
                             loadTransactions()
-                            // Експлицитно учитавамо и рачуне
+                            // Eksplicitno učitavamo i račune
                             loadAccounts()
                         } else {
-                            Log.e("BudgetViewModel", "Грешка при брисању прихода", result.exceptionOrNull())
-                            _uiState.value = _uiState.value.copy(error = "Грешка при брисању прихода: ${result.exceptionOrNull()?.message}")
+                            Log.e("BudgetViewModel", "Greška pri brisanju prihoda", result.exceptionOrNull())
+                            _uiState.value = _uiState.value.copy(error = "Greška pri brisanju prihoda: ${result.exceptionOrNull()?.message}")
                         }
                     }
                 } else {
-                    Log.e("BudgetViewModel", "Приход са ID $incomeId није пронађен")
+                    Log.e("BudgetViewModel", "Prihod sa ID $incomeId nije pronađen")
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) {
-                    // Игноришемо грешке отказивања корутине
-                    Log.d("BudgetViewModel", "Корутина за брисање прихода је отказана")
+                    // Ignorišemo greške otkazivanja korutine
+                    Log.d("BudgetViewModel", "Korutina za brisanje prihoda je otkazana")
                 } else {
-                    Log.e("BudgetViewModel", "Грешка при брисању прихода", e)
-                    _uiState.value = _uiState.value.copy(error = "Грешка при брисању прихода: ${e.message}")
+                    Log.e("BudgetViewModel", "Greška pri brisanju prihoda", e)
+                    _uiState.value = _uiState.value.copy(error = "Greška pri brisanju prihoda: ${e.message}")
                 }
             }
         }
@@ -594,7 +643,7 @@ class BudgetViewModel(
                 
                 if (result.isSuccess) {
                     // Када се додаје трошак, од баланса рачуна треба одузети износ
-                    val accountRepo = com.petar.smrdici.data.repository.AccountRepository.getInstance(context)
+                    val accountRepo = com.petar.smrdici.data.repository.AccountRepository.getInstance()
                     val updateResult = accountRepo.updateAccountBalance(expense.accountId, -expense.amount)
                     
                     if (updateResult.isSuccess) {
@@ -636,7 +685,7 @@ class BudgetViewModel(
                 
                 if (result.isSuccess) {
                     // Када се додаје приход, балансу рачуна треба додати износ
-                    val accountRepo = com.petar.smrdici.data.repository.AccountRepository.getInstance(context)
+                    val accountRepo = com.petar.smrdici.data.repository.AccountRepository.getInstance()
                     val updateResult = accountRepo.updateAccountBalance(income.accountId, income.amount)
                     
                     if (updateResult.isSuccess) {
@@ -706,11 +755,12 @@ class BudgetViewModel(
     }
     
     // Нова метода за чување буџетског лимита
+    @Suppress("UNUSED")
     fun saveBudgetLimit(limit: Double) {
         viewModelScope.launch {
             try {
                 // Користимо SharedPreferences за чување буџетског лимита
-                val sharedPrefs = context.getSharedPreferences("budget_settings", Context.MODE_PRIVATE)
+                val sharedPrefs = applicationContext.getSharedPreferences("budget_settings", Context.MODE_PRIVATE)
                 val periodKey = when (_selectedPeriod.value) {
                     Period.DAILY -> "daily"
                     Period.WEEKLY -> "weekly"
@@ -724,8 +774,10 @@ class BudgetViewModel(
                 val accountKey = _selectedAccountId.value ?: "all_accounts"
                 val key = "budget_limit_${periodKey}_$accountKey"
                 
-                // Чувамо буџетски лимит у SharedPreferences
-                sharedPrefs.edit().putFloat(key, limit.toFloat()).apply()
+                // Чувамо буџетски лимит у SharedPreferences користећи KTX екстензију
+                sharedPrefs.edit {
+                    putFloat(key, limit.toFloat())
+                }
                 
                 // Ажурирамо вредност у StateFlow-у
                 _budgetLimit.value = limit
@@ -744,7 +796,7 @@ class BudgetViewModel(
     private fun loadBudgetLimit() {
         viewModelScope.launch {
             try {
-                val sharedPrefs = context.getSharedPreferences("budget_settings", Context.MODE_PRIVATE)
+                val sharedPrefs = applicationContext.getSharedPreferences("budget_settings", Context.MODE_PRIVATE)
                 val periodKey = when (_selectedPeriod.value) {
                     Period.DAILY -> "daily"
                     Period.WEEKLY -> "weekly"
@@ -772,23 +824,33 @@ class BudgetViewModel(
         }
     }
     
-    // Метода за израчунавање процента искоришћености буџета
-    private fun calculateBudgetUsage() {
-        val limit = _budgetLimit.value
-        // Ако лимит није постављен или је нула, нема смисла рачунати проценат
-        if (limit <= 0) {
-            _budgetUsagePercent.value = 0.0
-            return
+    // Јавна метода за добијање формата периода као текста
+    @Suppress("UNUSED")
+    fun getPeriodDisplayText(): String {
+        return when (_selectedPeriod.value) {
+            Period.DAILY -> "данас"
+            Period.WEEKLY -> "ове недеље"
+            Period.MONTHLY -> "овог месеца"
+            Period.YEARLY -> "ове године"
+            Period.CUSTOM -> "у овом периоду"
+            Period.ALL -> "укупно"
         }
+    }
+    
+    // Метода за проверу да ли је буџет прекорачен
+    @Suppress("UNUSED")
+    fun isBudgetExceeded(): Boolean {
+        val limit = _budgetLimit.value
+        if (limit <= 0) return false
         
-        // Укупни трошкови за тренутни период
         val totalExpense = _expenses.value.sumOf { it.amount }
-        
-        // Израчунавамо проценат (0.0 - 1.0)
-        val percent = totalExpense / limit
-        _budgetUsagePercent.value = percent
-        
-        Log.d("BudgetViewModel", "Израчунат проценат буџета: $percent (потрошено $totalExpense од $limit)")
+        return totalExpense > limit
+    }
+    
+    // Метода за форматирање износа новца
+    @Suppress("UNUSED")
+    fun formatAmount(amount: Double): String {
+        return String.format(java.util.Locale.getDefault(), "%,.2f", amount)
     }
     
     // Фабрика за креирање ViewModel-а
@@ -800,14 +862,19 @@ class BudgetViewModel(
                 val incomeRepository = IncomeRepository.getInstance()
                 val settingsViewModel = BudgetSettingsViewModel.Factory(context)
                     .create(BudgetSettingsViewModel::class.java)
-                return BudgetViewModel(expenseRepository, incomeRepository, settingsViewModel, context) as T
+                return BudgetViewModel(
+                    expenseRepository, 
+                    incomeRepository, 
+                    settingsViewModel, 
+                    context.applicationContext
+                ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
 }
 
-// UI стање за буџет
+// UI stanje za буџет
 data class BudgetUiState(
     val isLoading: Boolean = false,
     val expenses: List<Expense> = emptyList(),

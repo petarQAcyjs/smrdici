@@ -17,7 +17,6 @@ import com.petar.smrdici.data.repository.ExportData
 import com.petar.smrdici.data.repository.ExpenseRepository
 import com.petar.smrdici.data.repository.IncomeRepository
 import com.petar.smrdici.data.repository.ListRepository
-import com.petar.smrdici.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,14 +24,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class DataExportImportViewModel(
-    private val context: Context,
     private val dataExportImportRepository: DataExportImportRepository,
     private val accountRepository: AccountRepository,
     private val expenseRepository: ExpenseRepository,
     private val incomeRepository: IncomeRepository,
     private val eventRepository: EventRepository,
-    private val listRepository: ListRepository,
-    private val settingsRepository: SettingsRepository
+    private val listRepository: ListRepository
 ) : ViewModel() {
     
     private val _isExporting = MutableStateFlow(false)
@@ -74,7 +71,7 @@ class DataExportImportViewModel(
                 // Izvoz podataka
                 val success = dataExportImportRepository.exportData(uri, exportData)
                 _exportSuccess.value = success
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 _exportSuccess.value = false
             } finally {
                 _isExporting.value = false
@@ -124,7 +121,7 @@ class DataExportImportViewModel(
                 } else {
                     _importSuccess.value = false
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 _importSuccess.value = false
             } finally {
                 _isImporting.value = false
@@ -149,14 +146,12 @@ class DataExportImportViewModel(
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(DataExportImportViewModel::class.java)) {
                 return DataExportImportViewModel(
-                    context,
                     DataExportImportRepository.getInstance(context),
-                    AccountRepository.getInstance(context),
+                    AccountRepository.getInstance(),
                     ExpenseRepository.getInstance(),
                     IncomeRepository.getInstance(),
-                    EventRepository.getInstance(context),
-                    ListRepository.getInstance(context),
-                    SettingsRepository.getInstance(context)
+                    EventRepository.getInstance(),
+                    ListRepository.getInstance()
                 ) as T
             }
             throw IllegalArgumentException("Непознати ViewModel класа")

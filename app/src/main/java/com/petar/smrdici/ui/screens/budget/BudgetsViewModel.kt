@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Account
@@ -24,8 +23,6 @@ import com.petar.smrdici.ui.screens.settings.Period
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
@@ -38,11 +35,10 @@ class BudgetsViewModel(
     private val expenseRepository: ExpenseRepository,
     private val incomeRepository: IncomeRepository,
     private val accountRepository: AccountRepository,
-    private val settingsViewModel: BudgetSettingsViewModel,
-    private val context: Context
+    private val settingsViewModel: BudgetSettingsViewModel
 ) : ViewModel() {
     
-    private val TAG = "BudgetsViewModel"
+    private val tag = "BudgetsViewModel"
     
     // Lista svih računa
     private val _accounts = MutableStateFlow<List<Account>>(emptyList())
@@ -52,19 +48,15 @@ class BudgetsViewModel(
     private val _selectedPeriodIndex = MutableStateFlow(2) // Podrazumevano mesečno
     val selectedPeriodIndex: StateFlow<Int> = _selectedPeriodIndex.asStateFlow()
     
+    // Interno stanje za period - koristimo interno
     private val _selectedPeriod = MutableStateFlow(Period.MONTHLY)
-    val selectedPeriod: StateFlow<Period> = _selectedPeriod.asStateFlow()
     
     // Svi budžeti
     private val _allBudgets = MutableStateFlow<List<Budget>>(emptyList())
     
-    // Budžeti za rashode
+    // Interna stanja za budžete
     private val _expenseBudgets = MutableStateFlow<List<Budget>>(emptyList())
-    val expenseBudgets: StateFlow<List<Budget>> = _expenseBudgets.asStateFlow()
-    
-    // Budžeti za prihode
     private val _incomeBudgets = MutableStateFlow<List<Budget>>(emptyList())
-    val incomeBudgets: StateFlow<List<Budget>> = _incomeBudgets.asStateFlow()
     
     // DisplayBudget lista za rashode
     private val _displayExpenseBudgets = MutableStateFlow<List<DisplayBudget>>(emptyList())
@@ -85,12 +77,9 @@ class BudgetsViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage = _errorMessage
     
-    // Ukupni podaci o budžetu
+    // Ukupni podaci o budžetu - interno stanje
     private val _totalExpenseBudget = MutableStateFlow(0.0)
-    val totalExpenseBudget: StateFlow<Double> = _totalExpenseBudget.asStateFlow()
-    
     private val _totalIncomeBudget = MutableStateFlow(0.0)
-    val totalIncomeBudget: StateFlow<Double> = _totalIncomeBudget.asStateFlow()
     
     private val _totalExpenseSpent = MutableStateFlow(0.0)
     val totalExpenseSpent: StateFlow<Double> = _totalExpenseSpent.asStateFlow()
@@ -149,9 +138,9 @@ class BudgetsViewModel(
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) {
                     // Preskačemo grešku ako je posao otkazan
-                    Log.d(TAG, "Учитавање рачуна отказано", e)
+                    Log.d(tag, "Учитавање рачуна отказано", e)
                 } else {
-                    Log.e(TAG, "Грешка при учитавању рачуна", e)
+                    Log.e(tag, "Грешка при учитавању рачуна", e)
                     _errorMessage.value = "Грешка при учитавању рачуна: ${e.message}"
                 }
             }
@@ -166,7 +155,7 @@ class BudgetsViewModel(
             _isLoading.value = true
             
             try {
-                Log.d("BudgetsViewModel", "Учитавам буџете...")
+                Log.d(tag, "Учитавам буџете...")
                 
                 // Учитавамо све буџете
                 budgetRepository.getAllBudgets().collect { budgets ->
@@ -185,7 +174,7 @@ class BudgetsViewModel(
                     _isLoading.value = false
                 }
             } catch (e: Exception) {
-                Log.e("BudgetsViewModel", "Грешка при учитавању буџета", e)
+                Log.e(tag, "Грешка при учитавању буџета", e)
                 _errorMessage.value = "Грешка при учитавању буџета: ${e.message}"
                 _isLoading.value = false
             }
@@ -210,7 +199,7 @@ class BudgetsViewModel(
                 loadExpenseSpending()
                 loadIncomeReceived()
             } catch (e: Exception) {
-                Log.e("BudgetsViewModel", "Грешка при израчунавању потрошње буџета", e)
+                Log.e(tag, "Грешка при израчунавању потрошње буџета", e)
             }
         }
     }
@@ -273,9 +262,9 @@ class BudgetsViewModel(
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) {
                     // Preskačemo grešku ako je posao otkazan
-                    Log.d(TAG, "Учитавање потрошње отказано", e)
+                    Log.d(tag, "Учитавање потрошње отказано", e)
                 } else {
-                    Log.e(TAG, "Грешка при учитавању потрошње", e)
+                    Log.e(tag, "Грешка при учитавању потрошње", e)
                     _errorMessage.value = "Грешка при учитавању потрошње: ${e.message}"
                 }
                 _isLoading.value = false
@@ -341,9 +330,9 @@ class BudgetsViewModel(
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) {
                     // Preskačemo grešku ako je posao otkazan
-                    Log.d(TAG, "Учитавање прихода отказано", e)
+                    Log.d(tag, "Учитавање прихода отказано", e)
                 } else {
-                    Log.e(TAG, "Грешка при учитавању прихода", e)
+                    Log.e(tag, "Грешка при учитавању прихода", e)
                     _errorMessage.value = "Грешка при учитавању прихода: ${e.message}"
                 }
                 _isLoading.value = false
@@ -409,7 +398,6 @@ class BudgetsViewModel(
      */
     private fun calculatePeriodDates(period: Period): Pair<Date, Date> {
         val calendar = Calendar.getInstance()
-        val today = calendar.time
         
         when (period) {
             Period.DAILY -> {
@@ -527,8 +515,7 @@ class BudgetsViewModel(
                     expenseRepository = expenseRepo,
                     incomeRepository = incomeRepo,
                     accountRepository = accountRepo,
-                    settingsViewModel = BudgetSettingsViewModel.Factory(context).create(BudgetSettingsViewModel::class.java),
-                    context = context
+                    settingsViewModel = BudgetSettingsViewModel.Factory(context).create(BudgetSettingsViewModel::class.java)
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")

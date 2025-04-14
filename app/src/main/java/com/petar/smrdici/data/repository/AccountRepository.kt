@@ -2,17 +2,18 @@ package com.petar.smrdici.data.repository
 
 import android.content.Context
 import android.util.Log
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.Account
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
-import java.util.NoSuchElementException
 
-class AccountRepository private constructor(private val context: Context) {
+class AccountRepository private constructor() {
     
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
@@ -22,6 +23,7 @@ class AccountRepository private constructor(private val context: Context) {
     
     init {
         loadAccounts()
+        Log.d(TAG, "AccountRepository inicijalizovan - nova verzija!")
     }
     
     fun loadAccounts() {
@@ -81,6 +83,7 @@ class AccountRepository private constructor(private val context: Context) {
         }
     }
     
+    @Suppress("unused")
     suspend fun updateAccount(account: Account) {
         try {
             val userId = auth.currentUser?.uid ?: return
@@ -142,6 +145,7 @@ class AccountRepository private constructor(private val context: Context) {
         }
     }
     
+    @Suppress("unused")
     suspend fun deleteAccount(accountId: String) {
         try {
             val userId = auth.currentUser?.uid ?: return
@@ -181,15 +185,162 @@ class AccountRepository private constructor(private val context: Context) {
         }
     }
     
+    // Додајемо нову методу за трансфер новца између рачуна
+    suspend fun transferFunds(
+        sourceAccountId: String, 
+        destinationAccountId: String, 
+        amount: Double,
+        description: String = "Трансфер новца"
+    ): Result<Unit> {
+        return try {
+            Log.d(TAG, "Покрећем трансфер новца: са $sourceAccountId на $destinationAccountId, износ: $amount")
+            
+            val userId = auth.currentUser?.uid ?: return Result.failure(
+                IllegalStateException("Корисник није пријављен")
+            )
+            
+            // Проверавамо да ли су рачуни валидни и има ли довољно средстава
+            val sourceAccountResult = getAccountById(sourceAccountId)
+            val destinationAccountResult = getAccountById(destinationAccountId)
+            
+            if (sourceAccountResult == null) {
+                return Result.failure(NoSuchElementException("Изворни рачун није пронађен"))
+            }
+            
+            if (destinationAccountResult == null) {
+                return Result.failure(NoSuchElementException("Циљни рачун није пронађен"))
+            }
+            
+            // Проверавамо да ли има довољно средстава
+            if (sourceAccountResult.balance < amount) {
+                return Result.failure(IllegalArgumentException("Недовољно средстава на изворном рачуну"))
+            }
+            
+            // Креирамо трансакцију трансфера у Firebase
+            val transferId = UUID.randomUUID().toString()
+            val transfer = mapOf(
+                "id" to transferId,
+                "sourceAccountId" to sourceAccountId,
+                "destinationAccountId" to destinationAccountId,
+                "amount" to amount,
+                "description" to description,
+                "timestamp" to Timestamp.now(),
+                "userId" to userId
+            )
+            
+            // Користимо трансакцију да би се све операције извршиле атомично
+            val db = firestore
+            db.runTransaction { transaction ->
+                // 1. Скидамо средства са изворног рачуна
+                val sourceAccountRef = db.collection("users").document(userId)
+                    .collection("accounts").document(sourceAccountId)
+                
+                val sourceAccount = transaction.get(sourceAccountRef).toObject(Account::class.java)
+                    ?: throw IllegalStateException("Не могу да добавим изворни рачун")
+                
+                // Проверавамо баланс још једном у трансакцији
+                if (sourceAccount.balance < amount) {
+                    throw IllegalArgumentException("Недовољно средстава на изворном рачуну")
+                }
+                
+                val updatedSourceAccount = sourceAccount.copy(balance = sourceAccount.balance - amount)
+                transaction.set(sourceAccountRef, updatedSourceAccount)
+                
+                // 2. Додајемо средства на циљни рачун
+                val destAccountRef = db.collection("users").document(userId)
+                    .collection("accounts").document(destinationAccountId)
+                
+                val destAccount = transaction.get(destAccountRef).toObject(Account::class.java)
+                    ?: throw IllegalStateException("Не могу да добавим циљни рачун")
+                
+                val updatedDestAccount = destAccount.copy(balance = destAccount.balance + amount)
+                transaction.set(destAccountRef, updatedDestAccount)
+                
+                // 3. Додајемо запис о трансферу
+                val transferRef = db.collection("users").document(userId)
+                    .collection("transfers").document(transferId)
+                
+                transaction.set(transferRef, transfer)
+                
+                // Враћамо успех
+                null
+            }.await()
+            
+            // Освежавамо локални кеш рачуна
+            loadAccounts()
+            
+            Log.d(TAG, "Трансфер успешно обављен")
+            Result.success(Unit)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Грешка при трансферу новца", e)
+            Result.failure(e)
+        }
+    }
+    
+    // Помоћна метода за добављање рачуна по ID-у
+    private suspend fun getAccountById(accountId: String): Account? {
+        try {
+            val userId = auth.currentUser?.uid ?: return null
+            
+            val docSnapshot = firestore.collection("users").document(userId)
+                .collection("accounts").document(accountId)
+                .get().await()
+            
+            if (!docSnapshot.exists()) {
+                return null
+            }
+            
+            val account = docSnapshot.toObject(Account::class.java)
+            if (account != null) {
+                account.id = accountId
+            }
+            
+            return account
+        } catch (e: Exception) {
+            Log.e(TAG, "Грешка при добављању рачуна по ID-у", e)
+            return null
+        }
+    }
+    
+    // Добављање историје трансфера
+    suspend fun getTransferHistory(): List<Map<String, Any>> {
+        return try {
+            val userId = auth.currentUser?.uid ?: return emptyList()
+            
+            val snapshot = firestore.collection("users").document(userId)
+                .collection("transfers")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .get()
+                .await()
+            
+            snapshot.documents.mapNotNull { doc ->
+                doc.data
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Грешка при добављању историје трансфера", e)
+            emptyList()
+        }
+    }
+    
     companion object {
         private const val TAG = "AccountRepository"
         
         @Volatile
         private var instance: AccountRepository? = null
         
-        fun getInstance(context: Context): AccountRepository {
+        /**
+         * Vraća instancu AccountRepository-ja.
+         * 
+         * @param context Parametar se trenutno ne koristi, ali je zadržan zbog
+         * kompatibilnosti sa postojećim kodom koji očekuje ovu signaturu i zbog
+         * konzistentnosti sa drugim repozitorijumima u aplikaciji.
+         * @return instanca AccountRepository-ja
+         */
+        @Suppress("UNUSED_PARAMETER")
+        fun getInstance(context: Context? = null): AccountRepository {
             return instance ?: synchronized(this) {
-                instance ?: AccountRepository(context).also { instance = it }
+                instance ?: AccountRepository().also { instance = it }
             }
         }
     }

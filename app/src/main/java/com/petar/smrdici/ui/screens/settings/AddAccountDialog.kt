@@ -30,6 +30,7 @@ import com.petar.smrdici.data.model.AccountType
 import com.petar.smrdici.ui.screens.editAccount.accountColors
 
 @Composable
+@Suppress("unused")
 fun AddAccountDialog(
     onDismiss: () -> Unit,
     onAddAccount: (Account) -> Unit

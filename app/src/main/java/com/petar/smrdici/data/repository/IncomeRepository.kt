@@ -1,6 +1,5 @@
 package com.petar.smrdici.data.repository
 
-import android.content.Context
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -11,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.tasks.await
 import java.util.Date
 import java.util.UUID
@@ -62,29 +60,6 @@ class IncomeRepository private constructor() {
         }
     }
     
-    // Ажурирање прихода
-    suspend fun updateIncome(income: Income): Result<Income> {
-        return try {
-            Log.d("IncomeRepository", "Ажурирам приход: ${income.id}")
-            
-            // Проверавамо да ли приход има валидан ID
-            if (income.id.isEmpty()) {
-                return Result.failure(IllegalArgumentException("Приход нема валидан ID"))
-            }
-            
-            // Чувамо приход у бази података
-            userIncomesCollection.document(income.id).set(income).await()
-            
-            // Ажурирамо локални кеш
-            refreshIncomes()
-            
-            Result.success(income)
-        } catch (e: Exception) {
-            Log.e("IncomeRepository", "Грешка при ажурирању прихода", e)
-            Result.failure(e)
-        }
-    }
-    
     // Брисање прихода
     suspend fun deleteIncome(incomeId: String): Result<Unit> {
         return try {
@@ -113,33 +88,6 @@ class IncomeRepository private constructor() {
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("IncomeRepository", "Грешка при брисању прихода", e)
-            Result.failure(e)
-        }
-    }
-    
-    // Добијање једног прихода по ID-у
-    suspend fun getIncomeById(incomeId: String): Result<Income> {
-        return try {
-            Log.d("IncomeRepository", "Учитавам приход: $incomeId")
-            
-            // Проверавамо да ли је ID валидан
-            if (incomeId.isEmpty()) {
-                return Result.failure(IllegalArgumentException("Невалидан ID прихода"))
-            }
-            
-            // Учитавамо приход из базе података
-            val docSnapshot = userIncomesCollection.document(incomeId).get().await()
-            
-            if (docSnapshot.exists()) {
-                val income = docSnapshot.toObject(Income::class.java)
-                    ?: return Result.failure(IllegalStateException("Не могу да претворим документ у Income објекат"))
-                
-                Result.success(income)
-            } else {
-                Result.failure(NoSuchElementException("Приход није пронађен"))
-            }
-        } catch (e: Exception) {
-            Log.e("IncomeRepository", "Грешка при учитавању прихода", e)
             Result.failure(e)
         }
     }
@@ -226,7 +174,7 @@ class IncomeRepository private constructor() {
                         
                         // Извлачимо URL за креирање индекса из поруке о грешци
                         val indexUrl = error.message?.let { msg ->
-                            val urlPattern = "https://console\\.firebase\\.google\\.com[^\\s]+".toRegex()
+                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
                             val matchResult = urlPattern.find(msg)
                             matchResult?.value
                         }
@@ -278,7 +226,7 @@ class IncomeRepository private constructor() {
                         
                         // Извлачимо URL за креирање индекса из поруке о грешци
                         val indexUrl = error.message?.let { msg ->
-                            val urlPattern = "https://console\\.firebase\\.google\\.com[^\\s]+".toRegex()
+                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
                             val matchResult = urlPattern.find(msg)
                             matchResult?.value
                         }
@@ -351,11 +299,11 @@ class IncomeRepository private constructor() {
             }
         }
         
-        fun initialize(context: Context) {
+        fun initialize() {
             if (instance == null) {
                 instance = IncomeRepository()
                 // Повезујемо са AccountRepository
-                instance?.setAccountRepository(AccountRepository.getInstance(context))
+                instance?.setAccountRepository(AccountRepository.getInstance())
             }
         }
     }

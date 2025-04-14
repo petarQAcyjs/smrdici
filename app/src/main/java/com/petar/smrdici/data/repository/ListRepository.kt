@@ -1,23 +1,21 @@
 package com.petar.smrdici.data.repository
 
-import android.content.Context
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.ShoppingList
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
-class ListRepository private constructor(private val context: Context) {
+class ListRepository private constructor() {
     
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     
+    // Чувамо листе у меморији за будућу употребу и реактивни UI
+    // Тренутно се користи само за локално праћење промена
     private val _lists = MutableStateFlow<List<ShoppingList>>(emptyList())
-    val lists: Flow<List<ShoppingList>> = _lists.asStateFlow()
     
     init {
         loadLists()
@@ -80,38 +78,6 @@ class ListRepository private constructor(private val context: Context) {
         }
     }
     
-    suspend fun updateList(list: ShoppingList) {
-        try {
-            val userId = auth.currentUser?.uid ?: return
-            
-            firestore.collection("users").document(userId)
-                .collection("lists")
-                .document(list.id ?: "")
-                .set(list)
-                .await()
-            
-            loadLists()
-        } catch (e: Exception) {
-            Log.e(TAG, "Грешка при ажурирању листе", e)
-        }
-    }
-    
-    suspend fun deleteList(listId: String) {
-        try {
-            val userId = auth.currentUser?.uid ?: return
-            
-            firestore.collection("users").document(userId)
-                .collection("lists")
-                .document(listId)
-                .delete()
-                .await()
-            
-            loadLists()
-        } catch (e: Exception) {
-            Log.e(TAG, "Грешка при брисању листе", e)
-        }
-    }
-    
     suspend fun deleteAllLists() {
         try {
             val userId = auth.currentUser?.uid ?: return
@@ -144,9 +110,9 @@ class ListRepository private constructor(private val context: Context) {
         @Volatile
         private var instance: ListRepository? = null
         
-        fun getInstance(context: Context): ListRepository {
+        fun getInstance(): ListRepository {
             return instance ?: synchronized(this) {
-                instance ?: ListRepository(context).also { instance = it }
+                instance ?: ListRepository().also { instance = it }
             }
         }
     }

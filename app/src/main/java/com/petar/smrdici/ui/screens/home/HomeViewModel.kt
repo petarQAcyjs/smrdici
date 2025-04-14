@@ -121,11 +121,6 @@ class HomeViewModel() : ViewModel() {
         } ?: "null"
     }
     
-    // Функција за ручно освежавање
-    private fun refreshEvents() {
-        loadTodayEvents()
-    }
-    
     // Функција за синхронизацију догађаја
     fun syncEvents() {
         if (isLoadingEvents) {

@@ -4,14 +4,11 @@ import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.CollectionReference
-import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.QuerySnapshot
 import com.petar.smrdici.data.model.Budget
 import com.petar.smrdici.data.model.BudgetType
-import com.petar.smrdici.data.model.DisplayBudget
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -21,11 +18,12 @@ import java.util.Date
 /**
  * Repository za rad sa budžetima
  */
+@Suppress("unused")
 class BudgetRepository(
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth
 ) {
-    private val TAG: String = "BudgetRepository"
+    private val tag = "BudgetRepository"
     
     init {
         // Pokrenimo migraciju podataka ako je potrebno
@@ -49,11 +47,11 @@ class BudgetRepository(
             .get()
             .addOnSuccessListener { snapshot ->
                 if (snapshot.isEmpty) {
-                    Log.d(TAG, "Nema budžeta za migraciju")
+                    Log.d(tag, "Nema budžeta za migraciju")
                     return@addOnSuccessListener
                 }
                 
-                Log.d(TAG, "Migracija ${snapshot.size()} budžeta za korisnika $userId")
+                Log.d(tag, "Migracija ${snapshot.size()} budžeta za korisnika $userId")
                 
                 // Za svaki budžet u staroj kolekciji
                 snapshot.documents.forEach { document ->
@@ -65,26 +63,26 @@ class BudgetRepository(
                         userBudgetsCollection.document(document.id)
                             .set(budgetData)
                             .addOnSuccessListener {
-                                Log.d(TAG, "Uspešno migriran budžet ${document.id}")
+                                Log.d(tag, "Uspešno migriran budžet ${document.id}")
                                 
                                 // Brišemo iz stare kolekcije nakon uspešne migracije
                                 firestore.collection("budgets").document(document.id)
                                     .delete()
                                     .addOnSuccessListener {
-                                        Log.d(TAG, "Uspešno obrisan stari budžet ${document.id}")
+                                        Log.d(tag, "Uspešno obrisan stari budžet ${document.id}")
                                     }
                                     .addOnFailureListener { e ->
-                                        Log.e(TAG, "Greška pri brisanju starog budžeta ${document.id}", e)
+                                        Log.e(tag, "Greška pri brisanju starog budžeta ${document.id}", e)
                                     }
                             }
                             .addOnFailureListener { e ->
-                                Log.e(TAG, "Greška pri migraciji budžeta ${document.id}", e)
+                                Log.e(tag, "Greška pri migraciji budžeta ${document.id}", e)
                             }
                     }
                 }
             }
             .addOnFailureListener { e ->
-                Log.e(TAG, "Greška pri dobavljanju budžeta za migraciju", e)
+                Log.e(tag, "Greška pri dobavljanju budžeta za migraciju", e)
             }
     }
     
@@ -96,12 +94,13 @@ class BudgetRepository(
             val id = doc.id
             val name = doc.getString("name") ?: ""
             val amount = doc.getDouble("amount") ?: 0.0
+            @Suppress("UNCHECKED_CAST")
             val categoryIds = doc.get("categoryIds") as? List<String> ?: emptyList()
             val accountId = doc.getString("accountId") ?: ""
             val startDate = doc.getTimestamp("startDate") ?: Timestamp(Date())
             val endDate = doc.getTimestamp("endDate") ?: Timestamp(Date())
             val orderId = doc.getDouble("orderId") ?: 0.0
-            val isActive = doc.getBoolean("isActive") ?: true
+            val isActive = doc.getBoolean("isActive") != false
             val type = try {
                 BudgetType.valueOf(doc.getString("type") ?: BudgetType.EXPENSE.name)
             } catch (e: Exception) {
@@ -121,7 +120,7 @@ class BudgetRepository(
                 type = type
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Greška pri konvertovanju budžeta", e)
+            Log.e(tag, "Greška pri konvertovanju budžeta", e)
             null
         }
     }
@@ -152,18 +151,18 @@ class BudgetRepository(
             
             // Ako nema ID, koristimo automatski generisani
             val documentId = if (budget.id.isEmpty()) {
-                val docRef = budgetsCollection.add(budgetData as Map<String, Any>).await()
+                val docRef = budgetsCollection.add(budgetData).await()
                 docRef.id
             } else {
                 val docRef = budgetsCollection.document(budget.id)
-                docRef.set(budgetData as Map<String, Any>).await()
+                docRef.set(budgetData).await()
                 budget.id
             }
             
             // Vraćamo uspešno kreiran budžet sa ID-em
             Result.success(budget.copy(id = documentId))
         } catch (e: Exception) {
-            Log.e(TAG, "Greška pri dodavanju budžeta", e)
+            Log.e(tag, "Greška pri dodavanju budžeta", e)
             Result.failure(e)
         }
     }
@@ -173,7 +172,7 @@ class BudgetRepository(
      */
     suspend fun updateBudget(budget: Budget): Result<Budget> {
         return try {
-            val user = auth.currentUser ?: throw Exception("Korisnik nije prijavljen")
+            if (auth.currentUser === null) throw Exception("Korisnik nije prijavljen")
             val budgetsCollection = getBudgetsCollection()
             
             // Proveravamo da li budžet postoji
@@ -197,11 +196,11 @@ class BudgetRepository(
             
             // Ažuriramo budžet
             val docRef = budgetsCollection.document(budget.id)
-            docRef.update(budgetData as Map<String, Any>).await()
+            docRef.update(budgetData).await()
             
             Result.success(budget)
         } catch (e: Exception) {
-            Log.e(TAG, "Greška pri ažuriranju budžeta", e)
+            Log.e(tag, "Greška pri ažuriranju budžeta", e)
             Result.failure(e)
         }
     }
@@ -211,7 +210,7 @@ class BudgetRepository(
      */
     suspend fun deleteBudget(budgetId: String): Result<Unit> {
         return try {
-            val user = auth.currentUser ?: throw Exception("Korisnik nije prijavljen")
+            if (auth.currentUser === null) throw Exception("Korisnik nije prijavljen")
             val budgetsCollection = getBudgetsCollection()
             
             // Brišemo budžet
@@ -220,7 +219,7 @@ class BudgetRepository(
             
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Greška pri brisanju budžeta", e)
+            Log.e(tag, "Greška pri brisanju budžeta", e)
             Result.failure(e)
         }
     }
@@ -231,7 +230,7 @@ class BudgetRepository(
     fun getAllBudgets(): Flow<List<Budget>> = callbackFlow {
         try {
             val user = auth.currentUser
-            if (user == null) {
+            if (user === null) {
                 trySend(emptyList())
                 close()
                 return@callbackFlow
@@ -244,7 +243,7 @@ class BudgetRepository(
                 
             val listener = query.addSnapshotListener { querySnapshot, exception ->
                 if (exception != null) {
-                    Log.e(TAG, "Greška pri dobavljanju budžeta", exception)
+                    Log.e(tag, "Greška pri dobavljanju budžeta", exception)
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -263,7 +262,7 @@ class BudgetRepository(
                 listener.remove()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Neočekivana greška u getAllBudgets", e)
+            Log.e(tag, "Neočekivana greška u getAllBudgets", e)
             trySend(emptyList())
             close(e)
         }
@@ -275,7 +274,7 @@ class BudgetRepository(
     fun getBudgetsByType(type: BudgetType): Flow<List<Budget>> = callbackFlow {
         try {
             val user = auth.currentUser
-            if (user == null) {
+            if (user === null) {
                 trySend(emptyList())
                 close()
                 return@callbackFlow
@@ -289,7 +288,7 @@ class BudgetRepository(
                 
             val listener = query.addSnapshotListener { querySnapshot, exception ->
                 if (exception != null) {
-                    Log.e(TAG, "Greška pri dobavljanju budžeta po tipu", exception)
+                    Log.e(tag, "Greška pri dobavljanju budžeta po tipu", exception)
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -302,17 +301,17 @@ class BudgetRepository(
                     }
                 }
                 
-                Log.d(TAG, "Dobavljeno ${budgets.size} budžeta tipa $type")
+                Log.d(tag, "Dobavljeno ${budgets.size} budžeta tipa $type")
                 
                 trySend(budgets)
             }
             
             awaitClose { 
-                Log.d(TAG, "Zatvaranje listenera za budžete tipa $type")
+                Log.d(tag, "Zatvaranje listenera za budžete tipa $type")
                 listener.remove() 
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Neočekivana greška u getBudgetsByType", e)
+            Log.e(tag, "Neočekivana greška u getBudgetsByType", e)
             trySend(emptyList())
             close(e)
         }
@@ -324,7 +323,7 @@ class BudgetRepository(
     fun getBudgetsForAccount(accountId: String): Flow<List<Budget>> = callbackFlow {
         try {
             val user = auth.currentUser
-            if (user == null) {
+            if (user === null) {
                 trySend(emptyList())
                 close()
                 return@callbackFlow
@@ -338,7 +337,7 @@ class BudgetRepository(
                 
             val listener = query.addSnapshotListener { querySnapshot, exception ->
                 if (exception != null) {
-                    Log.e(TAG, "Greška pri dobavljanju budžeta za račun", exception)
+                    Log.e(tag, "Greška pri dobavljanju budžeta za račun", exception)
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -350,17 +349,17 @@ class BudgetRepository(
                     }
                 }
                 
-                Log.d(TAG, "Dobavljeno ${budgets.size} budžeta za račun $accountId")
+                Log.d(tag, "Dobavljeno ${budgets.size} budžeta za račun $accountId")
                 
                 trySend(budgets)
             }
             
             awaitClose { 
-                Log.d(TAG, "Zatvaranje listenera za budžete za račun")
+                Log.d(tag, "Zatvaranje listenera za budžete za račun")
                 listener.remove() 
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Neočekivana greška u getBudgetsForAccount", e)
+            Log.e(tag, "Neočekivana greška u getBudgetsForAccount", e)
             trySend(emptyList())
             close(e)
         }
@@ -372,7 +371,7 @@ class BudgetRepository(
     fun getBudgetsForCategory(categoryId: String): Flow<List<Budget>> = callbackFlow {
         try {
             val user = auth.currentUser
-            if (user == null) {
+            if (user === null) {
                 trySend(emptyList())
                 close()
                 return@callbackFlow
@@ -386,7 +385,7 @@ class BudgetRepository(
                 
             val listener = query.addSnapshotListener { querySnapshot, exception ->
                 if (exception != null) {
-                    Log.e(TAG, "Greška pri dobavljanju budžeta za kategoriju", exception)
+                    Log.e(tag, "Greška pri dobavljanju budžeta za kategoriju", exception)
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -398,17 +397,17 @@ class BudgetRepository(
                     }
                 }
                 
-                Log.d(TAG, "Dobavljeno ${budgets.size} budžeta za kategoriju $categoryId")
+                Log.d(tag, "Dobavljeno ${budgets.size} budžeta za kategoriju $categoryId")
                 
                 trySend(budgets)
             }
             
             awaitClose {
-                Log.d(TAG, "Zatvaranje listenera za budžete za kategoriju")
+                Log.d(tag, "Zatvaranje listenera za budžete za kategoriju")
                 listener.remove() 
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Neočekivana greška u getBudgetsForCategory", e)
+            Log.e(tag, "Neočekivana greška u getBudgetsForCategory", e)
             trySend(emptyList())
             close(e)
         }

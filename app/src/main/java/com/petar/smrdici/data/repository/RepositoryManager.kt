@@ -1,8 +1,6 @@
 package com.petar.smrdici.data.repository
 
 import android.content.Context
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 
 /**
  * Centralno mesto za dobijanje instanci repozitorijuma
@@ -53,7 +51,7 @@ object RepositoryManager {
     fun getAccountRepositoryForBudget(context: Context): AccountRepository {
         if (accountRepositoryInstance == null) {
             // Koristimo regularnu factory metodu za kreiranje instance
-            accountRepositoryInstance = AccountRepository.getInstance(context)
+            accountRepositoryInstance = AccountRepository.getInstance()
         }
         return accountRepositoryInstance!!
     }

@@ -1,10 +1,12 @@
 package com.petar.smrdici
 
+import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
-import android.content.res.Resources
+import android.os.Process
 import android.os.StrictMode
 import android.util.Log
+import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException
 import com.google.android.gms.common.GooglePlayServicesRepairableException
@@ -27,8 +29,8 @@ class SmrdiciApplication : Application() {
         initGooglePlayServices()
         
         // Иницијализујемо репозиторијуме
-        ExpenseRepository.initialize(this)
-        IncomeRepository.initialize(this)
+        ExpenseRepository.initialize()
+        IncomeRepository.initialize()
         
         // Офлајн подршка је подразумевано укључена у новијим верзијама Firebase-а
         // Нема потребе за додатном конфигурацијом
@@ -47,7 +49,7 @@ class SmrdiciApplication : Application() {
             val availability = GoogleApiAvailability.getInstance()
             val result = availability.isGooglePlayServicesAvailable(applicationContext)
             
-            if (result != com.google.android.gms.common.ConnectionResult.SUCCESS) {
+            if (result != ConnectionResult.SUCCESS) {
                 Log.w(TAG, "Google Play сервиси нису доступни или нису ажурирани")
             }
         } catch (e: GooglePlayServicesRepairableException) {
@@ -115,7 +117,7 @@ class SmrdiciApplication : Application() {
             // Форсирамо приступ ресурсима кроз нови контекст
             // val newContext = createConfigurationContext(configuration)
             // val newResources = newContext.resources
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Игноришемо грешке, није критично
         }
     }
@@ -127,16 +129,17 @@ class SmrdiciApplication : Application() {
     // дупле иницијализације
     override fun attachBaseContext(base: Context?) {
         super.attachBaseContext(base)
-        // Потискујемо додатно логовање у другим процесима
+        // Потискујемо додатно логовање у другим процесама
         if (base != null && packageName != getProcessName(base)) {
             // Ово је секундарни процес, ограничавамо логовање
+            Log.d(TAG, "Апликација се покреће у секундарном процесу")
         }
     }
     
     // Помоћна метода за добијање имена тренутног процеса
     private fun getProcessName(context: Context): String? {
-        val pid = android.os.Process.myPid()
-        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val pid = Process.myPid()
+        val manager = context.getSystemService(ACTIVITY_SERVICE) as ActivityManager
         for (processInfo in manager.runningAppProcesses) {
             if (processInfo.pid == pid) {
                 return processInfo.processName

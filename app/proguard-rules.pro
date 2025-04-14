@@ -33,7 +33,7 @@
 -dontwarn android.content.res.**
 
 # Смањивање логова за Adreno профилирање
--dontwarn Adreno-AppProfiles.**
+-dontwarn Adreno.AppProfiles.**
 
 # Спречавање лога за audit упозорења
 -dontwarn audit.**

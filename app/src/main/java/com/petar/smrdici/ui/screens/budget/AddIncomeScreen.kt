@@ -35,27 +35,24 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.google.firebase.Timestamp
 import com.petar.smrdici.data.model.Income
 import com.petar.smrdici.data.model.IncomeCategory
-import com.petar.smrdici.data.repository.IncomeRepository
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -69,6 +66,7 @@ import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
+@Suppress("UNUSED_PARAMETER", "KotlinRedundantDiagnosticSuppress", "NAME_SHADOWING")
 @Composable
 fun AddIncomeScreen(
     navController: NavController,
@@ -103,13 +101,13 @@ fun AddIncomeScreen(
     
     // Стање за снекбар
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     
     // Стање за учитавање
     var isLoading by remember { mutableStateOf(false) }
     
     // Стање за аутентификацију
     val authState by authViewModel.authState.collectAsState()
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
@@ -137,11 +135,7 @@ fun AddIncomeScreen(
     LaunchedEffect(accounts) {
         if (accounts.isNotEmpty() && selectedAccountId.isEmpty()) {
             val defaultAccount = accounts.find { it.isDefault }
-            if (defaultAccount != null) {
-                selectedAccountId = defaultAccount.id
-            } else {
-                selectedAccountId = accounts.first().id
-            }
+            selectedAccountId = defaultAccount?.id ?: accounts.first().id
         }
     }
     
@@ -162,7 +156,7 @@ fun AddIncomeScreen(
                 } else {
                     amountError = ""
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 amountError = "Неисправан износ"
                 isValid = false
             }

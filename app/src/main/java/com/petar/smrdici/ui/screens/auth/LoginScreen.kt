@@ -207,7 +207,6 @@ fun LoginScreen(
             GoogleSignInButton(
                 onClick = {
                     authViewModel.beginGoogleSignIn(
-                        context,
                         onSuccess = { intentSender ->
                             try {
                                 googleSignInLauncher.launch(

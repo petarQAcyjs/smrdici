@@ -51,6 +51,7 @@ data class DisplayBudget(
     val percentSpent: Double = if (budget.amount > 0) spentAmount / budget.amount else 0.0
 ) {
     // Vraća indikator statusa budžeta za vizuelni prikaz
+    @Suppress("unused")
     fun getBudgetStatus(): BudgetStatus {
         return when {
             percentSpent <= 0.25 -> BudgetStatus.EXCELLENT

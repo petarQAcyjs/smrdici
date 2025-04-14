@@ -1,24 +1,26 @@
 package com.petar.smrdici.data.repository
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStreamReader
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Репозиторијум за извоз и увоз података апликације
  */
 class DataExportImportRepository private constructor(private val context: Context) {
     
-    private val gson = Gson()
+    private val gson = GsonBuilder().create()
     
     /**
      * Извози податке апликације у JSON формату на одређену локацију
@@ -69,20 +71,21 @@ class DataExportImportRepository private constructor(private val context: Contex
      * @return Назив фајла у формату "smrdici_backup_YYYY-MM-DD_HH-mm-ss.json"
      */
     fun createExportFilename(): String {
-        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
-        val current = LocalDateTime.now().format(formatter)
+        val formatter = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault())
+        val current = formatter.format(Date())
         return "smrdici_backup_$current.json"
     }
     
     companion object {
         private const val TAG = "DataExportImport"
         
+        @SuppressLint("StaticFieldLeak")
         @Volatile
         private var instance: DataExportImportRepository? = null
         
         fun getInstance(context: Context): DataExportImportRepository {
             return instance ?: synchronized(this) {
-                instance ?: DataExportImportRepository(context).also { instance = it }
+                instance ?: DataExportImportRepository(context.applicationContext).also { instance = it }
             }
         }
     }
@@ -99,5 +102,5 @@ data class ExportData(
     val lists: List<Any> = emptyList(),
     val settings: Map<String, Any> = emptyMap(),
     val version: Int = 1,
-    val exportDate: String = LocalDateTime.now().toString()
+    val exportDate: String = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
 ) 

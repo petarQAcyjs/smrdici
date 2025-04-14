@@ -35,27 +35,24 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.google.firebase.Timestamp
 import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.ExpenseCategory
-import com.petar.smrdici.data.repository.ExpenseRepository
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -65,7 +62,6 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -104,7 +100,6 @@ fun AddExpenseScreen(
     
     // Стање за снекбар
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     
     // Стање за учитавање
     var isLoading by remember { mutableStateOf(false) }
@@ -136,13 +131,10 @@ fun AddExpenseScreen(
     
     // Аутоматски постављамо подразумевани рачун ако постоји
     LaunchedEffect(accounts) {
+        // Користимо Elvis оператор за краћи и читљивији код
         if (accounts.isNotEmpty() && selectedAccountId.isEmpty()) {
-            val defaultAccount = accounts.find { it.isDefault }
-            if (defaultAccount != null) {
-                selectedAccountId = defaultAccount.id
-            } else {
-                selectedAccountId = accounts.first().id
-            }
+            // Користимо Elvis оператор уместо if-then блока
+            selectedAccountId = accounts.find { it.isDefault }?.id ?: accounts.first().id
         }
     }
     
@@ -163,7 +155,7 @@ fun AddExpenseScreen(
                 } else {
                     amountError = ""
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 amountError = "Неисправан износ"
                 isValid = false
             }
@@ -223,7 +215,9 @@ fun AddExpenseScreen(
                     if (saveResult.isSuccess) {
                         Log.d("AddExpenseScreen", "Расход је успешно сачуван")
                     } else {
-                        Log.e("AddExpenseScreen", "Грешка при чувању расхода", saveResult.exceptionOrNull())
+                        // Додадимо опцију да логујемо грешку са додатним информацијама
+                        val exception = saveResult.exceptionOrNull()
+                        Log.e("AddExpenseScreen", "Грешка при чувању расхода: ${exception?.message}", exception)
                     }
                     
                     // Враћамо резултат из NonCancellable блока
@@ -242,11 +236,11 @@ fun AddExpenseScreen(
                     
                     isLoading = false
                 }
-            } catch (e: Exception) {
+            } catch (@Suppress("UNUSED_PARAMETER") e: Exception) {
                 // Обрађујемо изузетке, али игноришемо JobCancellationException који се нормално дешава при навигацији
                 if (e is kotlinx.coroutines.CancellationException) {
                     // Само логујемо, не приказујемо грешку кориснику јер је успешно сачувано
-                    Log.d("AddExpenseScreen", "Корутина је отказана након успешног чувања")
+                    Log.d("AddExpenseScreen", "Корутина је отказана након успешног чувања: ${e.message}")
                 } else {
                     // За остале грешке показујемо поруку
                     Log.e("AddExpenseScreen", "Грешка при чувању расхода", e)
@@ -518,7 +512,7 @@ fun AddExpenseScreen(
                 TextButton(
                     onClick = { showDatePicker = false }
                 ) {
-                    Text("Отказжи")
+                    Text("Откажи")
                 }
             }
         ) {
