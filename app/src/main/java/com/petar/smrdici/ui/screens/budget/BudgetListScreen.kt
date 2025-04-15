@@ -55,11 +55,24 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.DisplayBudget
+import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.BudgetBattery
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
+
+/**
+ * Враћа валуту за приказ на основу изабраног рачуна
+ */
+private fun getCurrencyForAccount(accounts: List<Account>, selectedAccountId: String?): String {
+    return if (selectedAccountId != null) {
+        accounts.find { it.id == selectedAccountId }?.currency ?: "RSD"
+    } else {
+        val currencies = accounts.mapNotNull { it.currency }.distinct()
+        if (currencies.isEmpty()) "RSD" else currencies.first()
+    }
+}
 
 @OptIn(ExperimentalMaterialApi::class)
 @Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
@@ -344,7 +357,7 @@ fun BudgetListScreen(
                                     .clickable { showBudgetLimitDialog = true },
                                 expenses = totalExpenseSpent,
                                 budget = budgetLimit,
-                                currency = "РСД",
+                                currency = getCurrencyForAccount(accounts, selectedAccountId),
                                 backgroundNotFilled = Color(0xFF303436),
                                 onClick = { showBudgetLimitDialog = true }
                             )
@@ -519,6 +532,15 @@ fun BudgetListItem(
     formatAmount: (Double) -> String,
     onClick: () -> Unit
 ) {
+    // Добијамо валуту из буџета
+    val budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current))
+    val accounts by budgetViewModel.accounts.collectAsState(initial = emptyList())
+    val currency = if (displayBudget.budget.accountId.isNotEmpty()) {
+        accounts.find { it.id == displayBudget.budget.accountId }?.currency ?: "RSD"
+    } else {
+        "RSD"
+    }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -596,7 +618,7 @@ fun BudgetListItem(
                 modifier = Modifier.fillMaxWidth(),
                 expenses = displayBudget.spentAmount,
                 budget = displayBudget.budget.amount,
-                currency = "РСД",
+                currency = currency,
                 backgroundNotFilled = Color(0xFF303436)
             )
             

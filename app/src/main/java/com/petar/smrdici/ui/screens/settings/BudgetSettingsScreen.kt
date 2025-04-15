@@ -100,6 +100,16 @@ fun BudgetSettingsScreen(
     var showImportConfirmDialog by remember { mutableStateOf(false) }
     var selectedImportUri by remember { mutableStateOf<Uri?>(null) }
     
+    // Додатна стања за напредни увоз
+    val importPreview by dataExportImportViewModel.importPreview.collectAsState()
+    val importProgress by dataExportImportViewModel.importProgress.collectAsState()
+    val importProgressText by dataExportImportViewModel.importProgressText.collectAsState()
+    val isImporting by dataExportImportViewModel.isImporting.collectAsState()
+    val selectedImportMode by dataExportImportViewModel.importMode.collectAsState()
+    
+    // Стање за приказ напредног дијалога
+    var showAdvancedImportDialog by remember { mutableStateOf(false) }
+    
     // Launcher за бирање локације за чување извезених података
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -114,8 +124,8 @@ fun BudgetSettingsScreen(
         ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
-            selectedImportUri = uri
-            showImportConfirmDialog = true
+            // Уместо приказивања потврдног дијалога, учитавамо фајл за преглед
+            dataExportImportViewModel.loadImportFile(it)
         }
     }
     
@@ -544,16 +554,20 @@ fun BudgetSettingsScreen(
                     }
                 )
 
-                // Додајемо картицу за извоз/увоз података
-                Spacer(modifier = Modifier.height(16.dp))
-                ExportImportCard(
-                    onExportClick = { 
-                        exportLauncher.launch(dataExportImportViewModel.getExportFilename())
-                    },
-                    onImportClick = {
-                        importLauncher.launch("application/json")
-                    }
-                )
+                // Карта за извоз и увоз података
+                Section(title = "Извоз и увоз података") {
+                    ExportImportCard(
+                        onExportClick = {
+                            // Покрећемо извоз података
+                            exportLauncher.launch(dataExportImportViewModel.getExportFilename())
+                        },
+                        onImportClick = {
+                            // Приказујемо напредни дијалог за увоз
+                            showAdvancedImportDialog = true
+                            dataExportImportViewModel.resetImportPreview()
+                        }
+                    )
+                }
             }
         }
     }
@@ -756,35 +770,36 @@ fun BudgetSettingsScreen(
         )
     }
     
-    // Дијалог за потврду увоза
-    if (showImportConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showImportConfirmDialog = false },
-            title = { Text("Увоз података") },
-            text = { 
-                Text("Упозорење: Увоз ће заменити све постојеће податке! Да ли сте сигурни да желите да наставите?") 
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showImportConfirmDialog = false
-                        selectedImportUri?.let { uri ->
-                            dataExportImportViewModel.importData(uri)
-                        }
-                    }
-                ) {
-                    Text("Увези")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showImportConfirmDialog = false }
-                ) {
-                    Text("Откажи")
-                }
+    // Напредни дијалог за увоз података
+    ImportDialog(
+        isVisible = showAdvancedImportDialog,
+        importPreview = importPreview,
+        importProgress = importProgress,
+        importProgressText = importProgressText,
+        isImporting = isImporting,
+        selectedImportMode = selectedImportMode,
+        onDismiss = {
+            if (!isImporting) {
+                showAdvancedImportDialog = false
+                dataExportImportViewModel.resetImportPreview()
             }
-        )
-    }
+        },
+        onSelectFile = {
+            importLauncher.launch("application/json")
+        },
+        onImportModeChange = { mode ->
+            dataExportImportViewModel.setImportMode(mode)
+        },
+        onImport = {
+            dataExportImportViewModel.importData()
+        },
+        onCancel = {
+            if (!isImporting) {
+                showAdvancedImportDialog = false
+                dataExportImportViewModel.resetImportPreview()
+            }
+        }
+    )
 }
 
 @Composable
@@ -898,4 +913,32 @@ private fun AccountItem(
 // Додајте ову функцију за дебаговање
 private fun logAccountDetails(account: Account) {
     android.util.Log.d("BudgetSettings", "Account: ${account.name}, ID: ${account.id}, Default: ${account.isDefault}")
+}
+
+@Composable
+fun CurrencyDropdown(currencies: List<String>, selectedCurrency: String, onCurrencySelected: (String) -> Unit) {
+    // ... existing code ...
+}
+
+/**
+ * Komponenta koja prikazuje naslovljenu sekciju sa sadržajem
+ */
+@Composable
+fun Section(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        content()
+    }
 } 

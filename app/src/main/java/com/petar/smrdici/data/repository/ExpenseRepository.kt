@@ -36,7 +36,7 @@ class ExpenseRepository private constructor() {
         get() = firestore.collection("users").document(currentUserId).collection("expenses")
     
     // Додавање новог расхода
-    suspend fun addExpense(expense: Expense): Result<Expense> {
+    suspend fun addExpense(expense: Expense, updateAccountBalance: Boolean = true): Result<Expense> {
         return try {
             Log.d("ExpenseRepository", "Додајем расход: $expense")
             
@@ -47,8 +47,10 @@ class ExpenseRepository private constructor() {
             // Чувамо расход у бази података
             userExpensesCollection.document(expenseId).set(expenseToAdd).await()
             
-            // Ажурирамо баланс рачуна (смањујемо га)
-            accountRepository?.updateAccountBalance(expense.accountId, -expense.amount)
+            // Ажурирамо баланс рачуна (смањујемо га) само ако је затражено
+            if (updateAccountBalance) {
+                accountRepository?.updateAccountBalance(expense.accountId, -expense.amount)
+            }
             
             // Ажурирамо локални кеш
             refreshExpenses()

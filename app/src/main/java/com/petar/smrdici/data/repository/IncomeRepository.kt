@@ -36,7 +36,7 @@ class IncomeRepository private constructor() {
         get() = firestore.collection("users").document(currentUserId).collection("incomes")
     
     // Додавање новог прихода
-    suspend fun addIncome(income: Income): Result<Income> {
+    suspend fun addIncome(income: Income, updateAccountBalance: Boolean = true): Result<Income> {
         return try {
             Log.d("IncomeRepository", "Додајем приход: $income")
             
@@ -47,8 +47,13 @@ class IncomeRepository private constructor() {
             // Чувамо приход у бази података
             userIncomesCollection.document(incomeId).set(incomeToAdd).await()
             
-            // Ажурирамо баланс рачуна (повећавамо га)
-            accountRepository?.updateAccountBalance(income.accountId, income.amount)
+            // Ажурирамо баланс рачуна (повећавамо га) само ако је затражено
+            if (updateAccountBalance) {
+                Log.d("IncomeRepository", "Ажурирам баланс рачуна: ${income.accountId} за износ: ${income.amount}")
+                accountRepository?.updateAccountBalance(income.accountId, income.amount)
+            } else {
+                Log.d("IncomeRepository", "Прескачем ажурирање баланса рачуна за приход: $incomeId")
+            }
             
             // Ажурирамо локални кеш
             refreshIncomes()

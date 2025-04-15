@@ -387,10 +387,20 @@ class BudgetsViewModel(
     }
     
     /**
-     * Formatira iznos u RSD sa tačnom formatom
+     * Formatira iznos sa valutom izabranog računa
      */
     fun formatAmount(amount: Double): String {
-        return "${amount.toInt()} РСД"
+        // Uzimamo valutu iz izabranog računa ili podrazumevani "RSD" ako nema izabranog računa
+        val currency = if (_selectedAccountId.value != null) {
+            _accounts.value.find { it.id == _selectedAccountId.value }?.currency ?: "RSD"
+        } else {
+            // Ako nisu izabrani svi računi, koristimo podrazumevanu valutu 
+            // ili prvu dostupnu valutu ako ima više računa sa različitim valutama
+            val currencies = _accounts.value.mapNotNull { it.currency }.distinct()
+            if (currencies.isEmpty()) "RSD" else currencies.first()
+        }
+        
+        return "${amount.toInt()} $currency"
     }
     
     /**
