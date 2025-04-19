@@ -6,17 +6,17 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.data.model.AccountType
-import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.Income
-import com.petar.smrdici.data.model.ShoppingList
 import com.petar.smrdici.data.repository.AccountRepository
 import com.petar.smrdici.data.repository.DataExportImportRepository
 import com.petar.smrdici.data.repository.EventRepository
-import com.petar.smrdici.data.repository.ExportData
 import com.petar.smrdici.data.repository.ExpenseRepository
+import com.petar.smrdici.data.repository.ExportData
 import com.petar.smrdici.data.repository.IncomeRepository
 import com.petar.smrdici.data.repository.ListRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -199,31 +199,36 @@ class DataExportImportViewModel(
                     
                     var processedItems = 0
                     
-                    // Учитавамо постојеће податке за проверу дуплирања
-                    var existingAccounts = emptyList<Account>()
-                    var existingExpenses = emptyList<Expense>()
-                    var existingIncomes = emptyList<Income>()
-                    
-                    if (_importMode.value == ImportMode.ADD_NEW) {
-                        _importProgressText.value = "Учитавање постојећих података..."
-                        existingAccounts = accountRepository.getAllAccounts()
-                        existingExpenses = expenseRepository.getExpenses().first()
-                        existingIncomes = incomeRepository.getIncomes().first()
+                    // Учитавамо постојеће податке у зависности од режима
+                    val existingAccounts = if (_importMode.value == ImportMode.ADD_NEW) {
+                        accountRepository.getAllAccounts()
+                    } else {
+                        emptyList()
                     }
                     
-                    _importProgressText.value = "Брисање постојећих података..."
-                    
-                    // Ако смо у режиму замене, бришемо постојеће податке - само финансијске податке
-                    if (_importMode.value == ImportMode.REPLACE_ALL) {
-                        accountRepository.deleteAllAccounts()
-                        expenseRepository.deleteAllExpenses()
-                        incomeRepository.deleteAllIncomes()
+                    val existingExpenses = if (_importMode.value == ImportMode.ADD_NEW) {
+                        expenseRepository.getExpenses().first()
+                    } else {
+                        emptyList()
                     }
                     
-                    // Додавање увезених података
+                    val existingIncomes = if (_importMode.value == ImportMode.ADD_NEW) {
+                        incomeRepository.getIncomes().first()
+                    } else {
+                        emptyList()
+                    }
+                    
+                    // Обрађујемо рачуне
                     _importProgressText.value = "Увоз рачуна..."
                     
-                    // Безбедно касуј податке и обрађуј изузетке
+                    // Ако је режим REPLACE_ALL, бришемо све постојеће рачуне
+                    if (_importMode.value == ImportMode.REPLACE_ALL) {
+                        val currentAccounts = accountRepository.getAllAccounts()
+                        currentAccounts.forEach { account ->
+                            accountRepository.deleteAccount(account.id)
+                        }
+                    }
+                    
                     accounts.forEach { accountData ->
                         try {
                             // Сигурна конверзија Account објекта
@@ -237,15 +242,17 @@ class DataExportImportViewModel(
                                         is String -> balanceValue.toDoubleOrNull() ?: 0.0
                                         else -> 0.0
                                     }
-                                    val currency = (accountData["currency"] as? String) ?: "RSD"
+                                    val currency = (accountData["currency"] as? String) ?: ""
                                     val color = when (val colorValue = accountData["color"]) {
                                         is Number -> colorValue.toInt()
-                                        is String -> colorValue.toIntOrNull() ?: 0
                                         else -> 0
                                     }
-                                    val isDefault = (accountData["isDefault"] as? Boolean) ?: false
-                                    val typeStr = (accountData["type"] as? String) ?: "CASH"
+                                    val isDefault = when (val defaultValue = accountData["isDefault"]) {
+                                        is Boolean -> defaultValue
+                                        else -> false
+                                    }
                                     val type = try {
+                                        val typeStr = (accountData["type"] as? String) ?: "CASH"
                                         AccountType.valueOf(typeStr)
                                     } catch (e: Exception) {
                                         AccountType.CASH
@@ -283,6 +290,18 @@ class DataExportImportViewModel(
                     // Привремено памтимо на којим рачунима су расходи и приходи да би исправили стање на крају
                     val accountBalanceChanges = mutableMapOf<String, Double>()
                     
+                    // Ako je režim REPLACE_ALL, brišemo sve postojeće rashode
+                    if (_importMode.value == ImportMode.REPLACE_ALL) {
+                        val currentExpenses = expenseRepository.getExpenses().first()
+                        currentExpenses.forEach { expense ->
+                            expenseRepository.deleteExpense(expense.id)
+                        }
+                    }
+                    
+                    // Dohvatimo Firebase instancu za direktan pristup
+                    val firestore = FirebaseFirestore.getInstance()
+                    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                    
                     expenses.forEach { expenseData ->
                         try {
                             // Сигурна конверзија Expense објекта
@@ -303,6 +322,7 @@ class DataExportImportViewModel(
                                     val date = when (val dateValue = expenseData["date"]) {
                                         is Map<*, *> -> {
                                             try {
+                                                // Pokušaj izvući seconds i nanoseconds ako postoje
                                                 val seconds = when (val secondsValue = dateValue["seconds"]) {
                                                     is Number -> secondsValue.toLong()
                                                     is String -> secondsValue.toLongOrNull() ?: 0L
@@ -313,14 +333,57 @@ class DataExportImportViewModel(
                                                     is String -> nanosecondsValue.toIntOrNull() ?: 0
                                                     else -> 0
                                                 }
-                                                com.google.firebase.Timestamp(seconds, nanoseconds)
+                                                
+                                                // Pretvorimo timestamp u string datum
+                                                val date = Date(seconds * 1000 + nanoseconds / 1000000)
+                                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                dateFormat.format(date)
                                             } catch (e: Exception) {
                                                 Log.e("ImportData", "Грешка при парсирању датума расхода", e)
-                                                com.google.firebase.Timestamp.now()
+                                                // Današnji datum kao fallback
+                                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                dateFormat.format(Date())
                                             }
                                         }
-                                        is Number -> com.google.firebase.Timestamp(Date(dateValue.toLong()))
-                                        else -> com.google.firebase.Timestamp.now()
+                                        is String -> {
+                                            // Proveri da li je string već u ispravnom formatu
+                                            if (dateValue.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                                                dateValue
+                                            } else {
+                                                try {
+                                                    // Pokušaj parsirati string u datum
+                                                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                                    dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                    val parsedDate = dateFormat.parse(dateValue)
+                                                    if (parsedDate != null) {
+                                                        dateFormat.format(parsedDate)
+                                                    } else {
+                                                        dateFormat.format(Date())
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Log.e("ImportData", "Greška pri parsiranju string datuma: ${e.message}")
+                                                    // Današnji datum kao fallback
+                                                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                                    dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                    dateFormat.format(Date())
+                                                }
+                                            }
+                                        }
+                                        is Number -> {
+                                            // Pretvorimo long timestamp u string datum
+                                            val date = Date(dateValue.toLong())
+                                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                            dateFormat.format(date)
+                                        }
+                                        else -> {
+                                            // Današnji datum kao fallback
+                                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                            dateFormat.format(Date())
+                                        }
                                     }
                                     
                                     Expense(id, amount, description, category, date, accountId)
@@ -344,8 +407,42 @@ class DataExportImportViewModel(
                                     val currentChange = accountBalanceChanges.getOrDefault(expense.accountId, 0.0)
                                     accountBalanceChanges[expense.accountId] = currentChange - expense.amount
                                     
-                                    // Додајемо расход без ажурирања баланса
-                                    expenseRepository.addExpense(expense, updateAccountBalance = false)
+                                    // Kreiramo podatke za direktan upis u Firebase
+                                    val expenseId = expense.id.ifEmpty { java.util.UUID.randomUUID().toString() }
+                                    
+                                    // Osiguravamo da datum bude u ispravnom formatu
+                                    val validDate = if (expense.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                                        expense.date
+                                    } else {
+                                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                        dateFormat.format(Date())
+                                    }
+                                    
+                                    val expenseMap = hashMapOf(
+                                        "id" to expenseId,
+                                        "amount" to expense.amount,
+                                        "description" to expense.description,
+                                        "category" to expense.category,
+                                        "date" to validDate,  // Koristimo samo string format datuma
+                                        "accountId" to expense.accountId
+                                    )
+                                    
+                                    // Direktno upisujemo u Firebase
+                                    if (currentUserId.isNotEmpty()) {
+                                        firestore.collection("users").document(currentUserId)
+                                            .collection("expenses").document(expenseId)
+                                            .set(expenseMap)
+                                            .addOnSuccessListener {
+                                                Log.d("ImportData", "Uspešno dodat trošak: $expenseId")
+                                            }
+                                            .addOnFailureListener { e ->
+                                                Log.e("ImportData", "Greška pri dodavanju troška: ${e.message}")
+                                            }
+                                    } else {
+                                        // Ako nije dostupan direktan pristup Firebase-u, koristimo standardni način
+                                        expenseRepository.addExpense(expense.copy(id = expenseId), updateAccountBalance = false)
+                                    }
                                 }
                             }
                         } catch (e: Exception) {
@@ -356,6 +453,14 @@ class DataExportImportViewModel(
                     }
                     
                     _importProgressText.value = "Увоз прихода..."
+                    
+                    // Ako je režim REPLACE_ALL, brišemo sve postojeće prihode
+                    if (_importMode.value == ImportMode.REPLACE_ALL) {
+                        val currentIncomes = incomeRepository.getIncomes().first()
+                        currentIncomes.forEach { income ->
+                            incomeRepository.deleteIncome(income.id)
+                        }
+                    }
                     
                     incomes.forEach { incomeData ->
                         try {
@@ -377,6 +482,7 @@ class DataExportImportViewModel(
                                     val date = when (val dateValue = incomeData["date"]) {
                                         is Map<*, *> -> {
                                             try {
+                                                // Pokušaj izvući seconds i nanoseconds ako postoje
                                                 val seconds = when (val secondsValue = dateValue["seconds"]) {
                                                     is Number -> secondsValue.toLong()
                                                     is String -> secondsValue.toLongOrNull() ?: 0L
@@ -387,14 +493,57 @@ class DataExportImportViewModel(
                                                     is String -> nanosecondsValue.toIntOrNull() ?: 0
                                                     else -> 0
                                                 }
-                                                com.google.firebase.Timestamp(seconds, nanoseconds)
+                                                
+                                                // Pretvorimo timestamp u string datum
+                                                val date = Date(seconds * 1000 + nanoseconds / 1000000)
+                                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                dateFormat.format(date)
                                             } catch (e: Exception) {
                                                 Log.e("ImportData", "Грешка при парсирању датума прихода", e)
-                                                com.google.firebase.Timestamp.now()
+                                                // Današnji datum kao fallback
+                                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                dateFormat.format(Date())
                                             }
                                         }
-                                        is Number -> com.google.firebase.Timestamp(Date(dateValue.toLong()))
-                                        else -> com.google.firebase.Timestamp.now()
+                                        is String -> {
+                                            // Proveri da li je string već u ispravnom formatu
+                                            if (dateValue.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                                                dateValue
+                                            } else {
+                                                try {
+                                                    // Pokušaj parsirati string u datum
+                                                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                                    dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                    val parsedDate = dateFormat.parse(dateValue)
+                                                    if (parsedDate != null) {
+                                                        dateFormat.format(parsedDate)
+                                                    } else {
+                                                        dateFormat.format(Date())
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Log.e("ImportData", "Greška pri parsiranju string datuma: ${e.message}")
+                                                    // Današnji datum kao fallback
+                                                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                                    dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                    dateFormat.format(Date())
+                                                }
+                                            }
+                                        }
+                                        is Number -> {
+                                            // Pretvorimo long timestamp u string datum
+                                            val date = Date(dateValue.toLong())
+                                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                            dateFormat.format(date)
+                                        }
+                                        else -> {
+                                            // Današnji datum kao fallback
+                                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                            dateFormat.format(Date())
+                                        }
                                     }
                                     
                                     Income(id, amount, description, category, date, accountId)
@@ -418,8 +567,42 @@ class DataExportImportViewModel(
                                     val currentChange = accountBalanceChanges.getOrDefault(income.accountId, 0.0)
                                     accountBalanceChanges[income.accountId] = currentChange + income.amount
                                     
-                                    // Додајемо приход без ажурирања баланса
-                                    incomeRepository.addIncome(income, updateAccountBalance = false)
+                                    // Kreiramo podatke za direktan upis u Firebase
+                                    val incomeId = income.id.ifEmpty { java.util.UUID.randomUUID().toString() }
+                                    
+                                    // Osiguravamo da datum bude u ispravnom formatu
+                                    val validDate = if (income.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                                        income.date
+                                    } else {
+                                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                        dateFormat.format(Date())
+                                    }
+                                    
+                                    val incomeMap = hashMapOf(
+                                        "id" to incomeId,
+                                        "amount" to income.amount,
+                                        "description" to income.description,
+                                        "category" to income.category,
+                                        "date" to validDate,  // Koristimo samo string format datuma
+                                        "accountId" to income.accountId
+                                    )
+                                    
+                                    // Direktno upisujemo u Firebase
+                                    if (currentUserId.isNotEmpty()) {
+                                        firestore.collection("users").document(currentUserId)
+                                            .collection("incomes").document(incomeId)
+                                            .set(incomeMap)
+                                            .addOnSuccessListener {
+                                                Log.d("ImportData", "Uspešno dodat prihod: $incomeId")
+                                            }
+                                            .addOnFailureListener { e ->
+                                                Log.e("ImportData", "Greška pri dodavanju prihoda: ${e.message}")
+                                            }
+                                    } else {
+                                        // Ako nije dostupan direktan pristup Firebase-u, koristimo standardni način
+                                        incomeRepository.addIncome(income.copy(id = incomeId), updateAccountBalance = false)
+                                    }
                                 }
                             }
                         } catch (e: Exception) {
@@ -437,15 +620,43 @@ class DataExportImportViewModel(
                         val currentAccounts = accountRepository.getAllAccounts()
                         
                         // Мапирамо баланс увезених рачуна из JSON-а
-                        val importedBalances = accounts.associate { (it as Account).id to (it as Account).balance }
+                        val importedBalances = mutableMapOf<String, Double>()
+                        
+                        // Проверавамо и додајемо баланс за сваки рачун
+                        accounts.forEach {
+                            when (it) {
+                                is Account -> {
+                                    if (it.id.isNotEmpty()) {
+                                        importedBalances[it.id] = it.balance
+                                    }
+                                }
+                                is Map<*, *> -> {
+                                    val id = (it["id"] as? String) ?: ""
+                                    val balance = when (val balanceValue = it["balance"]) {
+                                        is Number -> balanceValue.toDouble()
+                                        is String -> balanceValue.toDoubleOrNull() ?: 0.0
+                                        else -> 0.0
+                                    }
+                                    
+                                    if (id.isNotEmpty()) {
+                                        importedBalances[id] = balance
+                                    }
+                                }
+                                else -> {
+                                    // Игноришемо нетипизирани објекте
+                                    Log.e("ImportData", "Непознат тип рачуна: $it")
+                                }
+                            }
+                        }
                         
                         // Поправљамо баланс рачуна
                         for (account in currentAccounts) {
-                            val importedBalance = importedBalances[account.id] ?: continue
-                            
-                            // Ажурирамо рачун директно да има баланс из JSON-а
-                            val correctedAccount = account.copy(balance = importedBalance)
-                            accountRepository.updateAccount(correctedAccount)
+                            val importedBalance = importedBalances[account.id]
+                            if (importedBalance != null) {
+                                // Ажурирамо рачун директно да има баланс из JSON-а
+                                val correctedAccount = account.copy(balance = importedBalance)
+                                accountRepository.updateAccount(correctedAccount)
+                            }
                         }
                     } catch (e: Exception) {
                         Log.e("ImportData", "Грешка при корекцији баланса рачуна: ${e.message}")

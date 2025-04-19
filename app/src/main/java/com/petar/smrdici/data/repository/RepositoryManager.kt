@@ -18,30 +18,18 @@ object RepositoryManager {
     
     /**
      * Vraća instancu ExpenseRepository za potrebe budžet funkcionalnosti
-     * Radi samo za čitanje podataka jer nema AccountRepository instancu
+     * Koristi postojeću instancu koja ima sve konekcije pravilno uspostavljene
      */
     fun getExpenseRepositoryForBudget(): ExpenseRepository {
-        if (expenseRepositoryInstance == null) {
-            // Refleksija za pristup privatnom konstruktoru
-            val constructor = ExpenseRepository::class.java.getDeclaredConstructor()
-            constructor.isAccessible = true
-            expenseRepositoryInstance = constructor.newInstance()
-        }
-        return expenseRepositoryInstance!!
+        return ExpenseRepository.getInstance()
     }
     
     /**
      * Vraća instancu IncomeRepository za potrebe budžet funkcionalnosti
-     * Radi samo za čitanje podataka jer nema AccountRepository instancu
+     * Koristi postojeću instancu koja ima sve konekcije pravilno uspostavljene
      */
     fun getIncomeRepositoryForBudget(): IncomeRepository {
-        if (incomeRepositoryInstance == null) {
-            // Refleksija za pristup privatnom konstruktoru
-            val constructor = IncomeRepository::class.java.getDeclaredConstructor()
-            constructor.isAccessible = true
-            incomeRepositoryInstance = constructor.newInstance()
-        }
-        return incomeRepositoryInstance!!
+        return IncomeRepository.getInstance()
     }
     
     /**
@@ -54,5 +42,12 @@ object RepositoryManager {
             accountRepositoryInstance = AccountRepository.getInstance()
         }
         return accountRepositoryInstance!!
+    }
+    
+    /**
+     * Vraća instancu BudgetRepository za potrebe budžet funkcionalnosti
+     */
+    fun getBudgetRepositoryForBudget(): BudgetRepository {
+        return BudgetRepository.getInstance()
     }
 } 

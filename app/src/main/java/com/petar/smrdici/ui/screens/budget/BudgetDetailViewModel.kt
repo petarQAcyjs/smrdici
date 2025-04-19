@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Budget
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.util.Date
 
 /**
  * ViewModel za upravljanje pojedinačnim budžetom i njegovim detaljima
@@ -134,9 +136,9 @@ class BudgetDetailViewModel(
     private fun processExpensesForBudget(budget: Budget, expenses: List<Expense>) {
         val filteredExpenses = expenses.filter { expense ->
             // Filtriramo po vremenskom periodu
-            val expenseDate = expense.date.toDate().time
-            val startDate = budget.startDate.toDate().time
-            val endDate = budget.endDate.toDate().time
+            val expenseDate = expense.getDateObject()?.time ?: 0L
+            val startDate = budget.getStartDateObject()?.time ?: 0L
+            val endDate = budget.getEndDateObject()?.time ?: 0L
             
             val isInTimeRange = expenseDate in startDate..endDate
             
@@ -153,13 +155,13 @@ class BudgetDetailViewModel(
         // Ažuriramo relevantne troškove
         _relevantExpenses.value = filteredExpenses
         
-        // Računamo ukupnu potrošnju za ovaj budžet
-        val totalSpent = filteredExpenses.sumOf { it.amount }
+        // Računamo ukupan trošak za ovaj budžet
+        val totalExpense = filteredExpenses.sumOf { it.amount }
         
-        // Kreiramo DisplayBudget sa informacijama o potrošnji
+        // Kreiramo DisplayBudget sa informacijama o troškovima
         _displayBudget.value = DisplayBudget(
             budget = budget,
-            spentAmount = totalSpent
+            spentAmount = totalExpense
         )
         
         _isLoading.value = false
@@ -171,9 +173,9 @@ class BudgetDetailViewModel(
     private fun processIncomesForBudget(budget: Budget, incomes: List<Income>) {
         val filteredIncomes = incomes.filter { income ->
             // Filtriramo po vremenskom periodu
-            val incomeDate = income.date.toDate().time
-            val startDate = budget.startDate.toDate().time
-            val endDate = budget.endDate.toDate().time
+            val incomeDate = income.getDateObject()?.time ?: 0L
+            val startDate = budget.getStartDateObject()?.time ?: 0L
+            val endDate = budget.getEndDateObject()?.time ?: 0L
             
             val isInTimeRange = incomeDate in startDate..endDate
             

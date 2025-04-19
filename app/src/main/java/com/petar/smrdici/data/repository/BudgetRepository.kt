@@ -32,6 +32,22 @@ class BudgetRepository(
         }
     }
     
+    companion object {
+        @Volatile private var instance: BudgetRepository? = null
+        
+        /**
+         * Singleton pristup repozitorijumu
+         */
+        fun getInstance(): BudgetRepository {
+            return instance ?: synchronized(this) {
+                instance ?: BudgetRepository(
+                    FirebaseFirestore.getInstance(),
+                    FirebaseAuth.getInstance()
+                ).also { instance = it }
+            }
+        }
+    }
+    
     // Vraća kolekciju budžeta za trenutnog korisnika
     private fun getBudgetsCollection(): CollectionReference {
         val userId = auth.currentUser?.uid ?: throw Exception("Korisnik nije prijavljen")

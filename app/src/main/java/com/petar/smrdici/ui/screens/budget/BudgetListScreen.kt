@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.screens.budget
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +55,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.petar.smrdici.data.model.Expense
+import com.petar.smrdici.data.model.Income
 import com.petar.smrdici.data.model.DisplayBudget
 import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.ui.components.AppHeader
@@ -61,6 +64,7 @@ import com.petar.smrdici.ui.components.BudgetBattery
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
+import com.petar.smrdici.data.model.CategoryManager
 
 /**
  * Враћа валуту за приказ на основу изабраног рачуна
@@ -82,31 +86,123 @@ fun BudgetListScreen(
     budgetsViewModel: BudgetsViewModel = viewModel(factory = BudgetsViewModel.Factory(LocalContext.current)),
     budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current))
 ) {
-    val scope = rememberCoroutineScope()
+    // Za snackbar poruke
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    
+    // Stanje ScrollView-a
     val scrollState = rememberScrollState()
     
-    // Stanja iz ViewModel-a
-    val selectedPeriodIndex by budgetsViewModel.selectedPeriodIndex.collectAsState()
+    // LaunchedEffect za inicialno učitavanje podataka
+    LaunchedEffect(Unit) {
+        Log.d("BudgetListScreen", "Inicijalno učitavanje podataka")
+        budgetsViewModel.loadBudgets()
+        budgetViewModel.reloadTransactions()
+    }
+    
+    // Učitavamo podatke iz ViewModela
     val isLoading by budgetsViewModel.isLoading.collectAsState()
-    val errorMessage by budgetsViewModel.errorMessage.collectAsState()
-    val expenseBudgets by budgetsViewModel.displayExpenseBudgets.collectAsState()
-    val incomeBudgets by budgetsViewModel.displayIncomeBudgets.collectAsState()
+    var isRefreshing by remember { mutableStateOf(false) }
     val totalExpenseSpent by budgetsViewModel.totalExpenseSpent.collectAsState()
     val totalIncomeReceived by budgetsViewModel.totalIncomeReceived.collectAsState()
+    val errorMessage by budgetsViewModel.errorMessage.collectAsState()
+    val displayExpenseBudgets by budgetsViewModel.displayExpenseBudgets.collectAsState()
+    val displayIncomeBudgets by budgetsViewModel.displayIncomeBudgets.collectAsState()
+    val selectedPeriodIndex by budgetsViewModel.selectedPeriodIndex.collectAsState()
     
-    // Stanja iz BudgetViewModel za progress bar budget
-    val budgetLimit by budgetViewModel.budgetLimit.collectAsState()
+    // Dobijamo transakcije iz BudgetViewModel
+    val expenses by budgetViewModel.expenses.collectAsState(initial = emptyList())
+    val incomes by budgetViewModel.incomes.collectAsState(initial = emptyList())
     
-    // UI stanja
-    var selectedTabIndex by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    // Dodatno - direktno pratimo UI stanje iz BudgetViewModel za dijagnostiku
+    val uiState by budgetViewModel.uiState.collectAsState()
+    
+    // Dodajemo log za praćenje učitanih transakcija
+    LaunchedEffect(expenses, incomes) {
+        Log.d("BudgetListScreen", "Učitane transakcije: ${expenses.size} troškova, ${incomes.size} prihoda")
+        Log.d("BudgetListScreen", "Provera uiState: ${uiState.expenses.size} troškova, ${uiState.incomes.size} prihoda")
+        
+        // Dodajemo dodatne provere za expenses i incomes
+        if (expenses.isEmpty() && uiState.expenses.isEmpty()) {
+            Log.d("BudgetListScreen", "UPOZORENJE: Lista troškova je prazna! Pozivam reloadTransactions()")
+            budgetViewModel.reloadTransactions()
+        }
+        if (incomes.isEmpty() && uiState.incomes.isEmpty()) {
+            Log.d("BudgetListScreen", "UPOZORENJE: Lista prihoda je prazna! Pozivam reloadTransactions()")
+            budgetViewModel.reloadTransactions()
+        }
+    }
+    
+    // Dodatna provera za praćenje promena u uiState
+    LaunchedEffect(uiState) {
+        Log.d("BudgetListScreen", "PROMENA UI STANJA: ${uiState.expenses.size} troškova, ${uiState.incomes.size} prihoda, isLoading=${uiState.isLoading}")
+        
+        // Ako expenses ili incomes postoje u uiState ali ne i u direktnom StateFlow, treba ih uskladiti
+        if (uiState.expenses.isNotEmpty() && expenses.isEmpty()) {
+            Log.d("BudgetListScreen", "Nesklad između uiState.expenses i expenses - pokušavam ponovno učitavanje")
+            budgetViewModel.reloadTransactions()
+        }
+        
+        if (uiState.incomes.isNotEmpty() && incomes.isEmpty()) {
+            Log.d("BudgetListScreen", "Nesklad između uiState.incomes i incomes - pokušavam ponovno učitavanje")
+            budgetViewModel.reloadTransactions()
+        }
+    }
+    
+    // Dodatni hack da osiguramo da se podaci učitaju - direktno preko coroutineScope
+    val coroutineScope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        coroutineScope.launch {
+            Log.d("BudgetListScreen", "Direktno osvežavanje podataka preko coroutineScope")
+            budgetViewModel.reloadTransactions()
+            
+            // Pokušavamo da pristupimo stateFlow vrednostima direktno
+            val expensesCount = budgetViewModel.expenses.value.size
+            val incomesCount = budgetViewModel.incomes.value.size
+            val uiStateExpensesCount = budgetViewModel.uiState.value.expenses.size
+            val uiStateIncomesCount = budgetViewModel.uiState.value.incomes.size
+            
+            Log.d("BudgetListScreen", "Direktni pristup: expenses=$expensesCount, incomes=$incomesCount")
+            Log.d("BudgetListScreen", "Direktni pristup uiState: expenses=$uiStateExpensesCount, incomes=$uiStateIncomesCount")
+            
+            // Dodatna sigurnosna provera - ako postoje podaci u uiState ali ne u StateFlow-ovima
+            if ((uiStateExpensesCount > 0 && expensesCount == 0) || 
+                (uiStateIncomesCount > 0 && incomesCount == 0)) {
+                Log.d("BudgetListScreen", "KRITIČNO: Podaci postoje u uiState ali ne u direktnim StateFlow-ovima!")
+                // Pokušavamo još jednom nakon kratke pauze
+                kotlinx.coroutines.delay(500)
+                budgetViewModel.reloadTransactions()
+            }
+        }
+    }
+    
+    // Pratimo promene u displayExpenseBudgets i displayIncomeBudgets
+    LaunchedEffect(displayExpenseBudgets, displayIncomeBudgets) {
+        Log.d("BudgetListScreen", "PROMENA BUDGETS: ${displayExpenseBudgets.size} expense budgets, ${displayIncomeBudgets.size} income budgets")
+        Log.d("BudgetListScreen", "Ukupni iznosi: totalExpenseSpent=$totalExpenseSpent, totalIncomeReceived=$totalIncomeReceived")
+    }
+    
+    // LaunchedEffect za praćenje promena perioda ili računa
+    LaunchedEffect(selectedPeriodIndex, budgetsViewModel.selectedAccountId.collectAsState().value) {
+        Log.d("BudgetListScreen", "Osvežavanje podataka zbog promene perioda ili računa")
+        budgetsViewModel.loadBudgets()
+        budgetViewModel.reloadTransactions()
+    }
+    
+    // Stanje za tabove
+    var selectedTabIndex by remember { mutableStateOf(0) }
     val tabs = listOf("Расходи", "Приходи")
-    var isRefreshing by remember { mutableStateOf(false) }
+    
+    // Pratimo promenu taba
+    LaunchedEffect(selectedTabIndex) {
+        Log.d("BudgetListScreen", "Promenjen tab na: ${tabs[selectedTabIndex]}")
+    }
+    
+    // Stanje za dropdown menu za izbor računa
     var showAccountsDropdown by remember { mutableStateOf(false) }
     
-    // Stanje za dialog za postavljanje budžetskog limit
-    var showBudgetLimitDialog by remember { mutableStateOf(false) }
-    var budgetLimitInput by remember { mutableStateOf("") }
+    // Vrednosti budžeta
+    val budgetLimit by budgetsViewModel.budgetLimit.collectAsState()
     
     // Konvertujemo period u čitljiv tekst
     val periodText = when(selectedPeriodIndex) {
@@ -157,6 +253,29 @@ fun BudgetListScreen(
     var selectedAccount by remember { mutableStateOf("") }
     LaunchedEffect(selectedAccountId) {
         selectedAccount = budgetsViewModel.getSelectedAccountName()
+    }
+    
+    // Sortiranje
+    var sortOrder by remember { mutableStateOf(SortOrder.DATE_DESC) }
+    
+    // Stanje za dialog za postavljanje budžetskog limit
+    var showBudgetLimitDialog by remember { mutableStateOf(false) }
+    var budgetLimitInput by remember { mutableStateOf("") }
+    
+    // Pull-to-refresh
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
+            budgetsViewModel.loadBudgets()
+            budgetViewModel.reloadTransactions()
+            isRefreshing = false
+        }
+    }
+    
+    // Dodajem LaunchedEffect za inicijalno učitavanje pri ulasku na ekran
+    LaunchedEffect(Unit) {
+        Log.d("BudgetListScreen", "Inicijalno učitavanje podataka pri otvaranju ekrana")
+        budgetsViewModel.loadBudgets()
+        budgetViewModel.reloadTransactions()
     }
     
     // Основни layout sa scaffold
@@ -333,7 +452,7 @@ fun BudgetListScreen(
                                 )
                                 
                                 Text(
-                                    text = if (budgetLimit > 0) budgetsViewModel.formatAmount(budgetLimit) else "Није подешено",
+                                    text = if (budgetLimit > 0.0) budgetsViewModel.formatAmount(budgetLimit) else "Није подешено",
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = Color.White.copy(alpha = 0.8f)
                                 )
@@ -342,7 +461,7 @@ fun BudgetListScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             
                             // Прогрес бар буџета
-                            val progress = if (budgetLimit > 0) (totalExpenseSpent / budgetLimit).coerceIn(0.0, 1.0) else 0.0
+                            val progress = if (budgetLimit > 0.0) (totalExpenseSpent / budgetLimit).coerceIn(0.0, 1.0) else 0.0
                             val progressColor = when {
                                 progress >= 1.0 -> Color.Red
                                 progress >= 0.75 -> Color(0xFFFF9800) // Наранџаста
@@ -376,23 +495,98 @@ fun BudgetListScreen(
                     }
                 }
                 
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Opcije za sortiranje
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = { 
+                            sortOrder = when(sortOrder) {
+                                SortOrder.DATE_DESC -> SortOrder.AMOUNT_DESC
+                                SortOrder.AMOUNT_DESC -> SortOrder.AMOUNT_ASC
+                                SortOrder.AMOUNT_ASC -> SortOrder.DATE_DESC
+                            }
+                        }
+                    ) {
+                        val sortText = when(sortOrder) {
+                            SortOrder.DATE_DESC -> "Сортирај по: Датуму"
+                            SortOrder.AMOUNT_DESC -> "Сортирај по: Износу (↓)"
+                            SortOrder.AMOUNT_ASC -> "Сортирај по: Износу (↑)"
+                        }
+                        Text(
+                            text = sortText,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+                
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // Lista budžeta - не користимо LazyColumn јер већ имамо вертикални скрол
-                val budgetList = if (selectedTabIndex == 0) expenseBudgets else incomeBudgets
+                // Prikazujemo listu TRANSAKCIJA, ne budžeta
+                val transactions = if (selectedTabIndex == 0) {
+                    // Sortiranje troškova
+                    Log.d("BudgetListScreen", "TRANSAKCIJE: Pripremam troškove za prikaz, ukupno: ${expenses.size}")
+                    expenses.forEach { expense ->
+                        Log.d("BudgetListScreen", "EXPENSE: id=${expense.id}, amount=${expense.amount}, date=${expense.date}, category=${expense.category}")
+                    }
+                    
+                    val sortedExpenses = when(sortOrder) {
+                        SortOrder.DATE_DESC -> expenses.sortedByDescending { it.getDateObject()?.time ?: 0L }
+                        SortOrder.AMOUNT_DESC -> expenses.sortedByDescending { it.amount }
+                        SortOrder.AMOUNT_ASC -> expenses.sortedBy { it.amount }
+                    }
+                    Log.d("BudgetListScreen", "Pripremljeno za prikaz: ${sortedExpenses.size} troškova")
+                    sortedExpenses
+                } else {
+                    // Sortiranje prihoda
+                    Log.d("BudgetListScreen", "TRANSAKCIJE: Pripremam prihode za prikaz, ukupno: ${incomes.size}")
+                    incomes.forEach { income ->
+                        Log.d("BudgetListScreen", "INCOME: id=${income.id}, amount=${income.amount}, date=${income.date}, category=${income.category}")
+                    }
+                    
+                    val sortedIncomes = when(sortOrder) {
+                        SortOrder.DATE_DESC -> incomes.sortedByDescending { it.getDateObject()?.time ?: 0L }
+                        SortOrder.AMOUNT_DESC -> incomes.sortedByDescending { it.amount }
+                        SortOrder.AMOUNT_ASC -> incomes.sortedBy { it.amount }
+                    }
+                    Log.d("BudgetListScreen", "Pripremljeno za prikaz: ${sortedIncomes.size} prihoda")
+                    sortedIncomes
+                }
                 
-                if (budgetList.isNotEmpty()) {
-                    budgetList.forEach { displayBudget ->
-                        BudgetListItem(
-                            displayBudget = displayBudget,
-                            formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
-                            onClick = {
-                                navController.navigate(Screen.BudgetDetail.route + "/${displayBudget.budget.id}")
+                if (transactions.isNotEmpty()) {
+                    Log.d("BudgetListScreen", "TRANSAKCIJE: Prikazujem ${transactions.size} transakcija")
+                    transactions.forEach { transaction ->
+                        Log.d("BudgetListScreen", "Tip transakcije: ${transaction.javaClass.simpleName}, iznos: ${
+                            when(transaction) {
+                                is Expense -> transaction.amount
+                                is Income -> transaction.amount
+                                else -> 0.0
                             }
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        }")
+                        when (transaction) {
+                            is Expense -> ExpenseListItem(
+                                expense = transaction,
+                                formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
+                                accounts = accounts
+                            )
+                            is Income -> IncomeListItem(
+                                income = transaction,
+                                formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
+                                accounts = accounts
+                            )
+                            else -> {
+                                Log.e("BudgetListScreen", "Nepoznat tip transakcije: ${transaction.javaClass.name}")
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 } else {
+                    Log.d("BudgetListScreen", "Nema transakcija za prikaz za tab: $selectedTabIndex")
                     // Prikaz za prazan ekran
                     Box(
                         modifier = Modifier
@@ -526,25 +720,29 @@ fun BudgetListScreen(
     }
 }
 
+// Dodajemo enum za sortiranje
+enum class SortOrder {
+    DATE_DESC, AMOUNT_DESC, AMOUNT_ASC
+}
+
 @Composable
-fun BudgetListItem(
-    displayBudget: DisplayBudget,
+fun ExpenseListItem(
+    expense: Expense,
     formatAmount: (Double) -> String,
-    onClick: () -> Unit
+    accounts: List<Account>
 ) {
-    // Добијамо валуту из буџета
-    val budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current))
-    val accounts by budgetViewModel.accounts.collectAsState(initial = emptyList())
-    val currency = if (displayBudget.budget.accountId.isNotEmpty()) {
-        accounts.find { it.id == displayBudget.budget.accountId }?.currency ?: "RSD"
-    } else {
-        "RSD"
-    }
+    val account = accounts.find { it.id == expense.accountId }
+    // Koristimo getFormattedDate metodu za prikazivanje datuma
+    val dateFormatted = expense.getFormattedDate()
+    
+    // Koristimo CategoryManager za dobijanje imena kategorije
+    val context = LocalContext.current
+    val categoryManager = CategoryManager.getInstance(context)
+    val categoryName = categoryManager.getExpenseCategoryDisplayName(expense.category)
     
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
+            .fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF303436)
         ),
@@ -552,77 +750,133 @@ fun BudgetListItem(
             defaultElevation = 2.dp
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Gornji deo sa imenom i iznosom
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            // Levi deo - kategorija i opis
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
             ) {
-                Column {
-                    // Ime budžeta/kategorije
+                Text(
+                    text = categoryName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                if (expense.description.isNotEmpty()) {
                     Text(
-                        text = displayBudget.budget.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
+                        text = expense.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f)
                     )
-                    
-                    // Kategorije ako postoje
-                    if (displayBudget.budget.categoryIds.isNotEmpty()) {
-                        val categoryCount = displayBudget.budget.categoryIds.size
-                        val categoryText = when (categoryCount) {
-                            1 -> "Буџет за категорију"
-                            else -> "Буџет за $categoryCount категорија"
-                        }
-                        
-                        Text(
-                            text = categoryText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    } else {
-                        Text(
-                            text = "Укупан буџет",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    }
                 }
                 
-                // Iznos potrošnje (za rashode) ili prihoda (za prihode)
-                Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = dateFormatted,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.5f)
+                )
+                
+                if (accounts.size > 1) {
                     Text(
-                        text = formatAmount(displayBudget.spentAmount),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    
-                    Text(
-                        text = "од ${formatAmount(displayBudget.budget.amount)}",
+                        text = account?.name ?: "Непознат рачун",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.7f)
+                        color = Color.White.copy(alpha = 0.5f)
                     )
                 }
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Заменимо обичан прогрес бар са BudgetBattery компонентом
-            BudgetBattery(
-                modifier = Modifier.fillMaxWidth(),
-                expenses = displayBudget.spentAmount,
-                budget = displayBudget.budget.amount,
-                currency = currency,
-                backgroundNotFilled = Color(0xFF303436)
+            // Desni deo - iznos
+            Text(
+                text = formatAmount(expense.amount),
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFFFF9800), // Narandžasta za troškove
+                fontWeight = FontWeight.Bold
             )
+        }
+    }
+}
+
+@Composable
+fun IncomeListItem(
+    income: Income,
+    formatAmount: (Double) -> String,
+    accounts: List<Account>
+) {
+    val account = accounts.find { it.id == income.accountId }
+    // Koristimo getFormattedDate metodu za prikazivanje datuma
+    val dateFormatted = income.getFormattedDate()
+    
+    // Koristimo CategoryManager za dobijanje imena kategorije
+    val context = LocalContext.current
+    val categoryManager = CategoryManager.getInstance(context)
+    val categoryName = categoryManager.getIncomeCategoryDisplayName(income.category)
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF303436)
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Levi deo - kategorija i opis
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+            ) {
+                Text(
+                    text = categoryName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                if (income.description.isNotEmpty()) {
+                    Text(
+                        text = income.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+                
+                Text(
+                    text = dateFormatted,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.5f)
+                )
+                
+                if (accounts.size > 1) {
+                    Text(
+                        text = account?.name ?: "Непознат рачун",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+                }
+            }
             
-            Spacer(modifier = Modifier.height(8.dp))
+            // Desni deo - iznos
+            Text(
+                text = formatAmount(income.amount),
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFF4CAF50), // Zelena za prihode
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 } 

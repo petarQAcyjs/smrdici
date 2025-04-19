@@ -11,8 +11,12 @@ import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException
 import com.google.android.gms.common.GooglePlayServicesRepairableException
 import com.google.android.gms.security.ProviderInstaller
+import com.petar.smrdici.data.repository.AccountRepository
+import com.petar.smrdici.data.repository.BudgetRepository
 import com.petar.smrdici.data.repository.ExpenseRepository
 import com.petar.smrdici.data.repository.IncomeRepository
+import com.petar.smrdici.data.repository.RepositoryManager
+import com.petar.smrdici.utils.AppGlobals
 
 class SmrdiciApplication : Application() {
     companion object {
@@ -22,6 +26,8 @@ class SmrdiciApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         
+        Log.d(TAG, "Inicijalizacija Smrdici aplikacije")
+        
         // Конфигуришемо управљање изузецима и логовима
         configureLogging()
         
@@ -29,8 +35,10 @@ class SmrdiciApplication : Application() {
         initGooglePlayServices()
         
         // Иницијализујемо репозиторијуме
-        ExpenseRepository.initialize()
-        IncomeRepository.initialize()
+        initializeRepositories()
+        
+        // Иницијализујемо AppGlobals
+        AppGlobals.initialize(applicationContext)
         
         // Офлајн подршка је подразумевано укључена у новијим верзијама Firebase-а
         // Нема потребе за додатном конфигурацијом
@@ -146,5 +154,22 @@ class SmrdiciApplication : Application() {
             }
         }
         return null
+    }
+    
+    private fun initializeRepositories() {
+        Log.d("SmrdiciApplication", "Inicijalizacija repozitorijuma")
+        
+        // Dobavljamo instance repozitorijuma kroz RepositoryManager
+        val expenseRepository = RepositoryManager.getExpenseRepositoryForBudget()
+        val incomeRepository = RepositoryManager.getIncomeRepositoryForBudget()
+        val accountRepository = RepositoryManager.getAccountRepositoryForBudget(this)
+        val budgetRepository = RepositoryManager.getBudgetRepositoryForBudget()
+        
+        // Međusobno povezivanje repozitorijuma (ako je potrebno)
+        // Npr. ExpenseRepository zahteva AccountRepository za ažuriranje balansa računa
+        expenseRepository?.setAccountRepository(accountRepository ?: AccountRepository.getInstance())
+        incomeRepository?.setAccountRepository(accountRepository ?: AccountRepository.getInstance())
+        
+        Log.d("SmrdiciApplication", "Repozitorijumi inicijalizovani")
     }
 } 

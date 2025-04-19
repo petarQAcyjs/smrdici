@@ -87,6 +87,14 @@ class BudgetsViewModel(
     private val _totalIncomeReceived = MutableStateFlow(0.0)
     val totalIncomeReceived: StateFlow<Double> = _totalIncomeReceived.asStateFlow()
     
+    // Dodajemo budžetski limit
+    private val _budgetLimit = MutableStateFlow(0.0)
+    val budgetLimit: StateFlow<Double> = _budgetLimit.asStateFlow()
+    
+    // Proširujemo isRefreshing stanje za pull-to-refresh
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+    
     init {
         // Inicijalno učitavamo račune
         loadAccounts()
@@ -150,33 +158,61 @@ class BudgetsViewModel(
     /**
      * Učitavanje svih budžeta
      */
+    @Suppress("UNUSED")
     fun loadBudgets() {
         viewModelScope.launch {
-            _isLoading.value = true
+            // Dodajem log za početak učitavanja budžeta
+            Log.d("BudgetsViewModel", "===== POČETAK UČITAVANJA BUDŽETA =====")
             
+            _isLoading.value = true
             try {
-                Log.d(tag, "Учитавам буџете...")
-                
-                // Учитавамо све буџете
-                budgetRepository.getAllBudgets().collect { budgets ->
-                    // Филтрирамо буџете ако је потребно
-                    val filteredBudgets = if (_selectedAccountId.value != null) {
-                        budgets.filter { it.accountId == _selectedAccountId.value }
-                    } else {
-                        budgets
+                Log.d("BudgetsViewModel", "Pozivam budgetRepository.getAllBudgets()")
+                budgetRepository.getAllBudgets().collect { budgetsList ->
+                    Log.d("BudgetsViewModel", "Učitano ${budgetsList.size} budžeta")
+                    
+                    // Detalji o budžetima
+                    if (budgetsList.isNotEmpty()) {
+                        val sampleBudgets = budgetsList.take(3).joinToString { 
+                            "Budget(id=${it.id}, name=${it.name}, amount=${it.amount}, type=${it.type})" 
+                        }
+                        Log.d("BudgetsViewModel", "Uzorci budžeta: $sampleBudgets")
                     }
                     
-                    _allBudgets.value = filteredBudgets
+                    // Odvajamo filtriranje budžeta prema tipu
+                    val expenseBudgets = budgetsList.filter { it.type == BudgetType.EXPENSE }
+                    val incomeBudgets = budgetsList.filter { it.type == BudgetType.INCOME }
+                    Log.d("BudgetsViewModel", "Nakon podele po tipu: ${expenseBudgets.size} budžeta za rashode, ${incomeBudgets.size} budžeta za prihode")
                     
-                    // Сада израчунавамо трошкове за све буџете
-                    calculateBudgetSpending(filteredBudgets)
+                    _allBudgets.value = budgetsList
                     
-                    _isLoading.value = false
+                    val selectedAccountId = _selectedAccountId.value
+                    if (selectedAccountId != null) {
+                        Log.d("BudgetsViewModel", "Filtriram budžete za račun: $selectedAccountId")
+                        val filteredExpenseBudgets = expenseBudgets.filter { budget ->
+                            budget.accountId == selectedAccountId
+                        }
+                        val filteredIncomeBudgets = incomeBudgets.filter { budget ->
+                            budget.accountId == selectedAccountId
+                        }
+                        Log.d("BudgetsViewModel", "Nakon filtriranja po računu: ${filteredExpenseBudgets.size} budžeta za rashode, ${filteredIncomeBudgets.size} budžeta za prihode")
+                        
+                        _expenseBudgets.value = filteredExpenseBudgets
+                        _incomeBudgets.value = filteredIncomeBudgets
+                    } else {
+                        Log.d("BudgetsViewModel", "Nije odabran račun, prikazujem sve budžete")
+                        _expenseBudgets.value = expenseBudgets
+                        _incomeBudgets.value = incomeBudgets
+                    }
+
+                    // Učitavamo rashode, prihode i računamo potrošnju za budžete
+                    Log.d("BudgetsViewModel", "Pokrećem izračunavanje budžetske potrošnje")
+                    calculateBudgetSpending()
                 }
-            } catch (e: Exception) {
-                Log.e(tag, "Грешка при учитавању буџета", e)
-                _errorMessage.value = "Грешка при учитавању буџета: ${e.message}"
                 _isLoading.value = false
+            } catch (e: Exception) {
+                Log.e("BudgetsViewModel", "Greška pri učitavanju budžeta", e)
+                _isLoading.value = false
+                _errorMessage.value = "Greška pri učitavanju budžeta: ${e.message}"
             }
         }
     }
@@ -184,160 +220,290 @@ class BudgetsViewModel(
     /**
      * Функција за израчунавање потрошње за буџете
      */
-    private fun calculateBudgetSpending(budgets: List<Budget>) {
+    private fun calculateBudgetSpending() {
         viewModelScope.launch {
+            _isLoading.value = true
+            Log.d("BudgetsViewModel", "===== POČETAK IZRAČUNAVANJA BUDŽETSKE POTROŠNJE =====")
+            
             try {
-                // Раздвајамо буџете по типу
-                _expenseBudgets.value = budgets.filter { it.type == BudgetType.EXPENSE }
-                _incomeBudgets.value = budgets.filter { it.type == BudgetType.INCOME }
+                // Zakazujemo osvežavanje budžeta nakon završetka izračunavanja
+                val startTime = System.currentTimeMillis()
                 
-                // Рачунамо укупне вредности буџета
-                _totalExpenseBudget.value = _expenseBudgets.value.sumOf { it.amount }
-                _totalIncomeBudget.value = _incomeBudgets.value.sumOf { it.amount }
-                
-                // Учитавамо поторшњу за расходе и приходе
                 loadExpenseSpending()
                 loadIncomeReceived()
+                
+                val endTime = System.currentTimeMillis()
+                Log.d("BudgetsViewModel", "Izračunavanje budžetske potrošnje završeno za ${endTime - startTime}ms")
+                Log.d("BudgetsViewModel", "KONAČNI REZULTATI: displayExpenseBudgets=${_displayExpenseBudgets.value.size}, displayIncomeBudgets=${_displayIncomeBudgets.value.size}")
+                Log.d("BudgetsViewModel", "KONAČNI IZNOSI: totalExpenseSpent=${_totalExpenseSpent.value}, totalIncomeReceived=${_totalIncomeReceived.value}")
+                
+                // Logujemo uzorke DisplayBudget objekata
+                if (_displayExpenseBudgets.value.isNotEmpty()) {
+                    val sampleExpenseBudgets = _displayExpenseBudgets.value.take(2).joinToString {
+                        "DisplayBudget(name=${it.budget.name}, amount=${it.budget.amount}, spent=${it.spentAmount})"
+                    }
+                    Log.d("BudgetsViewModel", "Uzorci expense budžeta: $sampleExpenseBudgets")
+                }
+                
+                if (_displayIncomeBudgets.value.isNotEmpty()) {
+                    val sampleIncomeBudgets = _displayIncomeBudgets.value.take(2).joinToString {
+                        "DisplayBudget(name=${it.budget.name}, amount=${it.budget.amount}, spent=${it.spentAmount})"
+                    }
+                    Log.d("BudgetsViewModel", "Uzorci income budžeta: $sampleIncomeBudgets")
+                }
+                
+                _isLoading.value = false
             } catch (e: Exception) {
-                Log.e(tag, "Грешка при израчунавању потрошње буџета", e)
+                Log.e("BudgetsViewModel", "Greška pri izračunavanju budžetske potrošnje", e)
+                _isLoading.value = false
+                _errorMessage.value = "Greška pri izračunavanju budžetske potrošnje: ${e.message}"
             }
         }
     }
     
     /**
-     * Učitava potrošnju za rashode u budžetu
+     * Funkcija za učitavanje troškova za budžet rashoda
      */
-    private fun loadExpenseSpending() {
-        viewModelScope.launch {
-            try {
-                val (startDate, endDate) = calculatePeriodDates(_selectedPeriod.value)
+    private suspend fun loadExpenseSpending() {
+        Log.d("BudgetsViewModel", "===== UČITAVANJE RASHODA ZA BUDŽETE =====")
+        
+        val currentPeriodIndex = _selectedPeriodIndex.value
+        val period = Period.values()[currentPeriodIndex]
+        val (startDate, endDate) = calculatePeriodDates(period)
+        
+        // Format datuma za log
+        val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+        Log.d("BudgetsViewModel", "Period za rashode: ${period.name}, od ${dateFormat.format(startDate)} do ${dateFormat.format(endDate)}")
+        
+        // Učitavamo sve rashode za odabrani period
+        val expenses = try {
+            val selectedAccountId = _selectedAccountId.value
+            if (selectedAccountId != null) {
+                Log.d("BudgetsViewModel", "Učitavam rashode za račun: $selectedAccountId i period")
+                // Filtriramo po računu i periodu
+                val expensesForAccount = expenseRepository.getExpensesForAccount(selectedAccountId)
+                val filteredExpenses = mutableListOf<Expense>()
                 
-                // Učitavamo sve troškove za trenutni period
-                val periodExpensesFlow = if (_selectedAccountId.value != null) {
-                    expenseRepository.getExpensesForAccount(_selectedAccountId.value!!)
-                } else {
-                    expenseRepository.getAllExpenses()
+                expensesForAccount.collect { expensesList ->
+                    filteredExpenses.addAll(expensesList.filter { expense ->
+                        val expenseDate = expense.getDateObject()?.time ?: 0L
+                        // Direktno koristimo startDate i endDate objekte bez konverzije
+                        val startTime = startDate.time
+                        val endTime = endDate.time
+                        
+                        val isInTimeRange = expenseDate in startTime..endTime
+                        
+                        isInTimeRange
+                    })
                 }
                 
-                periodExpensesFlow.collect { allExpenses: List<Expense> ->
-                    // Filtriramo troškove po periodu
-                    val periodExpenses = allExpenses.filter { expense: Expense ->
-                        val expenseDate = expense.date.toDate().time
-                        expenseDate in startDate.time..endDate.time
-                    }
-                    
-                    // Računamo potrošnju za svaki budžet
-                    val displayBudgets = _expenseBudgets.value.map { budget: Budget ->
-                        // Filtriramo troškove relevantne za ovaj budžet
-                        val relevantExpenses = periodExpenses.filter { expense: Expense ->
-                            // Provera računa
-                            val matchesAccount = budget.accountId.isEmpty() || 
-                                                budget.accountId == expense.accountId
-                            
-                            // Provera kategorije
-                            val matchesCategory = budget.categoryIds.isEmpty() || 
-                                                 budget.categoryIds.contains(expense.category)
-                            
-                            matchesAccount && matchesCategory
-                        }
-                        
-                        // Ukupna potrošnja za ovaj budžet
-                        val spent = relevantExpenses.sumOf { expense: Expense -> expense.amount }
-                        
-                        // Kreiramo DisplayBudget objekat
-                        DisplayBudget(
-                            budget = budget,
-                            spentAmount = spent
-                        )
-                    }
-                    
-                    // Ažuriramo displayBudgets
-                    _displayExpenseBudgets.value = displayBudgets
-                    
-                    // Ukupna potrošnja
-                    _totalExpenseSpent.value = displayBudgets.sumOf { displayBudget: DisplayBudget -> displayBudget.spentAmount }
-                    
-                    _isLoading.value = false
+                filteredExpenses
+            } else {
+                Log.d("BudgetsViewModel", "Učitavam sve rashode za period")
+                // Svi računi za period
+                val allExpenses = mutableListOf<Expense>()
+                expenseRepository.getExpensesForPeriod(startDate, endDate).collect { expensesList ->
+                    allExpenses.addAll(expensesList)
                 }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) {
-                    // Preskačemo grešku ako je posao otkazan
-                    Log.d(tag, "Учитавање потрошње отказано", e)
-                } else {
-                    Log.e(tag, "Грешка при учитавању потрошње", e)
-                    _errorMessage.value = "Грешка при учитавању потрошње: ${e.message}"
-                }
-                _isLoading.value = false
+                allExpenses
             }
+        } catch (e: Exception) {
+            Log.e("BudgetsViewModel", "Greška pri učitavanju rashoda za period", e)
+            emptyList()
         }
+        
+        Log.d("BudgetsViewModel", "Ukupno učitano ${expenses.size} rashoda za period")
+        
+        // Dodajemo log za datume nekoliko rashoda
+        if (expenses.isNotEmpty()) {
+            val dates = expenses.take(5).map { expense -> 
+                dateFormat.format(expense.getDateObject() ?: Date()) 
+            }
+            Log.d("BudgetsViewModel", "Primeri datuma prvih 5 rashoda: $dates")
+        }
+        
+        // Filtriramo rashode po kategorijama budžeta i računamo ukupne troškove
+        // Moramo da filtriramo budžete za rashode
+        val expenseBudgets = _expenseBudgets.value.filter { it.type == BudgetType.EXPENSE }
+        
+        Log.d("BudgetsViewModel", "Broj budžeta za rashode: ${expenseBudgets.size}")
+        
+        val expenseBudgetsWithSpending = mutableListOf<DisplayBudget>()
+        var totalExpenseSpent = 0.0
+        
+        for (budget in expenseBudgets) {
+            // Filtriramo rashode za ovaj budžet (po kategoriji)
+            val budgetExpenses = expenses.filter { expense ->
+                budget.categoryIds.contains(expense.category)
+            }
+            
+            // Računamo ukupnu potrošnju za ovaj budžet
+            val budgetSpent = budgetExpenses.sumOf { expense -> expense.amount }
+            totalExpenseSpent += budgetSpent
+            
+            Log.d("BudgetsViewModel", "Budžet ${budget.name}: potrošeno $budgetSpent od ${budget.amount} (${budgetExpenses.size} transakcija)")
+            
+            // Kreiramo DisplayBudget sa kalkulisanom potrošnjom
+            val displayBudget = DisplayBudget(
+                budget = budget,
+                spentAmount = budgetSpent
+            )
+            
+            expenseBudgetsWithSpending.add(displayBudget)
+        }
+        
+        // Ako nema budžeta za rashode, dodajemo podrazumevani
+        if (expenseBudgetsWithSpending.isEmpty()) {
+            Log.d("BudgetsViewModel", "Nema budžeta za rashode - dodajem podrazumevani")
+            
+            // Računamo ukupnu potrošnju za sve rashode
+            totalExpenseSpent = expenses.sumOf { expense -> expense.amount }
+            
+            // Kreiramo podrazumevani budžet
+            val defaultBudget = Budget(
+                id = "default_expense",
+                name = "Ukupni rashodi",
+                amount = totalExpenseSpent,
+                type = BudgetType.EXPENSE,
+                categoryIds = emptyList(),
+                accountId = _selectedAccountId.value ?: ""
+            )
+            
+            val displayBudget = DisplayBudget(
+                budget = defaultBudget,
+                spentAmount = totalExpenseSpent
+            )
+            
+            expenseBudgetsWithSpending.add(displayBudget)
+        }
+        
+        Log.d("BudgetsViewModel", "Ukupna potrošnja rashoda: $totalExpenseSpent, broj budžeta: ${expenseBudgetsWithSpending.size}")
+        
+        // Postavljamo vrednosti u stanje
+        _displayExpenseBudgets.value = expenseBudgetsWithSpending
+        _totalExpenseSpent.value = totalExpenseSpent
     }
     
     /**
-     * Učitava prihode za budžete prihoda
+     * Funkcija za učitavanje prihoda za budžet prihoda
      */
-    private fun loadIncomeReceived() {
-        viewModelScope.launch {
-            try {
-                val (startDate, endDate) = calculatePeriodDates(_selectedPeriod.value)
+    private suspend fun loadIncomeReceived() {
+        Log.d("BudgetsViewModel", "===== UČITAVANJE PRIHODA ZA BUDŽETE =====")
+        
+        val currentPeriodIndex = _selectedPeriodIndex.value
+        val period = Period.values()[currentPeriodIndex]
+        val (startDate, endDate) = calculatePeriodDates(period)
+        
+        // Format datuma za log
+        val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+        Log.d("BudgetsViewModel", "Period za prihode: ${period.name}, od ${dateFormat.format(startDate)} do ${dateFormat.format(endDate)}")
+        
+        // Učitavamo sve prihode za odabrani period
+        val incomes = try {
+            val selectedAccountId = _selectedAccountId.value
+            if (selectedAccountId != null) {
+                Log.d("BudgetsViewModel", "Učitavam prihode za račun: $selectedAccountId i period")
+                // Filtriramo po računu i periodu
+                val incomesForAccount = incomeRepository.getAllIncomes()
+                val filteredIncomes = mutableListOf<Income>()
                 
-                // Učitavamo sve prihode za trenutni period
-                val periodIncomesFlow = if (_selectedAccountId.value != null) {
-                    incomeRepository.getIncomesForAccount(_selectedAccountId.value!!)
-                } else {
-                    incomeRepository.getAllIncomes()
+                incomesForAccount.collect { incomesList ->
+                    filteredIncomes.addAll(incomesList.filter { income ->
+                        val incomeDate = income.getDateObject()?.time ?: 0L
+                        // Direktno koristimo startDate i endDate objekte bez konverzije
+                        val startTime = startDate.time
+                        val endTime = endDate.time
+                        
+                        val isInTimeRange = incomeDate in startTime..endTime
+                        
+                        isInTimeRange
+                    })
                 }
                 
-                periodIncomesFlow.collect { allIncomes: List<Income> ->
-                    // Filtriramo prihode po periodu
-                    val periodIncomes = allIncomes.filter { income: Income ->
-                        val incomeDate = income.date.toDate().time
-                        incomeDate in startDate.time..endDate.time
-                    }
-                    
-                    // Računamo prihode za svaki budžet
-                    val displayBudgets = _incomeBudgets.value.map { budget: Budget ->
-                        // Filtriramo prihode relevantne za ovaj budžet
-                        val relevantIncomes = periodIncomes.filter { income: Income ->
-                            // Provera računa
-                            val matchesAccount = budget.accountId.isEmpty() || 
-                                                budget.accountId == income.accountId
-                            
-                            // Provera kategorije
-                            val matchesCategory = budget.categoryIds.isEmpty() || 
-                                                 budget.categoryIds.contains(income.category)
-                            
-                            matchesAccount && matchesCategory
-                        }
-                        
-                        // Ukupan prihod za ovaj budžet
-                        val received = relevantIncomes.sumOf { income: Income -> income.amount }
-                        
-                        // Kreiramo DisplayBudget objekat
-                        DisplayBudget(
-                            budget = budget,
-                            spentAmount = received // U slučaju prihoda, ovo je primljeni iznos
-                        )
-                    }
-                    
-                    // Ažuriramo displayBudgets
-                    _displayIncomeBudgets.value = displayBudgets
-                    
-                    // Ukupan prihod
-                    _totalIncomeReceived.value = displayBudgets.sumOf { displayBudget: DisplayBudget -> displayBudget.spentAmount }
-                    
-                    _isLoading.value = false
+                filteredIncomes
+            } else {
+                Log.d("BudgetsViewModel", "Učitavam sve prihode za period")
+                // Svi računi za period
+                val allIncomes = mutableListOf<Income>()
+                incomeRepository.getIncomesForPeriod(startDate, endDate).collect { incomesList ->
+                    allIncomes.addAll(incomesList)
                 }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) {
-                    // Preskačemo grešku ako je posao otkazan
-                    Log.d(tag, "Учитавање прихода отказано", e)
-                } else {
-                    Log.e(tag, "Грешка при учитавању прихода", e)
-                    _errorMessage.value = "Грешка при учитавању прихода: ${e.message}"
-                }
-                _isLoading.value = false
+                allIncomes
             }
+        } catch (e: Exception) {
+            Log.e("BudgetsViewModel", "Greška pri učitavanju prihoda za period", e)
+            emptyList()
         }
+        
+        Log.d("BudgetsViewModel", "Ukupno učitano ${incomes.size} prihoda za period")
+        
+        // Dodajemo log za datume nekoliko prihoda
+        if (incomes.isNotEmpty()) {
+            val dates = incomes.take(5).map { income -> 
+                dateFormat.format(income.getDateObject() ?: Date()) 
+            }
+            Log.d("BudgetsViewModel", "Primeri datuma prvih 5 prihoda: $dates")
+        }
+        
+        // Filtriramo budžete za prihode
+        val incomeBudgets = _incomeBudgets.value.filter { it.type == BudgetType.INCOME }
+        
+        Log.d("BudgetsViewModel", "Broj budžeta za prihode: ${incomeBudgets.size}")
+        
+        val incomeBudgetsWithReceived = mutableListOf<DisplayBudget>()
+        var totalIncomeReceived = 0.0
+        
+        for (budget in incomeBudgets) {
+            // Filtriramo prihode za ovaj budžet (po kategoriji)
+            val budgetIncomes = incomes.filter { income ->
+                budget.categoryIds.contains(income.category)
+            }
+            
+            // Računamo ukupan primljeni iznos za ovaj budžet
+            val budgetReceived = budgetIncomes.sumOf { income -> income.amount }
+            totalIncomeReceived += budgetReceived
+            
+            Log.d("BudgetsViewModel", "Budžet ${budget.name}: primljeno $budgetReceived od ${budget.amount} (${budgetIncomes.size} transakcija)")
+            
+            // Kreiramo DisplayBudget sa kalkulisanim primljenim iznosom
+            val displayBudget = DisplayBudget(
+                budget = budget,
+                spentAmount = budgetReceived
+            )
+            
+            incomeBudgetsWithReceived.add(displayBudget)
+        }
+        
+        // Ako nema budžeta za prihode, dodajemo podrazumevani
+        if (incomeBudgetsWithReceived.isEmpty()) {
+            Log.d("BudgetsViewModel", "Nema budžeta za prihode - dodajem podrazumevani")
+            
+            // Računamo ukupni primljeni iznos za sve prihode
+            totalIncomeReceived = incomes.sumOf { income -> income.amount }
+            
+            // Kreiramo podrazumevani budžet
+            val defaultBudget = Budget(
+                id = "default_income",
+                name = "Ukupni prihodi",
+                amount = totalIncomeReceived,
+                type = BudgetType.INCOME,
+                categoryIds = emptyList(),
+                accountId = _selectedAccountId.value ?: ""
+            )
+            
+            val displayBudget = DisplayBudget(
+                budget = defaultBudget,
+                spentAmount = totalIncomeReceived
+            )
+            
+            incomeBudgetsWithReceived.add(displayBudget)
+        }
+        
+        Log.d("BudgetsViewModel", "Ukupno primljeno prihoda: $totalIncomeReceived, broj budžeta: ${incomeBudgetsWithReceived.size}")
+        
+        // Postavljamo vrednosti u stanje
+        _displayIncomeBudgets.value = incomeBudgetsWithReceived
+        _totalIncomeReceived.value = totalIncomeReceived
     }
     
     /**

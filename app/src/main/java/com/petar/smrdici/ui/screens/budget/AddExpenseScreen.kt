@@ -1,6 +1,7 @@
 package com.petar.smrdici.ui.screens.budget
 
 import android.util.Log
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -51,11 +53,13 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.google.firebase.Timestamp
-import com.petar.smrdici.data.model.Expense
-import com.petar.smrdici.data.model.ExpenseCategory
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.data.model.Expense
+import com.petar.smrdici.data.model.ExpenseCategory
+import com.petar.smrdici.data.repository.AccountRepository
+import com.petar.smrdici.data.repository.ExpenseRepository
 import com.petar.smrdici.ui.screens.settings.AccountViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -64,6 +68,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,7 +139,8 @@ fun AddExpenseScreen(
         // Користимо Elvis оператор за краћи и читљивији код
         if (accounts.isNotEmpty() && selectedAccountId.isEmpty()) {
             // Користимо Elvis оператор уместо if-then блока
-            selectedAccountId = accounts.find { it.isDefault }?.id ?: accounts.first().id
+            val defaultAccount = accounts.find { it.isDefault }
+            selectedAccountId = defaultAccount?.id ?: (if (accounts.isNotEmpty()) accounts.first().id else "")
         }
     }
     
@@ -188,12 +194,17 @@ fun AddExpenseScreen(
         
         isLoading = true
         
+        // Форматирамо датум у "YYYY-MM-DD" формат
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+        val formattedDate = dateFormat.format(Date(selectedDate))
+        
         // Креирамо нови објекат расхода
         val expense = Expense(
             amount = amount.toDouble(),
             description = description,
             category = selectedCategory?.name ?: ExpenseCategory.OTHER.name,
-            date = Timestamp(Date(selectedDate)),
+            date = formattedDate,
             accountId = selectedAccountId
         )
         
@@ -463,9 +474,9 @@ fun AddExpenseScreen(
                     onDismissRequest = { accountMenuExpanded = false },
                     modifier = Modifier.fillMaxWidth(0.9f)
                 ) {
-                    accounts.forEach { account ->
+                    for (account in accounts) {
                         DropdownMenuItem(
-                            text = { Text(account.name) },
+                            text = { Text(text = account.name) },
                             onClick = {
                                 selectedAccountId = account.id
                                 accountMenuExpanded = false

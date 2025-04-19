@@ -1,6 +1,7 @@
 package com.petar.smrdici.data.repository
 
 import android.util.Log
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -42,10 +43,35 @@ class ExpenseRepository private constructor() {
             
             // Генеришемо ID ако није већ постављен
             val expenseId = expense.id.ifEmpty { UUID.randomUUID().toString() }
-            val expenseToAdd = expense.copy(id = expenseId)
+            
+            // Осигурамо да имамо валидан датум у формату "YYYY-MM-DD"
+            val validDate = if (expense.date.isEmpty() || !expense.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                dateFormat.format(Date())
+            } else {
+                expense.date
+            }
+            
+            val expenseToAdd = expense.copy(id = expenseId, date = validDate)
+            
+            // Pretvaramo validDate string u Date objekat, pa u Timestamp za Firebase
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val dateObject = dateFormat.parse(validDate) ?: Date()
+            
+            // Kreiramo mapu podataka koja će biti sačuvana u Firestore
+            val expenseMap = mapOf(
+                "id" to expenseId,
+                "amount" to expenseToAdd.amount,
+                "description" to expenseToAdd.description,
+                "category" to expenseToAdd.category,
+                "date" to com.google.firebase.Timestamp(dateObject), // Koristimo Timestamp umesto String
+                "accountId" to expenseToAdd.accountId
+            )
             
             // Чувамо расход у бази података
-            userExpensesCollection.document(expenseId).set(expenseToAdd).await()
+            userExpensesCollection.document(expenseId).set(expenseMap).await()
             
             // Ажурирамо баланс рачуна (смањујемо га) само ако је затражено
             if (updateAccountBalance) {
@@ -96,7 +122,7 @@ class ExpenseRepository private constructor() {
     
     // Добијање свих расхода за тренутног корисника
     fun getAllExpenses(): Flow<List<Expense>> = callbackFlow {
-        Log.d("ExpenseRepository", "Учитавам све расходе")
+        Log.d("ExpenseRepository", "Учитавам све расходе - BUDGET FIX")
         
         val listener = userExpensesCollection
             .orderBy("date", Query.Direction.DESCENDING)
@@ -109,14 +135,57 @@ class ExpenseRepository private constructor() {
                 
                 val expenses = snapshot?.documents?.mapNotNull { doc ->
                     try {
-                        doc.toObject(Expense::class.java)?.copy(id = doc.id)
+                        val id = doc.id
+                        val amount = doc.getDouble("amount") ?: 0.0
+                        val description = doc.getString("description") ?: ""
+                        val category = doc.getString("category") ?: ""
+                        val accountId = doc.getString("accountId") ?: ""
+                        
+                        // Učitavanje datuma - koristimo getTimestamp jer je date Timestamp, a ne String
+                        val dateStr = try {
+                            val timestamp = doc.getTimestamp("date")
+                            if (timestamp != null) {
+                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                dateFormat.format(timestamp.toDate())
+                            } else {
+                                // Ako je timestamp null, koristimo današnji datum
+                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                dateFormat.format(Date())
+                            }
+                        } catch (e: Exception) {
+                            // Ako dođe do greške pri čitanju Timestamp-a, pokušavamo čitati kao String (za podršku starijih podataka)
+                            val dateFromString = doc.getString("date") ?: ""
+                            if (dateFromString.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                                dateFromString
+                            } else {
+                                // Ako ni to ne radi, koristimo današnji datum
+                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                dateFormat.format(Date())
+                            }
+                        }
+                        
+                        val expense = Expense(id, amount, description, category, dateStr, accountId)
+                        
+                        Log.d("ExpenseRepository", "Учитан трошак ID: ${expense.id}, износ: ${expense.amount}, датум: ${expense.getFormattedDate()}")
+                        
+                        expense
                     } catch (e: Exception) {
                         Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
                         null
                     }
                 } ?: emptyList()
                 
-                Log.d("ExpenseRepository", "Учитано ${expenses.size} расхода")
+                Log.d("ExpenseRepository", "Учитано ${expenses.size} расхода - BUDGET FIX")
+                
+                // Детаљнији лог за дебагирање - приказује све учитане расходе
+                if (expenses.isNotEmpty()) {
+                    Log.d("ExpenseRepository", "Учитани расходи: ${expenses.map { "${it.id} (${it.amount})" }}")
+                } else {
+                    Log.d("ExpenseRepository", "Нема учитаних расхода. Проверите Firebase конекцију и податке.")
+                }
                 
                 // Ажурирамо локални кеш
                 _expenses.value = expenses
@@ -143,7 +212,43 @@ class ExpenseRepository private constructor() {
             
             val expenses = snapshot.documents.mapNotNull { doc ->
                 try {
-                    doc.toObject(Expense::class.java)?.copy(id = doc.id)
+                    val id = doc.id
+                    val amount = doc.getDouble("amount") ?: 0.0
+                    val description = doc.getString("description") ?: ""
+                    val category = doc.getString("category") ?: ""
+                    val accountId = doc.getString("accountId") ?: ""
+                    
+                    // Učitavanje datuma - koristimo getTimestamp jer je date Timestamp, a ne String
+                    val dateStr = try {
+                        val timestamp = doc.getTimestamp("date")
+                        if (timestamp != null) {
+                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            dateFormat.format(timestamp.toDate())
+                        } else {
+                            // Ako je timestamp null, koristimo današnji datum
+                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            dateFormat.format(Date())
+                        }
+                    } catch (e: Exception) {
+                        // Ako dođe do greške pri čitanju Timestamp-a, pokušavamo čitati kao String (za podršku starijih podataka)
+                        val dateFromString = doc.getString("date") ?: ""
+                        if (dateFromString.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                            dateFromString
+                        } else {
+                            // Ako ni to ne radi, koristimo današnji datum
+                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            dateFormat.format(Date())
+                        }
+                    }
+                    
+                    val expense = Expense(id, amount, description, category, dateStr, accountId)
+                    
+                    Log.d("ExpenseRepository", "Учитан трошак ID: ${expense.id}, износ: ${expense.amount}, датум: ${expense.getFormattedDate()}")
+                    
+                    expense
                 } catch (e: Exception) {
                     Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
                     null
@@ -160,11 +265,17 @@ class ExpenseRepository private constructor() {
     
     // Додајемо методу за добијање трошкова за одређени период
     fun getExpensesForPeriod(startDate: Date, endDate: Date): Flow<List<Expense>> = callbackFlow {
-        Log.d("ExpenseRepository", "Учитавам трошкове за период од $startDate до $endDate")
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        
+        val startDateStr = dateFormat.format(startDate)
+        val endDateStr = dateFormat.format(endDate)
+        
+        Log.d("ExpenseRepository", "Учитавам трошкове за период од $startDateStr до $endDateStr")
         
         val listener = userExpensesCollection
-            .whereGreaterThanOrEqualTo("date", startDate)
-            .whereLessThanOrEqualTo("date", endDate)
+            .whereGreaterThanOrEqualTo("date", startDateStr)
+            .whereLessThanOrEqualTo("date", endDateStr)
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -194,7 +305,43 @@ class ExpenseRepository private constructor() {
                 
                 val expenses = snapshot?.documents?.mapNotNull { doc ->
                     try {
-                        doc.toObject(Expense::class.java)?.copy(id = doc.id)
+                        val id = doc.id
+                        val amount = doc.getDouble("amount") ?: 0.0
+                        val description = doc.getString("description") ?: ""
+                        val category = doc.getString("category") ?: ""
+                        val accountId = doc.getString("accountId") ?: ""
+                        
+                        // Učitavanje datuma - koristimo getTimestamp jer je date Timestamp, a ne String
+                        val dateStr = try {
+                            val timestamp = doc.getTimestamp("date")
+                            if (timestamp != null) {
+                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                dateFormat.format(timestamp.toDate())
+                            } else {
+                                // Ako je timestamp null, koristimo današnji datum
+                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                dateFormat.format(Date())
+                            }
+                        } catch (e: Exception) {
+                            // Ako dođe do greške pri čitanju Timestamp-a, pokušavamo čitati kao String (za podršku starijih podataka)
+                            val dateFromString = doc.getString("date") ?: ""
+                            if (dateFromString.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                                dateFromString
+                            } else {
+                                // Ako ni to ne radi, koristimo današnji datum
+                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                dateFormat.format(Date())
+                            }
+                        }
+                        
+                        val expense = Expense(id, amount, description, category, dateStr, accountId)
+                        
+                        Log.d("ExpenseRepository", "Учитан трошак за период ID: ${expense.id}, износ: ${expense.amount}, датум: ${expense.getFormattedDate()}")
+                        
+                        expense
                     } catch (e: Exception) {
                         Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
                         null
@@ -213,7 +360,7 @@ class ExpenseRepository private constructor() {
     
     // Добијање расхода за одређени рачун
     fun getExpensesForAccount(accountId: String): Flow<List<Expense>> = callbackFlow {
-        Log.d("ExpenseRepository", "Учитавам трошкове за рачун: $accountId")
+        Log.d("ExpenseRepository", "Учитавам трошкове за рачун: $accountId - BUDGET FIX")
         
         val listener = userExpensesCollection
             .whereEqualTo("accountId", accountId)
@@ -246,14 +393,58 @@ class ExpenseRepository private constructor() {
                 
                 val expenses = snapshot?.documents?.mapNotNull { doc ->
                     try {
-                        doc.toObject(Expense::class.java)?.copy(id = doc.id)
+                        val id = doc.id
+                        val amount = doc.getDouble("amount") ?: 0.0
+                        val description = doc.getString("description") ?: ""
+                        val category = doc.getString("category") ?: ""
+                        val accountId = doc.getString("accountId") ?: ""
+                        
+                        // Učitavanje datuma - koristimo getTimestamp jer je date Timestamp, a ne String
+                        val dateStr = try {
+                            val timestamp = doc.getTimestamp("date")
+                            if (timestamp != null) {
+                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                dateFormat.format(timestamp.toDate())
+                            } else {
+                                // Ako je timestamp null, koristimo današnji datum
+                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                dateFormat.format(Date())
+                            }
+                        } catch (e: Exception) {
+                            // Ako dođe do greške pri čitanju Timestamp-a, pokušavamo čitati kao String (za podršku starijih podataka)
+                            val dateFromString = doc.getString("date") ?: ""
+                            if (dateFromString.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                                dateFromString
+                            } else {
+                                // Ako ni to ne radi, koristimo današnji datum
+                                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                dateFormat.format(Date())
+                            }
+                        }
+                        
+                        val expense = Expense(id, amount, description, category, dateStr, accountId)
+                        
+                        Log.d("ExpenseRepository", "Учитан трошак ID: ${expense.id}, износ: ${expense.amount}, датум: ${expense.getFormattedDate()}")
+                        
+                        expense
                     } catch (e: Exception) {
                         Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
                         null
                     }
                 } ?: emptyList()
                 
-                Log.d("ExpenseRepository", "Учитано ${expenses.size} расхода за рачун")
+                Log.d("ExpenseRepository", "Учитано ${expenses.size} расхода за рачун - BUDGET FIX")
+                
+                // Детаљнији лог за дебагирање
+                if (expenses.isNotEmpty()) {
+                    Log.d("ExpenseRepository", "Учитани расходи за рачун: ${expenses.map { "${it.id} (${it.amount})" }}")
+                } else {
+                    Log.d("ExpenseRepository", "Нема учитаних расхода за рачун $accountId.")
+                }
+                
                 trySend(expenses)
             }
         
@@ -288,6 +479,32 @@ class ExpenseRepository private constructor() {
             Log.d("ExpenseRepository", "Сви расходи су обрисани")
         } catch (e: Exception) {
             Log.e("ExpenseRepository", "Грешка при брисању свих расхода", e)
+        }
+    }
+    
+    // Dobijanje rashoda za određeni račun i period
+    fun getExpensesForAccount(accountId: String, startDate: Date, endDate: Date): List<Expense> {
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        
+        val startDateStr = dateFormat.format(startDate)
+        val endDateStr = dateFormat.format(endDate)
+        
+        Log.d("ExpenseRepository", "Učitavam troškove za račun: $accountId i period od $startDateStr do $endDateStr")
+        
+        try {
+            // Filtriramo rashode za račun u datom vremenskom periodu
+            val expenses = _expenses.value.filter { expense -> 
+                expense.accountId == accountId &&
+                expense.date >= startDateStr &&
+                expense.date <= endDateStr
+            }
+            
+            Log.d("ExpenseRepository", "Filtrirano ${expenses.size} rashoda za račun i period")
+            return expenses
+        } catch (e: Exception) {
+            Log.e("ExpenseRepository", "Greška pri filtriranju rashoda za račun i period", e)
+            return emptyList()
         }
     }
     

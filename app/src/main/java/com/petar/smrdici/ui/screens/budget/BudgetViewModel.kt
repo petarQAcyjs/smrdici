@@ -90,6 +90,9 @@ class BudgetViewModel(
     val budgetUsagePercent: StateFlow<Double> = _budgetUsagePercent.asStateFlow()
     
     init {
+        // Додајемо log за početak inicijalizacije
+        Log.d("BudgetViewModel", "===== INICIJALIZACIJA BUDGET VIEW MODELA =====")
+        
         // Подешавамо период из BudgetSettingsViewModel
         viewModelScope.launch {
             settingsViewModel.period.collectLatest { period ->
@@ -108,6 +111,7 @@ class BudgetViewModel(
                 _selectedPeriodIndex.value = periodIndex
                 
                 // Учитавамо трансакције након постављања периода
+                Log.d("BudgetViewModel", "Pozivam loadTransactions iz init bloka")
                 loadTransactions()
                 
                 // Учитавамо буџетски лимит за тренутни период
@@ -147,6 +151,7 @@ class BudgetViewModel(
     }
     
     private fun loadTransactions() {
+        Log.d("BudgetViewModel", "===== POČETAK UČITAVANJA TRANSAKCIJA - INTERNO =====")
         loadExpenses()
         loadIncomes()
     }
@@ -156,21 +161,32 @@ class BudgetViewModel(
     fun reloadTransactions() {
         viewModelScope.launch {
             try {
-                Log.d("BudgetViewModel", "Почињем освежавање трансакција...")
+                Log.d("BudgetViewModel", "===== POČETAK OSVEŽAVANJA TRANSAKCIJA - JAVNA METODA =====")
                 _isLoading.value = true
                 
-                // Паралелно покрећемо учитавање трансакција
+                // Pauziramo pre učitavanja da bismo bili sigurni da je UI spreman
+                kotlinx.coroutines.delay(100)
+                
+                // Parelalno pokrećemo učitavanje transakcija
                 loadTransactions()
                 
-                // Учитавамо буџетски лимит
+                // Učitavamo budžetski limit
                 loadBudgetLimit()
                 
-                // Учитавамо рачуне
+                // Učitavamo račune
                 loadAccounts()
                 
-                Log.d("BudgetViewModel", "Освежавање трансакција завршено!")
+                // Kratka pauza da osiguramo da su svi async pozivi imali vremena da završe
+                kotlinx.coroutines.delay(300)
+                
+                // Eksplicitno ažuriramo UI stanje na kraju
+                updateUiState()
+                
+                Log.d("BudgetViewModel", "Osvežavanje transakcija završeno!")
+                Log.d("BudgetViewModel", "STANJE NAKON OSVEŽAVANJA: expenses=${_expenses.value.size}, incomes=${_incomes.value.size}")
+                Log.d("BudgetViewModel", "STANJE UISTATE NAKON OSVEŽAVANJA: expenses=${_uiState.value.expenses.size}, incomes=${_uiState.value.incomes.size}")
             } catch (e: Exception) {
-                Log.e("BudgetViewModel", "Грешка при освежавању трансакција", e)
+                Log.e("BudgetViewModel", "Greška pri osvežavanju transakcija", e)
             } finally {
                 _isLoading.value = false
             }
@@ -181,9 +197,14 @@ class BudgetViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             
+            // Dodajem log poruku na početku učitavanja
+            Log.d("BudgetViewModel", "===== POČETAK UČITAVANJA RASHODA =====")
+            
             // Користимо нове методе за учитавање расхода за одређени период
             val currentPeriod = _selectedPeriod.value
             val accountId = _selectedAccountId.value
+            
+            Log.d("BudgetViewModel", "Parametri za učitavanje rashoda: period=$currentPeriod, accountId=$accountId")
             
             try {
                 if (currentPeriod == Period.ALL) {
@@ -191,12 +212,25 @@ class BudgetViewModel(
                     if (accountId != null) {
                         // Филтрирамо по рачуну
                         try {
+                            Log.d("BudgetViewModel", "Učitavam SVE rashode i filtriram po računu: $accountId")
                             expenseRepository.getAllExpenses().collect { allExpenses ->
                                 val filteredExpenses = allExpenses.filter { expense ->
                                     expense.accountId == accountId
                                 }
+                                Log.d("BudgetViewModel", "Ukupno učitano ${allExpenses.size} rashoda, nakon filtriranja: ${filteredExpenses.size}")
+                                // Dodajemo log za datume
+                                if (filteredExpenses.isNotEmpty()) {
+                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                    val dates = filteredExpenses.take(5).map { 
+                                        dateFormat.format(it.getDateObject() ?: Date()) 
+                                    }
+                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
+                                }
                                 _expenses.value = filteredExpenses
                                 _isLoading.value = false
+                                
+                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
+                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _expenses na ${filteredExpenses.size} elemenata i pozivam updateUiState()")
                                 updateUiState()
                             }
                         } catch (e: Exception) {
@@ -210,9 +244,22 @@ class BudgetViewModel(
                     } else {
                         // Сви рачуни
                         try {
+                            Log.d("BudgetViewModel", "Učitavam SVE rashode za sve račune")
                             expenseRepository.getAllExpenses().collect { expenses ->
+                                Log.d("BudgetViewModel", "Ukupno učitano ${expenses.size} rashoda za sve račune")
+                                // Dodajemo log za datume
+                                if (expenses.isNotEmpty()) {
+                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                    val dates = expenses.take(5).map { 
+                                        dateFormat.format(it.getDateObject() ?: Date()) 
+                                    }
+                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
+                                }
                                 _expenses.value = expenses
                                 _isLoading.value = false
+                                
+                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
+                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _expenses na ${expenses.size} elemenata i pozivam updateUiState()")
                                 updateUiState()
                             }
                         } catch (e: Exception) {
@@ -227,19 +274,33 @@ class BudgetViewModel(
                 } else {
                     // За остале периоде користимо getExpensesForPeriod
                     val (startDate, endDate) = calculatePeriodDates(currentPeriod)
+                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
                     
-                    Log.d("BudgetViewModel", "Учитавам расходе за период од $startDate до $endDate")
+                    Log.d("BudgetViewModel", "Учитавам расходе за период од ${dateFormat.format(startDate)} до ${dateFormat.format(endDate)}")
                     
                     if (accountId != null) {
                         // Филтрирамо по рачуну и периоду - пошто нема готове методе, сами филтрирамо
                         try {
+                            Log.d("BudgetViewModel", "Učitavam rashode za račun $accountId i filtriram po periodu")
                             expenseRepository.getExpensesForAccount(accountId).collect { allExpensesForAccount ->
+                                Log.d("BudgetViewModel", "Učitano ${allExpensesForAccount.size} rashoda za račun pre filtriranja po datumu")
                                 val filteredExpenses = allExpensesForAccount.filter { expense ->
-                                    val expenseDate = expense.date.toDate()
-                                    expenseDate.time >= startDate.time && expenseDate.time <= endDate.time
+                                    val expenseDate = expense.getDateObject()
+                                    expenseDate?.time ?: 0L >= startDate?.time ?: 0L && expenseDate?.time ?: 0L <= endDate?.time ?: 0L
+                                }
+                                Log.d("BudgetViewModel", "Nakon filtriranja po datumu: ${filteredExpenses.size} rashoda")
+                                // Dodajemo log za datume
+                                if (filteredExpenses.isNotEmpty()) {
+                                    val dates = filteredExpenses.take(5).map { 
+                                        dateFormat.format(it.getDateObject() ?: Date()) 
+                                    }
+                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
                                 }
                                 _expenses.value = filteredExpenses
                                 _isLoading.value = false
+                                
+                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
+                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _expenses na ${filteredExpenses.size} elemenata i pozivam updateUiState()")
                                 updateUiState()
                             }
                         } catch (e: Exception) {
@@ -253,9 +314,21 @@ class BudgetViewModel(
                     } else {
                         // Сви рачуни за период
                         try {
+                            Log.d("BudgetViewModel", "Učitavam rashode za SVE račune za određeni period")
                             expenseRepository.getExpensesForPeriod(startDate, endDate).collect { expenses ->
+                                Log.d("BudgetViewModel", "Ukupno učitano ${expenses.size} rashoda za period")
+                                // Dodajemo log za datume
+                                if (expenses.isNotEmpty()) {
+                                    val dates = expenses.take(5).map { 
+                                        dateFormat.format(it.getDateObject() ?: Date()) 
+                                    }
+                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
+                                }
                                 _expenses.value = expenses
                                 _isLoading.value = false
+                                
+                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
+                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _expenses na ${expenses.size} elemenata i pozivam updateUiState()")
                                 updateUiState()
                             }
                         } catch (e: Exception) {
@@ -368,9 +441,14 @@ class BudgetViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             
+            // Dodajem log poruku na početku učitavanja
+            Log.d("BudgetViewModel", "===== POČETAK UČITAVANJA PRIHODA =====")
+            
             // Користимо нове методе за учитавање прихода за одређени период
             val currentPeriod = _selectedPeriod.value
             val accountId = _selectedAccountId.value
+            
+            Log.d("BudgetViewModel", "Parametri za učitavanje prihoda: period=$currentPeriod, accountId=$accountId")
             
             try {
                 if (currentPeriod == Period.ALL) {
@@ -378,12 +456,25 @@ class BudgetViewModel(
                     if (accountId != null) {
                         // Филтрирамо по рачуну
                         try {
+                            Log.d("BudgetViewModel", "Učitavam SVE prihode i filtriram po računu: $accountId")
                             incomeRepository.getAllIncomes().collect { allIncomes ->
                                 val filteredIncomes = allIncomes.filter { income ->
                                     income.accountId == accountId
                                 }
+                                Log.d("BudgetViewModel", "Ukupno učitano ${allIncomes.size} prihoda, nakon filtriranja: ${filteredIncomes.size}")
+                                // Dodajemo log za datume
+                                if (filteredIncomes.isNotEmpty()) {
+                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                    val dates = filteredIncomes.take(5).map { 
+                                        dateFormat.format(it.getDateObject() ?: Date()) 
+                                    }
+                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
+                                }
                                 _incomes.value = filteredIncomes
                                 _isLoading.value = false
+                                
+                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
+                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _incomes na ${filteredIncomes.size} elemenata i pozivam updateUiState()")
                                 updateUiState()
                             }
                         } catch (e: Exception) {
@@ -397,9 +488,22 @@ class BudgetViewModel(
                     } else {
                         // Сви рачуни
                         try {
+                            Log.d("BudgetViewModel", "Učitavam SVE prihode za sve račune")
                             incomeRepository.getAllIncomes().collect { incomes ->
+                                Log.d("BudgetViewModel", "Ukupno učitano ${incomes.size} prihoda za sve račune")
+                                // Dodajemo log za datume
+                                if (incomes.isNotEmpty()) {
+                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                    val dates = incomes.take(5).map { 
+                                        dateFormat.format(it.getDateObject() ?: Date()) 
+                                    }
+                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
+                                }
                                 _incomes.value = incomes
                                 _isLoading.value = false
+                                
+                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
+                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _incomes na ${incomes.size} elemenata i pozivam updateUiState()")
                                 updateUiState()
                             }
                         } catch (e: Exception) {
@@ -420,14 +524,28 @@ class BudgetViewModel(
                     if (accountId != null) {
                         // Филтрирамо по рачуну и периоду - пошто нема готове методе, сами филтрирамо
                         try {
+                            Log.d("BudgetViewModel", "Učitavam prihode za račun $accountId i filtriram po periodu")
                             incomeRepository.getAllIncomes().collect { allIncomes ->
+                                Log.d("BudgetViewModel", "Učitano ${allIncomes.size} prihoda za račun pre filtriranja po datumu")
                                 val filteredIncomes = allIncomes.filter { income ->
-                                    val incomeDate = income.date.toDate()
-                                    incomeDate.time >= startDate.time && incomeDate.time <= endDate.time &&
+                                    val incomeDate = income.getDateObject()
+                                    incomeDate?.time ?: 0L >= startDate?.time ?: 0L && incomeDate?.time ?: 0L <= endDate?.time ?: 0L &&
                                     income.accountId == accountId
+                                }
+                                Log.d("BudgetViewModel", "Nakon filtriranja po datumu: ${filteredIncomes.size} prihoda")
+                                // Dodajemo log za datume
+                                if (filteredIncomes.isNotEmpty()) {
+                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                    val dates = filteredIncomes.take(5).map { 
+                                        dateFormat.format(it.getDateObject() ?: Date()) 
+                                    }
+                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
                                 }
                                 _incomes.value = filteredIncomes
                                 _isLoading.value = false
+                                
+                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
+                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _incomes na ${filteredIncomes.size} elemenata i pozivam updateUiState()")
                                 updateUiState()
                             }
                         } catch (e: Exception) {
@@ -441,9 +559,22 @@ class BudgetViewModel(
                     } else {
                         // Сви рачуни за период
                         try {
+                            Log.d("BudgetViewModel", "Učitavam prihode za SVE račune za određeni period")
                             incomeRepository.getIncomesForPeriod(startDate, endDate).collect { incomes ->
+                                Log.d("BudgetViewModel", "Ukupno učitano ${incomes.size} prihoda za period")
+                                // Dodajemo log za datume
+                                if (incomes.isNotEmpty()) {
+                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                    val dates = incomes.take(5).map { 
+                                        dateFormat.format(it.getDateObject() ?: Date()) 
+                                    }
+                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
+                                }
                                 _incomes.value = incomes
                                 _isLoading.value = false
+                                
+                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
+                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _incomes na ${incomes.size} elemenata i pozivam updateUiState()")
                                 updateUiState()
                             }
                         } catch (e: Exception) {
@@ -469,42 +600,64 @@ class BudgetViewModel(
         }
     }
     
-    // Метода за израчунавање процента искоришћености буџета
+    /**
+     * Računa procenat iskorišćenosti budžeta
+     */
     private fun calculateBudgetUsage() {
-        val limit = _budgetLimit.value
-        // Ако лимит није постављен или је нула, нема смисла рачунати проценат
-        if (limit <= 0) {
+        val currentBudgetLimit = _budgetLimit.value
+        val currentExpenses = _expenses.value.sumOf { it.amount }
+        
+        if (currentBudgetLimit > 0) {
+            val usagePercent = (currentExpenses / currentBudgetLimit).coerceIn(0.0, 1.0)
+            _budgetUsagePercent.value = usagePercent
+            Log.d("BudgetViewModel", "Izračunat procenat korišćenja budžeta: ${usagePercent * 100}%")
+        } else {
             _budgetUsagePercent.value = 0.0
-            return
+            Log.d("BudgetViewModel", "Budžetski limit nije podešen, procenat korišćenja postavljen na 0%")
         }
-        
-        // Укупни трошкови за тренутни период
-        val totalExpense = _expenses.value.sumOf { it.amount }
-        
-        // Израчунавамо проценат (0.0 - 1.0)
-        val percent = totalExpense / limit
-        _budgetUsagePercent.value = percent
-        
-        Log.d("BudgetViewModel", "Израчунат проценат буџета: $percent (потрошено $totalExpense од $limit)")
-        
-        // Користимо _uiState за ажурирање стања UI-а са информацијама о буџету
-        updateUiState()
     }
     
-    // Нова функција за ажурирање UI стања
+    /**
+     * Ažurira UI stanje sa najnovijim vrednostima
+     */
     private fun updateUiState() {
-        // Ажурирамо уи стање са свим релевантним подацима
-        val newState = BudgetUiState(
-            expenses = _expenses.value,
-            incomes = _incomes.value,
-            accounts = _accounts.value,
-            isLoading = _isLoading.value,
-            error = null // Ресетујемо грешку када успешно учитамо податке
-        )
+        Log.d("BudgetViewModel", "===== AŽURIRANJE UI STANJA =====")
+        Log.d("BudgetViewModel", "Podaci za UI stanje: expenses=${_expenses.value.size}, incomes=${_incomes.value.size}, accounts=${_accounts.value.size}")
         
-        // Проверавамо да ли је дошло до стварне промене пре ажурирања стања
-        if (_uiState.value != newState) {
-            _uiState.value = newState
+        viewModelScope.launch {
+            try {
+                // Pravimo kopiju trenutnih vrednosti da izbegnemo potencijalnu promenu tokom ažuriranja
+                val currentExpenses = _expenses.value
+                val currentIncomes = _incomes.value
+                val currentAccounts = _accounts.value
+                
+                // Logujemo više detalja o podacima
+                if (currentExpenses.isNotEmpty()) {
+                    Log.d("BudgetViewModel", "Uzorci rashoda: ${currentExpenses.take(3).joinToString { "ID: ${it.id}, iznos: ${it.amount}" }}")
+                } else {
+                    Log.d("BudgetViewModel", "UPOZORENJE: Lista rashoda je prazna pri ažuriranju UI stanja!")
+                }
+                
+                if (currentIncomes.isNotEmpty()) {
+                    Log.d("BudgetViewModel", "Uzorci prihoda: ${currentIncomes.take(3).joinToString { "ID: ${it.id}, iznos: ${it.amount}" }}")
+                } else {
+                    Log.d("BudgetViewModel", "UPOZORENJE: Lista prihoda je prazna pri ažuriranju UI stanja!")
+                }
+                
+                // Ažuriramo UI stanje sa kopiranim vrednostima
+                _uiState.value = BudgetUiState(
+                    expenses = currentExpenses,
+                    incomes = currentIncomes,
+                    accounts = currentAccounts,
+                    isLoading = _isLoading.value,
+                    error = null
+                )
+                
+                Log.d("BudgetViewModel", "UI stanje ažurirano sa ${_uiState.value.expenses.size} rashoda i ${_uiState.value.incomes.size} prihoda")
+                Log.d("BudgetViewModel", "Verifikacija da li su ažuriranja primenjena: _expenses=${_expenses.value.size}, _uiState.expenses=${_uiState.value.expenses.size}")
+            } catch (e: Exception) {
+                Log.e("BudgetViewModel", "Greška pri ažuriranju UI stanja", e)
+            }
         }
     }
     
@@ -872,13 +1025,4 @@ class BudgetViewModel(
             throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
-}
-
-// UI stanje za буџет
-data class BudgetUiState(
-    val isLoading: Boolean = false,
-    val expenses: List<Expense> = emptyList(),
-    val incomes: List<Income> = emptyList(),
-    val accounts: List<Account> = emptyList(),
-    val error: String? = null
-) 
+} 

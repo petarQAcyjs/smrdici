@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.google.firebase.Timestamp
 import com.petar.smrdici.data.model.Income
 import com.petar.smrdici.data.model.IncomeCategory
 import com.petar.smrdici.ui.auth.AuthState
@@ -64,6 +63,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Suppress("UNUSED_PARAMETER", "KotlinRedundantDiagnosticSuppress", "NAME_SHADOWING")
@@ -134,8 +134,7 @@ fun AddIncomeScreen(
     // Аутоматски постављамо подразумевани рачун ако постоји
     LaunchedEffect(accounts) {
         if (accounts.isNotEmpty() && selectedAccountId.isEmpty()) {
-            val defaultAccount = accounts.find { it.isDefault }
-            selectedAccountId = defaultAccount?.id ?: accounts.first().id
+            selectedAccountId = accounts.find { it.isDefault }?.id ?: accounts.first().id
         }
     }
     
@@ -189,67 +188,72 @@ fun AddIncomeScreen(
         
         isLoading = true
         
-        try {
-            // Креирамо нови објекат прихода
-            val income = Income(
-                amount = amount.toDouble(),
-                description = description,
-                category = selectedCategory?.name ?: IncomeCategory.OTHER.name,
-                date = Timestamp(Date(selectedDate)),
-                accountId = selectedAccountId
-            )
-            
-            Log.d("AddIncomeScreen", "Чувам приход: $income")
-            
-            // Користимо viewModelScope уместо локалног scope-а из композиције
-            // Ово спречава отказивање корутине када се композиција промени
-            budgetViewModel.viewModelScope.launch {
-                try {
-                    // Дефинишемо променљиву резултата пре NonCancellable контекста
-                    val result = withContext(NonCancellable) {
-                        // Користимо NonCancellable контекст да спречимо отказивање операције чувања
-                        // Ово је важно за операције које морају да се заврше и не смеју бити прекинуте
-                        // чак и ако се корутина отказује (нпр. због навигације)
-                        
-                        // Користимо budgetViewModel уместо директног приступа репозиторијуму
-                        val saveResult = budgetViewModel.addIncome(income)
-                        
-                        if (saveResult.isSuccess) {
-                            Log.d("AddIncomeScreen", "Приход је успешно сачуван")
-                        } else {
-                            Log.e("AddIncomeScreen", "Грешка при чувању прихода", saveResult.exceptionOrNull())
-                        }
-                        
-                        // Враћамо резултат из NonCancellable блока
-                        saveResult
+        // Форматирамо датум у "YYYY-MM-DD" формат
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+        val formattedDate = dateFormat.format(Date(selectedDate))
+        
+        // Креирамо нови објекат прихода
+        val income = Income(
+            amount = amount.toDouble(),
+            description = description,
+            category = selectedCategory?.name ?: IncomeCategory.OTHER.name,
+            date = formattedDate,
+            accountId = selectedAccountId
+        )
+        
+        Log.d("AddIncomeScreen", "Чувам приход: $income")
+        
+        // Користимо viewModelScope уместо локалног scope-а из композиције
+        // Ово спречава отказивање корутине када се композиција промени
+        budgetViewModel.viewModelScope.launch {
+            try {
+                // Дефинишемо променљиву резултата пре NonCancellable контекста
+                val result = withContext(NonCancellable) {
+                    // Користимо NonCancellable контекст да спречимо отказивање операције чувања
+                    // Ово је важно за операције које морају да се заврше и не смеју бити прекинуте
+                    // чак и ако се корутина отказује (нпр. због навигације)
+                    
+                    // Користимо budgetViewModel уместо директног приступа репозиторијуму
+                    val saveResult = budgetViewModel.addIncome(income)
+                    
+                    if (saveResult.isSuccess) {
+                        Log.d("AddIncomeScreen", "Приход је успешно сачуван")
+                    } else {
+                        // Додадимо опцију да логујемо грешку са додатним информацијама
+                        val exception = saveResult.exceptionOrNull()
+                        Log.e("AddIncomeScreen", "Грешка при чувању прихода: ${exception?.message}", exception)
                     }
                     
-                    // UI ажурирања извршавамо на главној нити, ван NonCancellable контекста
-                    withContext(Dispatchers.Main) {
-                        if (result.isSuccess) {
-                            snackbarHostState.showSnackbar("Приход је успешно сачуван")
-                            // Враћамо се на претходни екран
-                            navController.popBackStack()
-                        } else {
-                            snackbarHostState.showSnackbar("Грешка при чувању прихода: ${result.exceptionOrNull()?.message}")
-                        }
-                        
-                        isLoading = false
+                    // Враћамо резултат из NonCancellable блока
+                    saveResult
+                }
+                
+                // UI ажурирања извршавамо на главној нити, ван NonCancellable контекста
+                withContext(Dispatchers.Main) {
+                    if (result.isSuccess) {
+                        snackbarHostState.showSnackbar("Приход је успешно сачуван")
+                        // Враћамо се на претходни екран
+                        navController.popBackStack()
+                    } else {
+                        snackbarHostState.showSnackbar("Грешка при чувању прихода: ${result.exceptionOrNull()?.message}")
                     }
-                } catch (e: Exception) {
+                    
+                    isLoading = false
+                }
+            } catch (@Suppress("UNUSED_PARAMETER") e: Exception) {
+                // Обрађујемо изузетке, али игноришемо JobCancellationException који се нормално дешава при навигацији
+                if (e is kotlinx.coroutines.CancellationException) {
+                    // Само логујемо, не приказујемо грешку кориснику јер је успешно сачувано
+                    Log.d("AddIncomeScreen", "Корутина је отказана након успешног чувања: ${e.message}")
+                } else {
+                    // За остале грешке показујемо поруку
                     Log.e("AddIncomeScreen", "Грешка при чувању прихода", e)
-                    withContext(Dispatchers.Main) {
+                    
+                    withContext(Dispatchers.Main + NonCancellable) {
                         snackbarHostState.showSnackbar("Грешка при чувању прихода: ${e.message}")
                         isLoading = false
                     }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("AddIncomeScreen", "Грешка при припреми прихода", e)
-            budgetViewModel.viewModelScope.launch {
-                withContext(Dispatchers.Main) {
-                    snackbarHostState.showSnackbar("Грешка при чувању прихода: ${e.message}")
-                    isLoading = false
                 }
             }
         }
