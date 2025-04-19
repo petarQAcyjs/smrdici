@@ -11,8 +11,11 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+
+// Note: dependencyResolutionManagement је означен као @Incubating (експериментални),
+// али је стандардан приступ у модерним Gradle пројектима за управљање зависностима.
+// Упозорење се може игнорисати док функција не постане стабилна у будућим верзијама Gradle-а.
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()

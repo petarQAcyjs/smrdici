@@ -1,14 +1,14 @@
+@file:Suppress("DEPRECATION")
 package com.petar.smrdici.ui.auth
 
 import android.content.Context
-import android.content.Intent
+import android.content.IntentSender
 import androidx.activity.result.ActivityResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.auth.api.identity.BeginSignInRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.auth.api.identity.SignInClient
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
@@ -22,39 +22,62 @@ class AuthViewModel : ViewModel() {
     private val _authState = MutableStateFlow<AuthState>(AuthState.Initial)
     val authState: StateFlow<AuthState> = _authState
 
-    private lateinit var googleSignInClient: GoogleSignInClient
+    private lateinit var oneTapClient: SignInClient
+    private lateinit var signInRequest: BeginSignInRequest
 
     init {
         checkCurrentUser()
     }
 
     fun initGoogleSignIn(context: Context) {
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken("683999597671-0l004ln7l16meoo26ogk4mvcojndnsk7.apps.googleusercontent.com") // OAuth Client ID
-            .requestEmail()
+        oneTapClient = Identity.getSignInClient(context)
+        
+        // Конфигурација захтева за пријаву
+        signInRequest = BeginSignInRequest.builder()
+            .setGoogleIdTokenRequestOptions(
+                BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
+                    .setSupported(true)
+                    .setServerClientId("683999597671-0l004ln7l16meoo26ogk4mvcojndnsk7.apps.googleusercontent.com") // OAuth Client ID
+                    .setFilterByAuthorizedAccounts(false)
+                    .build()
+            )
             .build()
-
-        googleSignInClient = GoogleSignIn.getClient(context, gso)
     }
 
-    fun getGoogleSignInIntent(): Intent {
-        return googleSignInClient.signInIntent
+    fun beginSignIn(onSuccess: (IntentSender) -> Unit, onFailure: (Exception) -> Unit) {
+        viewModelScope.launch {
+            try {
+                _authState.value = AuthState.Loading
+                
+                // Користимо нови метод за започињање пријаве
+                val result = oneTapClient.beginSignIn(signInRequest).await()
+                onSuccess(result.pendingIntent.intentSender)
+            } catch (e: Exception) {
+                onFailure(e)
+                _authState.value = AuthState.Error(e.message ?: "Грешка приликом покретања пријаве")
+            }
+        }
     }
 
     fun handleGoogleSignInResult(result: ActivityResult) {
         viewModelScope.launch {
             try {
                 _authState.value = AuthState.Loading
-                val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                val account = task.getResult(ApiException::class.java)
-                val idToken = account.idToken!!
                 
-                val credential = GoogleAuthProvider.getCredential(idToken, null)
-                val authResult = auth.signInWithCredential(credential).await()
+                // Извлачимо кориснички акредитив из резултата активности
+                val credential = oneTapClient.getSignInCredentialFromIntent(result.data)
+                val idToken = credential.googleIdToken
                 
-                _authState.value = AuthState.Authenticated(authResult.user!!)
+                if (idToken != null) {
+                    // Пријава на Firebase са Google токеном
+                    val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
+                    val authResult = auth.signInWithCredential(firebaseCredential).await()
+                    _authState.value = AuthState.Authenticated(authResult.user!!)
+                } else {
+                    _authState.value = AuthState.Error("Недостаје ID токен")
+                }
             } catch (e: Exception) {
-                _authState.value = AuthState.Error(e.message ?: "Greška prilikom prijave")
+                _authState.value = AuthState.Error(e.message ?: "Грешка приликом пријаве")
             }
         }
     }
@@ -66,7 +89,7 @@ class AuthViewModel : ViewModel() {
                 val result = auth.signInWithEmailAndPassword(email, password).await()
                 _authState.value = AuthState.Authenticated(result.user!!)
             } catch (e: Exception) {
-                _authState.value = AuthState.Error(e.message ?: "Greška prilikom prijave")
+                _authState.value = AuthState.Error(e.message ?: "Грешка приликом пријаве")
             }
         }
     }
@@ -78,31 +101,58 @@ class AuthViewModel : ViewModel() {
                 val result = auth.createUserWithEmailAndPassword(email, password).await()
                 _authState.value = AuthState.Authenticated(result.user!!)
             } catch (e: Exception) {
-                _authState.value = AuthState.Error(e.message ?: "Greška prilikom registracije")
+                _authState.value = AuthState.Error(e.message ?: "Грешка приликом регистрације")
             }
         }
     }
 
     fun signOut() {
-        auth.signOut()
-        googleSignInClient.signOut()
+        android.util.Log.d("AuthViewModel", "Почетак одјављивања...")
+
+        // Прво постављамо стање на NotAuthenticated да обезбедимо да UI реагује
         _authState.value = AuthState.NotAuthenticated
+        android.util.Log.d("AuthViewModel", "Стање промењено на NotAuthenticated одмах")
+        
+        // Одјављујемо се из Firebase
+        try {
+            auth.signOut()
+            android.util.Log.d("AuthViewModel", "Firebase одјава успешна")
+        } catch (e: Exception) {
+            android.util.Log.e("AuthViewModel", "Грешка приликом одјаве из Firebase: ${e.message}", e)
+        }
+        
+        // Одјављујемо се из OneTap-а
+        try {
+            if (::oneTapClient.isInitialized) {
+                android.util.Log.d("AuthViewModel", "OneTapClient иницијализован, одјављујем се")
+                oneTapClient.signOut()
+                android.util.Log.d("AuthViewModel", "OneTapClient одјава успешна")
+            } else {
+                android.util.Log.d("AuthViewModel", "OneTapClient није иницијализован")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AuthViewModel", "Грешка приликом Google одјаве: ${e.message}", e)
+        }
     }
 
     private fun checkCurrentUser() {
+        android.util.Log.d("AuthViewModel", "Проверавам тренутног корисника...")
         val currentUser = auth.currentUser
         if (currentUser != null) {
+            android.util.Log.d("AuthViewModel", "Корисник је пријављен: ${currentUser.email}")
             _authState.value = AuthState.Authenticated(currentUser)
         } else {
+            android.util.Log.d("AuthViewModel", "Није пронађен пријављени корисник")
             _authState.value = AuthState.NotAuthenticated
         }
+        android.util.Log.d("AuthViewModel", "Стање постављено на: ${_authState.value}")
     }
 }
 
 sealed class AuthState {
-    object Initial : AuthState()
-    object Loading : AuthState()
-    object NotAuthenticated : AuthState()
+    data object Initial : AuthState()
+    data object Loading : AuthState()
+    data object NotAuthenticated : AuthState()
     data class Authenticated(val user: FirebaseUser) : AuthState()
     data class Error(val message: String) : AuthState()
-} 
+}

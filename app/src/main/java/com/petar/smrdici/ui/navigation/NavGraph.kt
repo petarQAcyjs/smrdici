@@ -4,14 +4,19 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import com.petar.smrdici.ui.components.MainLayout
 import com.petar.smrdici.ui.screens.auth.LoginScreen
 import com.petar.smrdici.ui.screens.budget.BudgetScreen
 import com.petar.smrdici.ui.screens.calendar.CalendarScreen
 import com.petar.smrdici.ui.screens.home.HomeScreen
+import com.petar.smrdici.ui.screens.lists.ListDetailsScreen
 import com.petar.smrdici.ui.screens.lists.ListsScreen
 import com.petar.smrdici.ui.screens.profile.ProfileScreen
 import com.petar.smrdici.ui.screens.calendar.AddEventScreen
+import com.petar.smrdici.ui.screens.settings.BudgetSettingsScreen
+import com.petar.smrdici.ui.screens.editAccount.EditAccountScreen
 
 @Composable
 fun NavGraph(
@@ -27,37 +32,79 @@ fun NavGraph(
         }
         
         composable(route = Screen.Home.route) {
-            MainLayout(navController = navController) {
+            MainLayout {
                 HomeScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Budget.route) {
-            MainLayout(navController = navController) {
+            MainLayout {
                 BudgetScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Calendar.route) {
-            MainLayout(navController = navController) {
+            MainLayout {
                 CalendarScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Lists.route) {
-            MainLayout(navController = navController) {
+            MainLayout {
                 ListsScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Profile.route) {
-            MainLayout(navController = navController) {
+            MainLayout {
                 ProfileScreen(navController = navController)
             }
         }
         
         composable(route = Screen.AddEvent.route) {
             AddEventScreen(navController = navController)
+        }
+        
+        composable(
+            route = Screen.ListDetails.route,
+            arguments = listOf(
+                navArgument("listId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val listId = backStackEntry.arguments?.getString("listId") ?: ""
+            ListDetailsScreen(
+                navController = navController,
+                listId = listId
+            )
+        }
+        
+        composable(Screen.BudgetSettings.route) {
+            BudgetSettingsScreen(navController = navController)
+        }
+        
+        composable(
+            route = Screen.EditAccount.route,
+            arguments = listOf(
+                navArgument("accountId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val accountId = backStackEntry.arguments?.getString("accountId") ?: ""
+            EditAccountScreen(
+                navController = navController,
+                accountId = accountId
+            )
+        }
+        
+        // Додајте ову руту за тестирање
+        composable("edit_account/{accountId}") { backStackEntry ->
+            val accountId = backStackEntry.arguments?.getString("accountId") ?: ""
+            EditAccountScreen(
+                navController = navController,
+                accountId = accountId
+            )
         }
     }
 } 
