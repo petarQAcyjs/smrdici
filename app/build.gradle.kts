@@ -10,14 +10,13 @@ android {
     compileSdk = 36
 
     defaultConfig {
+        versionCode = providers.gradleProperty("versionCode").get().toInt()
+        versionName = providers.gradleProperty("versionName").get()
         applicationId = "com.petar.smrdici"
         minSdk = 24
         //noinspection OldTargetApi Aplikacija sada koristi targetSdk = 36, što je najnovija verzija Android SDK-a (Android 16).
         //noinspection OldTargetApi
-        targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
-
+        targetSdk = 36        
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
         // Искључујемо учитавање native библиотеке libpenguin.so
@@ -31,32 +30,17 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
         debug {
-            // Искључујемо визуализацију граница за дебаговање
             buildConfigField("Boolean", "DEBUG_VISUALIZATION", "false")
-        }
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-    buildFeatures {
-        compose = true
-        // Искључујемо визуализације граница за дебаговање
-        buildConfig = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
+       }
+    
+   }
     
     // Додајемо конфигурацију за спречавање покушаја учитавања непостојећих .dm фајлова
     packaging {
@@ -69,6 +53,13 @@ android {
             excludes.add("**/*.dm")
         }
     }
+    
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
 }
 
 dependencies {
