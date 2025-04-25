@@ -196,8 +196,8 @@ class BudgetsViewModel(
                 Log.d(tag, "===== POČETAK UČITAVANJA BUDŽETA =====")
                 _isLoading.value = true
                 
-                // Definišemo timeout za operaciju (10 sekundi)
-                val timeoutMs = 10000L
+                // Definišemo timeout za operaciju (20 sekundi umesto 10)
+                val timeoutMs = 20000L
                 val startTime = System.currentTimeMillis()
                 
                 try {

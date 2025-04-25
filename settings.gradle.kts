@@ -10,6 +10,9 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+    plugins {
+        id("com.google.gms.google-services") version "4.4.2"
+    }
 }
 
 // Note: dependencyResolutionManagement је означен као @Incubating (експериментални),

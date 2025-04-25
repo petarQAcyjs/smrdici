@@ -7,15 +7,14 @@ plugins {
 
 android {
     namespace = "com.petar.smrdici"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.petar.smrdici"
         minSdk = 24
-        //noinspection OldTargetApi Vaša aplikacija trenutno koristi targetSdk = 35, što je već Android 15, ali je to dovoljno novo i ne bih to menjao u ovom trenutku, jer vidim da je vaš compileSdk takođe postavljen na 35.
-        //Međutim, postoji mogućnost da vas IDE upozorava jer je već u najavi Android 16. Ako želite da koristite najnoviju verziju, uradiću potrebne izmene, ali je za sada aplikacija usklađena sa najnovijim zahtevima za Google Play. Upozorenje možemo ignorisati ili ažurirati na Android 16 kada bude zvanično objavljen.
+        //noinspection OldTargetApi Aplikacija sada koristi targetSdk = 36, što je najnovija verzija Android SDK-a (Android 16).
         //noinspection OldTargetApi
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -44,11 +43,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
@@ -56,7 +55,7 @@ android {
         buildConfig = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.6"
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
     
     // Додајемо конфигурацију за спречавање покушаја учитавања непостојећих .dm фајлова
