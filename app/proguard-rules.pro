@@ -14,7 +14,7 @@
 
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+-keepattributes SourceFile,LineNumberTable
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
@@ -50,3 +50,28 @@
 # Google API Manager грешке
 -dontwarn GoogleApiManager
 -dontwarn com.google.android.gms.common.api.**
+
+# Firebase pravila
+-keepattributes Signature
+-keepattributes *Annotation*
+-keepattributes EnclosingMethod
+-keepattributes InnerClasses
+
+# Firebase Firestore
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-keep class com.google.firebase.firestore.** { *; }
+
+# Gson pravila
+-keep class com.google.gson.** { *; }
+-keepattributes Expose
+-keepattributes SerializedName
+-keep class * implements com.google.gson.TypeAdapterFactory
+-keep class * implements com.google.gson.JsonSerializer
+-keep class * implements com.google.gson.JsonDeserializer
+
+# Model klase
+-keep class com.petar.smrdici.model.** { *; }
+
+# Androidx Navigation
+-keep class androidx.navigation.** { *; }
