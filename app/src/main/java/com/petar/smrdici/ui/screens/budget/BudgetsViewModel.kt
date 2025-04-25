@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * ViewModel za upravljanje listom budžeta i ukupnom potrošnjom
@@ -95,6 +97,15 @@ class BudgetsViewModel(
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
     
+    // Mutex za sinhronizaciju pristupa loadBudgets metodi
+    private val loadBudgetsMutex = Mutex()
+    
+    // Praćenje poslednjeg vremena poziva za debounce
+    private var lastLoadBudgetsCallTime = 0L
+    
+    // Minimalno vreme između uzastopnih poziva (debounce period u ms)
+    private val DEBOUNCE_PERIOD_MS = 1000L
+    
     init {
         // Inicijalno učitavamo račune
         loadAccounts()
@@ -161,58 +172,100 @@ class BudgetsViewModel(
     @Suppress("UNUSED")
     fun loadBudgets() {
         viewModelScope.launch {
-            // Dodajem log za početak učitavanja budžeta
-            Log.d("BudgetsViewModel", "===== POČETAK UČITAVANJA BUDŽETA =====")
+            // Provera debounce perioda - propuštamo poziv samo ako je prošlo dovoljno vremena
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastLoadBudgetsCallTime < DEBOUNCE_PERIOD_MS) {
+                Log.w(tag, "Debounce: Ignorišem poziv loadBudgets() jer je pozvan pre manje od ${DEBOUNCE_PERIOD_MS}ms")
+                return@launch
+            }
             
-            _isLoading.value = true
+            // Dodatna provera da li je već u toku učitavanje
+            if (_isLoading.value) {
+                Log.w(tag, "Učitavanje budžeta je već u toku, preskačem novi poziv")
+                return@launch
+            }
+            
+            // Koristimo mutex za sinhronizaciju pristupa - samo jedan poziv može ući u kritičnu sekciju
+            if (!loadBudgetsMutex.tryLock()) {
+                Log.w(tag, "Mutex zaključan: Drugi loadBudgets() poziv je već u toku, preskačem")
+                return@launch
+            }
+            
             try {
-                Log.d("BudgetsViewModel", "Pozivam budgetRepository.getAllBudgets()")
-                budgetRepository.getAllBudgets().collect { budgetsList ->
-                    Log.d("BudgetsViewModel", "Učitano ${budgetsList.size} budžeta")
-                    
-                    // Detalji o budžetima
-                    if (budgetsList.isNotEmpty()) {
-                        val sampleBudgets = budgetsList.take(3).joinToString { 
-                            "Budget(id=${it.id}, name=${it.name}, amount=${it.amount}, type=${it.type})" 
+                lastLoadBudgetsCallTime = currentTime
+                Log.d(tag, "===== POČETAK UČITAVANJA BUDŽETA =====")
+                _isLoading.value = true
+                
+                // Definišemo timeout za operaciju (10 sekundi)
+                val timeoutMs = 10000L
+                val startTime = System.currentTimeMillis()
+                
+                try {
+                    // Koristimo kotlinx.coroutines.flow.timeout da izbegnemo zaglavljivanje operacije
+                    kotlinx.coroutines.withTimeout(timeoutMs) {
+                        // Dobavljamo budžete
+                        budgetRepository.getAllBudgets().collect { budgetsList ->
+                            Log.d(tag, "Učitano ${budgetsList.size} budžeta")
+                            
+                            // Uključujemo i vreme izvršavanja u log
+                            val elapsedMs = System.currentTimeMillis() - startTime
+                            Log.d(tag, "Vreme učitavanja: ${elapsedMs}ms")
+                            
+                            // Odvajamo filtriranje budžeta prema tipu
+                            val expenseBudgets = budgetsList.filter { it.type == BudgetType.EXPENSE }
+                            val incomeBudgets = budgetsList.filter { it.type == BudgetType.INCOME }
+                            
+                            _allBudgets.value = budgetsList
+                            
+                            val selectedAccountId = _selectedAccountId.value
+                            
+                            // Filtriramo budžete prema odabranom računu
+                            val filteredExpenseBudgets = if (selectedAccountId != null) {
+                                // Samo budžeti za odabrani račun
+                                expenseBudgets.filter { it.accountId.isEmpty() || it.accountId == selectedAccountId }
+                            } else {
+                                // Svi budžeti
+                                expenseBudgets
+                            }
+                            
+                            val filteredIncomeBudgets = if (selectedAccountId != null) {
+                                // Samo budžeti za odabrani račun
+                                incomeBudgets.filter { it.accountId.isEmpty() || it.accountId == selectedAccountId }
+                            } else {
+                                // Svi budžeti
+                                incomeBudgets
+                            }
+                            
+                            _expenseBudgets.value = filteredExpenseBudgets
+                            _incomeBudgets.value = filteredIncomeBudgets
+                            
+                            // Učitavamo potrošnju za budžete - ovo je sada "fire and forget"
+                            // nećemo čekati da se završi calculateBudgetSpending da bi resetovali isLoading
+                            calculateBudgetSpending()
+                            
+                            // Odmah nakon dobijanja podataka, resetujemo isLoading
+                            // Ne čekamo kalkulaciju potrošnje jer ona može raditi u pozadini
+                            Log.d(tag, "Glavni podaci učitani, resetujem isLoading=false")
+                            _isLoading.value = false
                         }
-                        Log.d("BudgetsViewModel", "Uzorci budžeta: $sampleBudgets")
                     }
-                    
-                    // Odvajamo filtriranje budžeta prema tipu
-                    val expenseBudgets = budgetsList.filter { it.type == BudgetType.EXPENSE }
-                    val incomeBudgets = budgetsList.filter { it.type == BudgetType.INCOME }
-                    Log.d("BudgetsViewModel", "Nakon podele po tipu: ${expenseBudgets.size} budžeta za rashode, ${incomeBudgets.size} budžeta za prihode")
-                    
-                    _allBudgets.value = budgetsList
-                    
-                    val selectedAccountId = _selectedAccountId.value
-                    if (selectedAccountId != null) {
-                        Log.d("BudgetsViewModel", "Filtriram budžete za račun: $selectedAccountId")
-                        val filteredExpenseBudgets = expenseBudgets.filter { budget ->
-                            budget.accountId == selectedAccountId
-                        }
-                        val filteredIncomeBudgets = incomeBudgets.filter { budget ->
-                            budget.accountId == selectedAccountId
-                        }
-                        Log.d("BudgetsViewModel", "Nakon filtriranja po računu: ${filteredExpenseBudgets.size} budžeta za rashode, ${filteredIncomeBudgets.size} budžeta za prihode")
-                        
-                        _expenseBudgets.value = filteredExpenseBudgets
-                        _incomeBudgets.value = filteredIncomeBudgets
+                } catch (e: Exception) {
+                    val elapsedMs = System.currentTimeMillis() - startTime
+                    if (e is kotlinx.coroutines.TimeoutCancellationException) {
+                        Log.e(tag, "TIMEOUT: Učitavanje budžeta prekoračilo vremensko ograničenje (${elapsedMs}ms > ${timeoutMs}ms)", e)
+                        _errorMessage.value = "Učitavanje budžeta je predugo trajalo i automatski je prekinuto."
                     } else {
-                        Log.d("BudgetsViewModel", "Nije odabran račun, prikazujem sve budžete")
-                        _expenseBudgets.value = expenseBudgets
-                        _incomeBudgets.value = incomeBudgets
+                        Log.e(tag, "GREŠKA: Učitavanje budžeta nije uspelo (${elapsedMs}ms)", e)
+                        _errorMessage.value = "Greška prilikom učitavanja budžeta: ${e.message}"
                     }
-
-                    // Učitavamo rashode, prihode i računamo potrošnju za budžete
-                    Log.d("BudgetsViewModel", "Pokrećem izračunavanje budžetske potrošnje")
-                    calculateBudgetSpending()
+                } finally {
+                    // Garantujemo da se isLoading uvek resetuje, čak i ako je došlo do greške
+                    _isLoading.value = false
+                    Log.d(tag, "===== ZAVRŠENO UČITAVANJE BUDŽETA =====")
                 }
-                _isLoading.value = false
-            } catch (e: Exception) {
-                Log.e("BudgetsViewModel", "Greška pri učitavanju budžeta", e)
-                _isLoading.value = false
-                _errorMessage.value = "Greška pri učitavanju budžeta: ${e.message}"
+            } finally {
+                // Uvek otključavamo mutex, čak i ako je došlo do greške
+                loadBudgetsMutex.unlock()
             }
         }
     }
@@ -222,18 +275,17 @@ class BudgetsViewModel(
      */
     private fun calculateBudgetSpending() {
         viewModelScope.launch {
-            _isLoading.value = true
+            // Ne menjamo globalno isLoading stanje ovde
+            // Koristimo lokalno stanje za praćenje
+            val calculationStartTime = System.currentTimeMillis()
             Log.d("BudgetsViewModel", "===== POČETAK IZRAČUNAVANJA BUDŽETSKE POTROŠNJE =====")
             
             try {
-                // Zakazujemo osvežavanje budžeta nakon završetka izračunavanja
-                val startTime = System.currentTimeMillis()
-                
                 loadExpenseSpending()
                 loadIncomeReceived()
                 
                 val endTime = System.currentTimeMillis()
-                Log.d("BudgetsViewModel", "Izračunavanje budžetske potrošnje završeno za ${endTime - startTime}ms")
+                Log.d("BudgetsViewModel", "Izračunavanje budžetske potrošnje završeno za ${endTime - calculationStartTime}ms")
                 Log.d("BudgetsViewModel", "KONAČNI REZULTATI: displayExpenseBudgets=${_displayExpenseBudgets.value.size}, displayIncomeBudgets=${_displayIncomeBudgets.value.size}")
                 Log.d("BudgetsViewModel", "KONAČNI IZNOSI: totalExpenseSpent=${_totalExpenseSpent.value}, totalIncomeReceived=${_totalIncomeReceived.value}")
                 
@@ -251,12 +303,12 @@ class BudgetsViewModel(
                     }
                     Log.d("BudgetsViewModel", "Uzorci income budžeta: $sampleIncomeBudgets")
                 }
-                
-                _isLoading.value = false
             } catch (e: Exception) {
                 Log.e("BudgetsViewModel", "Greška pri izračunavanju budžetske potrošnje", e)
-                _isLoading.value = false
                 _errorMessage.value = "Greška pri izračunavanju budžetske potrošnje: ${e.message}"
+            } finally {
+                // Dodajemo log koji će nam pomoći da pratimo kada se završava kalkulacija
+                Log.d("BudgetsViewModel", "===== ZAVRŠENO IZRAČUNAVANJE BUDŽETSKE POTROŠNJE =====")
             }
         }
     }
@@ -567,6 +619,15 @@ class BudgetsViewModel(
         }
         
         return "${amount.toInt()} $currency"
+    }
+    
+    /**
+     * Forsira zaustavljanje stanja učitavanja.
+     * Koristi se kao sigurnosni mehanizam da bi se sprečilo "beskonačno" učitavanje.
+     */
+    fun forceStopLoading() {
+        Log.w(tag, "FORSIRANO ZAUSTAVLJANJE UČITAVANJA - sigurnosni mehanizam")
+        _isLoading.value = false
     }
     
     /**

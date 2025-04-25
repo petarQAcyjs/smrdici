@@ -260,7 +260,27 @@ class BudgetRepository(
             val listener = query.addSnapshotListener { querySnapshot, exception ->
                 if (exception != null) {
                     Log.e(tag, "Greška pri dobavljanju budžeta", exception)
-                    trySend(emptyList())
+                    
+                    // Proveravamo da li je greška vezana za nedostajući indeks
+                    if (exception.message?.contains("FAILED_PRECONDITION") == true && 
+                        exception.message?.contains("The query requires an index") == true) {
+                        
+                        // Izvlačimo URL za kreiranje indeksa iz poruke o grešci
+                        val indexUrl = exception.message?.let { msg ->
+                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
+                            val matchResult = urlPattern.find(msg)
+                            matchResult?.value
+                        }
+                        
+                        Log.e(tag, "Potrebno je kreirati indeks u Firebase konzoli. " +
+                               "Koristite sledeći link: $indexUrl")
+                        
+                        // Šaljemo praznu listu umesto da zatvorimo flow sa greškom
+                        trySend(emptyList())
+                    } else {
+                        // Za ostale greške, zatvaramo flow sa greškom
+                        close(exception)
+                    }
                     return@addSnapshotListener
                 }
                 
@@ -305,7 +325,27 @@ class BudgetRepository(
             val listener = query.addSnapshotListener { querySnapshot, exception ->
                 if (exception != null) {
                     Log.e(tag, "Greška pri dobavljanju budžeta po tipu", exception)
-                    trySend(emptyList())
+                    
+                    // Proveravamo da li je greška vezana za nedostajući indeks
+                    if (exception.message?.contains("FAILED_PRECONDITION") == true && 
+                        exception.message?.contains("The query requires an index") == true) {
+                        
+                        // Izvlačimo URL za kreiranje indeksa iz poruke o grešci
+                        val indexUrl = exception.message?.let { msg ->
+                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
+                            val matchResult = urlPattern.find(msg)
+                            matchResult?.value
+                        }
+                        
+                        Log.e(tag, "Potrebno je kreirati indeks u Firebase konzoli. " +
+                               "Koristite sledeći link: $indexUrl")
+                        
+                        // Šaljemo praznu listu umesto da zatvorimo flow sa greškom
+                        trySend(emptyList())
+                    } else {
+                        // Za ostale greške, zatvaramo flow sa greškom
+                        close(exception)
+                    }
                     return@addSnapshotListener
                 }
                 
@@ -354,7 +394,27 @@ class BudgetRepository(
             val listener = query.addSnapshotListener { querySnapshot, exception ->
                 if (exception != null) {
                     Log.e(tag, "Greška pri dobavljanju budžeta za račun", exception)
-                    trySend(emptyList())
+                    
+                    // Proveravamo da li je greška vezana za nedostajući indeks
+                    if (exception.message?.contains("FAILED_PRECONDITION") == true && 
+                        exception.message?.contains("The query requires an index") == true) {
+                        
+                        // Izvlačimo URL za kreiranje indeksa iz poruke o grešci
+                        val indexUrl = exception.message?.let { msg ->
+                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
+                            val matchResult = urlPattern.find(msg)
+                            matchResult?.value
+                        }
+                        
+                        Log.e(tag, "Potrebno je kreirati indeks u Firebase konzoli. " +
+                               "Koristite sledeći link: $indexUrl")
+                        
+                        // Šaljemo praznu listu umesto da zatvorimo flow sa greškom
+                        trySend(emptyList())
+                    } else {
+                        // Za ostale greške, zatvaramo flow sa greškom
+                        close(exception)
+                    }
                     return@addSnapshotListener
                 }
                 
@@ -402,7 +462,27 @@ class BudgetRepository(
             val listener = query.addSnapshotListener { querySnapshot, exception ->
                 if (exception != null) {
                     Log.e(tag, "Greška pri dobavljanju budžeta za kategoriju", exception)
-                    trySend(emptyList())
+                    
+                    // Proveravamo da li je greška vezana za nedostajući indeks
+                    if (exception.message?.contains("FAILED_PRECONDITION") == true && 
+                        exception.message?.contains("The query requires an index") == true) {
+                        
+                        // Izvlačimo URL za kreiranje indeksa iz poruke o grešci
+                        val indexUrl = exception.message?.let { msg ->
+                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
+                            val matchResult = urlPattern.find(msg)
+                            matchResult?.value
+                        }
+                        
+                        Log.e(tag, "Potrebno je kreirati indeks u Firebase konzoli. " +
+                               "Koristite sledeći link: $indexUrl")
+                        
+                        // Šaljemo praznu listu umesto da zatvorimo flow sa greškom
+                        trySend(emptyList())
+                    } else {
+                        // Za ostale greške, zatvaramo flow sa greškom
+                        close(exception)
+                    }
                     return@addSnapshotListener
                 }
                 

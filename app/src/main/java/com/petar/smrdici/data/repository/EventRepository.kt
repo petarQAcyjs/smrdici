@@ -8,6 +8,9 @@ import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.Event
 import kotlinx.coroutines.tasks.await
 import java.util.Date
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 
 // Класа је измењена да прима зависности кроз конструктор уместо да их креира интерно
 class EventRepository(
@@ -252,7 +255,73 @@ class EventRepository(
     }
     
     // Добављање догађаја између два датума
-    suspend fun getEvents(startDate: Date, endDate: Date): Result<List<Event>> {
+    fun getEvents(startDate: Date, endDate: Date): Flow<List<Event>> = callbackFlow {
+        try {
+            // Proveravamo samo da li je korisnik prijavljen
+            val userId = auth.currentUser?.uid
+            if (userId == null) {
+                close(IllegalStateException("Корисник није пријављен"))
+                return@callbackFlow
+            }
+            
+            val startTimestamp = Timestamp(startDate)
+            val endTimestamp = Timestamp(endDate)
+            
+            val listener = eventsCollection
+                .whereGreaterThanOrEqualTo("startTime", startTimestamp)
+                .whereLessThanOrEqualTo("startTime", endTimestamp)
+                .orderBy("startTime", Query.Direction.ASCENDING)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e("EventRepository", "Грешка при слушању догађаја за период", error)
+                        
+                        // Проверавамо да ли је грешка везана за недостајући индекс
+                        if (error.message?.contains("FAILED_PRECONDITION") == true && 
+                            error.message?.contains("The query requires an index") == true) {
+                            
+                            // Извлачимо URL за креирање индекса из поруке о грешци
+                            val indexUrl = error.message?.let { msg ->
+                                val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
+                                val matchResult = urlPattern.find(msg)
+                                matchResult?.value
+                            }
+                            
+                            Log.e("EventRepository", "Потребно је креирати индекс у Firebase конзоли. " +
+                                   "Користите следећи линк: $indexUrl")
+                            
+                            // Шаљемо празну листу уместо да затворимо flow са грешком
+                            trySend(emptyList())
+                        } else {
+                            close(error)
+                        }
+                        return@addSnapshotListener
+                    }
+                    
+                    val events = snapshot?.documents?.mapNotNull { doc ->
+                        try {
+                            doc.toObject(Event::class.java)?.copy(id = doc.id)
+                        } catch (e: Exception) {
+                            Log.e("EventRepository", "Грешка при читању догађаја ${doc.id}", e)
+                            null
+                        }
+                    } ?: emptyList()
+                    
+                    trySend(events)
+                }
+            
+            awaitClose { 
+                listener.remove() 
+                Log.d("EventRepository", "Затворен listener за догађаје")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("EventRepository", "Грешка при добављању догађаја", e)
+            close(e)
+        }
+    }
+    
+    // Стара имплементација - оставља се због компатибилности
+    suspend fun getEventsSync(startDate: Date, endDate: Date): Result<List<Event>> {
         return try {
             // Proveravamo samo da li je korisnik prijavljen
             auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Корисник није пријављен"))

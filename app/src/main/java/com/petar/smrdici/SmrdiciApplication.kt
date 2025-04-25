@@ -17,7 +17,11 @@ import com.petar.smrdici.data.repository.ExpenseRepository
 import com.petar.smrdici.data.repository.IncomeRepository
 import com.petar.smrdici.data.repository.RepositoryManager
 import com.petar.smrdici.utils.AppGlobals
+import com.petar.smrdici.utils.LogUtils
 
+/**
+ * Glavna aplikacijska klasa koja se inicijalizuje pri pokretanju aplikacije.
+ */
 class SmrdiciApplication : Application() {
     companion object {
         private const val TAG = "SmrdiciApplication"
@@ -28,8 +32,8 @@ class SmrdiciApplication : Application() {
         
         Log.d(TAG, "Inicijalizacija Smrdici aplikacije")
         
-        // Конфигуришемо управљање изузецима и логовима
-        configureLogging()
+        // Inicijalizacija log sistema
+        initLogging()
         
         // Иницијализујемо Google Play сервисе правилно
         initGooglePlayServices()
@@ -42,6 +46,54 @@ class SmrdiciApplication : Application() {
         
         // Офлајн подршка је подразумевано укључена у новијим верзијама Firebase-а
         // Нема потребе за додатном конфигурацијом
+    }
+    
+    private fun initLogging() {
+        // Postavljamo opcije logovanja - može biti konfigurisano na osnovu build tipa
+        // ili BuildConfig.DEBUG uslova
+        val isDebugBuild = true // TODO: Zameniti sa BuildConfig.DEBUG u produkciji
+        
+        // Osnovna konfiguracija
+        LogUtils.Config.ENABLE_DETAILED_LOGS = isDebugBuild
+        
+        // Podešavamo nivo detaljnosti u zavisnosti od build tipa
+        LogUtils.Config.DETAIL_LEVEL = if (isDebugBuild) {
+            LogUtils.DetailLevel.NORMAL
+        } else {
+            LogUtils.DetailLevel.MINIMAL
+        }
+        
+        // Broj stavki za prikazivanje u listama
+        LogUtils.Config.MAX_ITEMS_TO_LOG = 5
+        
+        // Isključujemo neke manje bitne tagove
+        LogUtils.Config.DISABLED_TAGS.add("CursorInputConnection")
+        LogUtils.Config.DISABLED_TAGS.add("ProfileInstaller")
+        LogUtils.Config.DISABLED_TAGS.add("Choreographer")
+        
+        // Selektivno kontrolišemo kategorije logova
+        if (!isDebugBuild) {
+            // U produkciji, isključimo neke kategorije da smanjimo količinu logova
+            LogUtils.Config.disableCategory("ui")
+            LogUtils.Config.disableCategory("transaction")
+            
+            // Isključujemo detalje za expense i income kategorije
+            LogUtils.Config.disableCategory("expense")
+            LogUtils.Config.disableCategory("income")
+        } else {
+            // U debug verziji, podesimo nivo detalja za različite kategorije
+            LogUtils.Config.enableCategory("debug")
+            LogUtils.Config.enableCategory("testing")
+            
+            // Ograničimo broj stavki za prikaz
+            if (LogUtils.Config.DETAIL_LEVEL == LogUtils.DetailLevel.VERBOSE) {
+                LogUtils.Config.MAX_ITEMS_TO_LOG = 10
+            } else {
+                LogUtils.Config.MAX_ITEMS_TO_LOG = 3  // U normalnom režimu prikazujemo samo 3 stavke
+            }
+        }
+        
+        Log.i("SmrdiciApplication", "Logging inicijalizovan: detaljno logovanje = ${LogUtils.Config.ENABLE_DETAILED_LOGS}, nivo = ${LogUtils.Config.DETAIL_LEVEL}")
     }
     
     /**

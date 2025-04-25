@@ -80,33 +80,28 @@ class HomeViewModel() : ViewModel() {
                 
                 // Учитавамо све догађаје за данас
                 eventRepository.getEvents(startOfDay, endOfDay)
-                    .fold(
-                        onSuccess = { events ->
-                            Log.d("HomeViewModel", "Учитано ${events.size} догађаја")
-                            
-                            // Филтрирамо само будуће догађаје
-                            val currentTime = Calendar.getInstance().time
-                            val activeEvents = events.filter { event ->
-                                val eventEndTime = event.endTime?.toDate() ?: Date(Long.MAX_VALUE)
-                                eventEndTime >= currentTime
-                            }
-                            
-                            Log.d("HomeViewModel", """
-                                Филтрирање догађаја:
-                                - Укупно догађаја: ${events.size}
-                                - Активних догађаја: ${activeEvents.size}
-                                - Тренутно време: ${formatDate(currentTime)}
-                            """.trimIndent())
-                            
-                            // Обавезно проверавамо да ли је листа заиста различита пре ажурирања
-                            if (_todayEvents.value != activeEvents) {
-                                _todayEvents.value = activeEvents
-                            }
-                        },
-                        onFailure = { e ->
-                            Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
+                    .collect { events ->
+                        Log.d("HomeViewModel", "Учитано ${events.size} догађаја")
+                        
+                        // Филтрирамо само будуће догађаје
+                        val currentTime = Calendar.getInstance().time
+                        val activeEvents = events.filter { event: Event ->
+                            val eventEndTime = event.endTime?.toDate() ?: Date(Long.MAX_VALUE)
+                            eventEndTime >= currentTime
                         }
-                    )
+                        
+                        Log.d("HomeViewModel", """
+                            Филтрирање догађаја:
+                            - Укупно догађаја: ${events.size}
+                            - Активних догађаја: ${activeEvents.size}
+                            - Тренутно време: ${formatDate(currentTime)}
+                        """.trimIndent())
+                        
+                        // Обавезно проверавамо да ли је листа заиста различита пре ажурирања
+                        if (_todayEvents.value != activeEvents) {
+                            _todayEvents.value = activeEvents
+                        }
+                    }
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
             } finally {
@@ -140,18 +135,16 @@ class HomeViewModel() : ViewModel() {
                 // Затим покушавамо синхронизацију
                 Log.d("HomeViewModel", "Покрећем синхронизацију са сервером...")
                 eventRepository.syncEvents()
-                    .fold(
-                        onSuccess = {
-                            Log.d("HomeViewModel", "Синхронизација успешна!")
-                            _syncStatus.value = SyncStatus.Success
-                            // Поново учитавамо догађаје након успешне синхронизације
-                            loadTodayEvents()
-                        },
-                        onFailure = { e ->
-                            Log.e("HomeViewModel", "Грешка при синхронизацији", e)
-                            _syncStatus.value = SyncStatus.Error(e.message ?: "Грешка при синхронизацији")
-                        }
-                    )
+                    .onSuccess {
+                        Log.d("HomeViewModel", "Синхронизација успешна!")
+                        _syncStatus.value = SyncStatus.Success
+                        // Поново учитавамо догађаје након успешне синхронизације
+                        loadTodayEvents()
+                    }
+                    .onFailure { e ->
+                        Log.e("HomeViewModel", "Грешка при синхронизацији", e)
+                        _syncStatus.value = SyncStatus.Error(e.message ?: "Грешка при синхронизацији")
+                    }
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Грешка при синхронизацији", e)
                 _syncStatus.value = SyncStatus.Error(e.message ?: "Непозната грешка")

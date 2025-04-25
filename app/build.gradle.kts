@@ -122,4 +122,7 @@ dependencies {
     // Додатне зависности за решавање проблема са Google API
     implementation(libs.play.services.auth)
     implementation(libs.play.services.base)
+    
+    // Coroutines sync - za Mutex implementaciju
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 }

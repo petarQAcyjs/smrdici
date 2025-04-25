@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.DocumentSnapshot
 import com.petar.smrdici.data.model.Income
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import java.util.Date
 import java.util.UUID
+import com.petar.smrdici.utils.LogUtils
 
 class IncomeRepository private constructor() {
     private val firestore = FirebaseFirestore.getInstance()
@@ -109,13 +111,13 @@ class IncomeRepository private constructor() {
     
     // Добијање свих прихода за тренутног корисника
     fun getAllIncomes(): Flow<List<Income>> = callbackFlow {
-        Log.d("IncomeRepository", "Учитавам све приходе - BUDGET FIX")
+        LogUtils.i("IncomeRepository", "Učitavam sve prihode", category = "income")
         
         val listener = userIncomesCollection
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("IncomeRepository", "Грешка при слушању прихода", error)
+                    Log.e("IncomeRepository", "Greška pri slušanju prihoda", error)
                     close(error)
                     return@addSnapshotListener
                 }
@@ -128,46 +130,59 @@ class IncomeRepository private constructor() {
                         val category = doc.getString("category") ?: ""
                         val accountId = doc.getString("accountId") ?: ""
                         
-                        // Учитавање датума у формату "YYYY-MM-DD"
-                        val dateStr = doc.getString("date") ?: ""
-                        val date = if (dateStr.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
-                            dateStr
-                        } else {
-                            // Ако није у очекиваном формату, форматирај данашњи датум
-                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            dateFormat.format(Date())
-                        }
+                        // Poboljšana konverzija datuma
+                        val date = getDateFromDocument(doc)
                         
                         val income = Income(id, amount, description, category, date, accountId)
                         
-                        Log.d("IncomeRepository", "Учитан приход ID: ${income.id}, износ: ${income.amount}, датум: ${income.getFormattedDate()}")
-                        
+                        // Više ne logujemo svaki pojedinačni prihod
                         income
                     } catch (e: Exception) {
-                        Log.e("IncomeRepository", "Грешка при конверзији документа у Income", e)
+                        Log.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e)
                         null
                     }
                 } ?: emptyList()
                 
-                Log.d("IncomeRepository", "Учитано ${incomes.size} прихода - BUDGET FIX")
-                
-                // Детаљнији лог за дебагирање - приказује све учитане приходе
+                // Log samo ukupan broj i statistike umesto pojedinačnih stavki
                 if (incomes.isNotEmpty()) {
-                    Log.d("IncomeRepository", "Учитани приходи: ${incomes.map { "${it.id} (${it.amount})" }}")
+                    val totalAmount = incomes.sumOf { it.amount }
+                    val avgAmount = if (incomes.isNotEmpty()) totalAmount / incomes.size else 0.0
+                    val minAmount = incomes.minOfOrNull { it.amount } ?: 0.0
+                    val maxAmount = incomes.maxOfOrNull { it.amount } ?: 0.0
+                    
+                    LogUtils.i("IncomeRepository", 
+                        "Učitano ${incomes.size} prihoda. " +
+                        "Ukupno: $totalAmount, Prosek: $avgAmount, Min: $minAmount, Max: $maxAmount", 
+                        category = "income")
+                    
+                    // Samo u VERBOSE modu prikazati distribuciju vrednosti (opciono)
+                    if (LogUtils.Config.DETAIL_LEVEL == LogUtils.DetailLevel.VERBOSE) {
+                        // Grupisati po opsegu vrednosti za bolji pregled
+                        val distribution = incomes.groupBy { income ->
+                            when {
+                                income.amount < 1000 -> "< 1,000"
+                                income.amount < 5000 -> "1,000 - 5,000"
+                                income.amount < 10000 -> "5,000 - 10,000"
+                                else -> "> 10,000"
+                            }
+                        }.mapValues { it.value.size }
+                        
+                        LogUtils.d("IncomeRepository", "Distribucija prihoda po iznosima: $distribution", 
+                            category = "income")
+                    }
                 } else {
-                    Log.d("IncomeRepository", "Нема учитаних прихода. Проверите Firebase конекцију и податке.")
+                    LogUtils.i("IncomeRepository", "Nema učitanih prihoda.", category = "income")
                 }
                 
-                // Ажурирамо локални кеш
+                // Ažuriramo lokalni keš
                 _incomes.value = incomes
                 
-                // Шаљемо нову листу
+                // Šaljemo novu listu
                 trySend(incomes)
             }
         
         awaitClose { 
-            Log.d("IncomeRepository", "Затварам listener за приходе")
+            Log.d("IncomeRepository", "Zatvaram listener za prihode")
             listener.remove() 
         }
     }
@@ -175,7 +190,7 @@ class IncomeRepository private constructor() {
     // Освежавање листе прихода (користи се интерно)
     private suspend fun refreshIncomes() {
         try {
-            Log.d("IncomeRepository", "Освежавам листу прихода")
+            LogUtils.d("IncomeRepository", "Osvežavam listu prihoda", category = "income")
             
             val snapshot = userIncomesCollection
                 .orderBy("date", Query.Direction.DESCENDING)
@@ -190,33 +205,34 @@ class IncomeRepository private constructor() {
                     val category = doc.getString("category") ?: ""
                     val accountId = doc.getString("accountId") ?: ""
                     
-                    // Учитавање датума
-                    val dateStr = doc.getString("date") ?: ""
-                    val date = if (dateStr.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
-                        dateStr
-                    } else {
-                        // Ако није у очекиваном формату, форматирај данашњи датум
-                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                        dateFormat.format(Date())
-                    }
+                    // Poboljšana konverzija datuma
+                    val date = getDateFromDocument(doc)
                     
                     val income = Income(id, amount, description, category, date, accountId)
                     
-                    Log.d("IncomeRepository", "Учитан приход ID: ${income.id}, износ: ${income.amount}, датум: ${income.getFormattedDate()}")
-                    
+                    // Više ne logujemo svaki pojedinačni prihod
                     income
                 } catch (e: Exception) {
-                    Log.e("IncomeRepository", "Грешка при конверзији документа у Income", e)
+                    Log.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e)
                     null
                 }
             }
             
-            Log.d("IncomeRepository", "Освежено ${incomes.size} прихода")
+            // Logujemo samo ukupan broj i statistike
+            if (incomes.isNotEmpty()) {
+                val totalAmount = incomes.sumOf { it.amount }
+                val avgAmount = if (incomes.isNotEmpty()) totalAmount / incomes.size else 0.0
+                
+                LogUtils.d("IncomeRepository", 
+                    "Osveženo ${incomes.size} prihoda. Ukupno: $totalAmount, Prosek: $avgAmount", 
+                    category = "income")
+            } else {
+                LogUtils.d("IncomeRepository", "Nema prihoda za osvežavanje", category = "income")
+            }
             
             _incomes.value = incomes
         } catch (e: Exception) {
-            Log.e("IncomeRepository", "Грешка при освежавању прихода", e)
+            LogUtils.e("IncomeRepository", "Greška pri osvežavanju prihoda", e, category = "income")
         }
     }
     
@@ -228,7 +244,7 @@ class IncomeRepository private constructor() {
         val startDateStr = dateFormat.format(startDate)
         val endDateStr = dateFormat.format(endDate)
         
-        Log.d("IncomeRepository", "Учитавам приходе за период од $startDateStr до $endDateStr")
+        LogUtils.i("IncomeRepository", "Učitavam prihode za period od $startDateStr do $endDateStr", category = "income")
         
         val listener = userIncomesCollection
             .whereGreaterThanOrEqualTo("date", startDateStr)
@@ -236,7 +252,7 @@ class IncomeRepository private constructor() {
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("IncomeRepository", "Грешка при слушању прихода за период", error)
+                    LogUtils.e("IncomeRepository", "Greška pri slušanju prihoda za period", error, category = "income")
                     
                     // Проверавамо да ли је грешка везана за недостајући индекс
                     if (error.message?.contains("FAILED_PRECONDITION") == true && 
@@ -249,8 +265,8 @@ class IncomeRepository private constructor() {
                             matchResult?.value
                         }
                         
-                        Log.e("IncomeRepository", "Потребно је креирати индекс у Firebase конзоли. " +
-                               "Користите следећи линк: $indexUrl")
+                        LogUtils.e("IncomeRepository", "Potrebno je kreirati indeks u Firebase konzoli. " +
+                               "Koristite sledeći link: $indexUrl", category = "income")
                         
                         // Шаљемо празну листу уместо да затворимо flow са грешком
                         trySend(emptyList())
@@ -268,46 +284,66 @@ class IncomeRepository private constructor() {
                         val category = doc.getString("category") ?: ""
                         val accountId = doc.getString("accountId") ?: ""
                         
-                        // Учитавање датума
-                        val dateStr = doc.getString("date") ?: ""
-                        val date = if (dateStr.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
-                            dateStr
-                        } else {
-                            // Ако није у очекиваном формату, форматирај данашњи датум
-                            dateFormat.format(Date())
-                        }
+                        // Poboljšana konverzija datuma
+                        val date = getDateFromDocument(doc)
                         
                         val income = Income(id, amount, description, category, date, accountId)
                         
-                        Log.d("IncomeRepository", "Учитан приход за период ID: ${income.id}, износ: ${income.amount}, датум: ${income.getFormattedDate()}")
-                        
+                        // Više ne logujemo svaki pojedinačni prihod
                         income
                     } catch (e: Exception) {
-                        Log.e("IncomeRepository", "Грешка при конверзији документа у Income", e)
+                        LogUtils.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e, category = "income")
                         null
                     }
                 } ?: emptyList()
                 
-                Log.d("IncomeRepository", "Учитано ${incomes.size} прихода за период")
+                // Log samo ukupan broj i statistike
+                if (incomes.isNotEmpty()) {
+                    val totalAmount = incomes.sumOf { it.amount }
+                    val avgAmount = if (incomes.isNotEmpty()) totalAmount / incomes.size else 0.0
+                    val minAmount = incomes.minOfOrNull { it.amount } ?: 0.0
+                    val maxAmount = incomes.maxOfOrNull { it.amount } ?: 0.0
+                    
+                    LogUtils.i("IncomeRepository", 
+                        "Učitano ${incomes.size} prihoda za period $startDateStr - $endDateStr. " +
+                        "Ukupno: $totalAmount, Prosek: $avgAmount, Min: $minAmount, Max: $maxAmount", 
+                        category = "income")
+                    
+                    // Samo u VERBOSE modu prikazati dodatne detalje
+                    if (LogUtils.Config.DETAIL_LEVEL == LogUtils.DetailLevel.VERBOSE) {
+                        // Grupisati po mesecima
+                        val monthDistribution = incomes.groupBy { 
+                            val parts = it.date.split("-") 
+                            if (parts.size >= 2) "${parts[0]}-${parts[1]}" else it.date
+                        }.mapValues { it.value.sumOf { income -> income.amount } }
+                        
+                        LogUtils.d("IncomeRepository", "Mesečna distribucija prihoda za period: $monthDistribution", 
+                            category = "income")
+                    }
+                } else {
+                    LogUtils.i("IncomeRepository", "Nema prihoda za period $startDateStr - $endDateStr", 
+                        category = "income")
+                }
+                
                 trySend(incomes)
             }
         
         awaitClose { 
-            Log.d("IncomeRepository", "Затварам listener за приходе за период")
+            LogUtils.d("IncomeRepository", "Zatvaram listener za prihode za period", category = "income")
             listener.remove() 
         }
     }
     
     // Добијање прихода за одређени рачун
     fun getIncomesForAccount(accountId: String): Flow<List<Income>> = callbackFlow {
-        Log.d("IncomeRepository", "Учитавам приходе за рачун: $accountId - BUDGET FIX")
+        LogUtils.i("IncomeRepository", "Učitavam prihode za račun: $accountId", category = "income")
         
         val listener = userIncomesCollection
             .whereEqualTo("accountId", accountId)
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("IncomeRepository", "Грешка при слушању прихода за рачун", error)
+                    LogUtils.e("IncomeRepository", "Greška pri slušanju prihoda za račun", error, category = "income")
                     
                     // Проверавамо да ли је грешка везана за недостајући индекс
                     if (error.message?.contains("FAILED_PRECONDITION") == true && 
@@ -320,8 +356,8 @@ class IncomeRepository private constructor() {
                             matchResult?.value
                         }
                         
-                        Log.e("IncomeRepository", "Потребно је креирати индекс у Firebase конзоли. " +
-                               "Користите следећи линк: $indexUrl")
+                        LogUtils.e("IncomeRepository", "Potrebno je kreirati indeks u Firebase konzoli. " +
+                               "Koristite sledeći link: $indexUrl", category = "income")
                         
                         // Шаљемо празну листу уместо да затворимо flow са грешком
                         trySend(emptyList())
@@ -339,42 +375,62 @@ class IncomeRepository private constructor() {
                         val category = doc.getString("category") ?: ""
                         val accountId = doc.getString("accountId") ?: ""
                         
-                        // Учитавање датума
-                        val dateStr = doc.getString("date") ?: ""
-                        val date = if (dateStr.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
-                            dateStr
-                        } else {
-                            // Ако није у очекиваном формату, форматирај данашњи датум
-                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            dateFormat.format(Date())
-                        }
+                        // Poboljšana konverzija datuma
+                        val date = getDateFromDocument(doc)
                         
                         val income = Income(id, amount, description, category, date, accountId)
                         
-                        Log.d("IncomeRepository", "Учитан приход за рачун ID: ${income.id}, износ: ${income.amount}, датум: ${income.getFormattedDate()}")
-                        
+                        // Više ne logujemo svaki pojedinačni prihod
                         income
                     } catch (e: Exception) {
-                        Log.e("IncomeRepository", "Грешка при конверзији документа у Income", e)
+                        LogUtils.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e, category = "income")
                         null
                     }
                 } ?: emptyList()
                 
-                Log.d("IncomeRepository", "Учитано ${incomes.size} прихода за рачун - BUDGET FIX")
-                
-                // Детаљнији лог за дебагирање
+                // Log samo ukupan broj i statistike umesto pojedinačnih stavki
                 if (incomes.isNotEmpty()) {
-                    Log.d("IncomeRepository", "Учитани приходи за рачун: ${incomes.map { "${it.id} (${it.amount})" }}")
+                    val totalAmount = incomes.sumOf { it.amount }
+                    val avgAmount = if (incomes.isNotEmpty()) totalAmount / incomes.size else 0.0
+                    val minAmount = incomes.minOfOrNull { it.amount } ?: 0.0
+                    val maxAmount = incomes.maxOfOrNull { it.amount } ?: 0.0
+                    
+                    LogUtils.i("IncomeRepository", 
+                        "Učitano ${incomes.size} prihoda za račun $accountId. " +
+                        "Ukupno: $totalAmount, Prosek: $avgAmount, Min: $minAmount, Max: $maxAmount", 
+                        category = "income")
+                    
+                    // Samo u VERBOSE modu prikazati distribuciju vrednosti (opciono)
+                    if (LogUtils.Config.DETAIL_LEVEL == LogUtils.DetailLevel.VERBOSE) {
+                        // Grupisati po kategorijama za bolji pregled
+                        val categoryDistribution = incomes.groupBy { it.category }
+                            .mapValues { entry -> entry.value.sumOf { it.amount } }
+                        
+                        LogUtils.d("IncomeRepository", "Distribucija prihoda po kategorijama za račun $accountId: $categoryDistribution", 
+                            category = "income")
+                        
+                        // Grupisati po opsegu vrednosti
+                        val valueDistribution = incomes.groupBy { income ->
+                            when {
+                                income.amount < 1000 -> "< 1,000"
+                                income.amount < 5000 -> "1,000 - 5,000"
+                                income.amount < 10000 -> "5,000 - 10,000"
+                                else -> "> 10,000"
+                            }
+                        }.mapValues { it.value.size }
+                        
+                        LogUtils.d("IncomeRepository", "Distribucija prihoda po iznosima za račun $accountId: $valueDistribution", 
+                            category = "income")
+                    }
                 } else {
-                    Log.d("IncomeRepository", "Нема учитаних прихода за рачун $accountId.")
+                    LogUtils.i("IncomeRepository", "Nema učitanih prihoda za račun $accountId.", category = "income")
                 }
                 
                 trySend(incomes)
             }
         
         awaitClose { 
-            Log.d("IncomeRepository", "Затварам listener за приходе за рачун")
+            LogUtils.d("IncomeRepository", "Zatvaram listener za prihode za račun", category = "income")
             listener.remove() 
         }
     }
@@ -387,7 +443,8 @@ class IncomeRepository private constructor() {
         val startDateStr = dateFormat.format(startDate)
         val endDateStr = dateFormat.format(endDate)
         
-        Log.d("IncomeRepository", "Učitavam prihode za račun: $accountId i period od $startDateStr do $endDateStr")
+        LogUtils.d("IncomeRepository", "Učitavam prihode za račun: $accountId i period od $startDateStr do $endDateStr", 
+            category = "income")
         
         try {
             // Filtriramo prihode za račun u datom vremenskom periodu
@@ -397,10 +454,35 @@ class IncomeRepository private constructor() {
                 income.date <= endDateStr
             }
             
-            Log.d("IncomeRepository", "Filtrirano ${incomes.size} prihoda za račun i period")
+            // Logujemo samo ukupan broj i statistike
+            if (incomes.isNotEmpty()) {
+                val totalAmount = incomes.sumOf { it.amount }
+                val avgAmount = if (incomes.isNotEmpty()) totalAmount / incomes.size else 0.0
+                
+                LogUtils.d("IncomeRepository", 
+                    "Filtrirano ${incomes.size} prihoda za račun $accountId i period. " +
+                    "Ukupno: $totalAmount, Prosek: $avgAmount", 
+                    category = "income")
+                
+                // Samo u VERBOSE modu prikazati distribuciju po datumima
+                if (LogUtils.Config.DETAIL_LEVEL == LogUtils.DetailLevel.VERBOSE) {
+                    // Grupisati po mesecima za bolji pregled
+                    val monthDistribution = incomes.groupBy { 
+                        val parts = it.date.split("-")
+                        if (parts.size >= 2) "${parts[0]}-${parts[1]}" else it.date 
+                    }.mapValues { it.value.sumOf { income -> income.amount } }
+                    
+                    LogUtils.d("IncomeRepository", "Mesečna distribucija prihoda za period: $monthDistribution", 
+                        category = "income")
+                }
+            } else {
+                LogUtils.d("IncomeRepository", "Nema prihoda za račun $accountId u periodu od $startDateStr do $endDateStr", 
+                    category = "income")
+            }
+            
             return incomes
         } catch (e: Exception) {
-            Log.e("IncomeRepository", "Greška pri filtriranju prihoda za račun i period", e)
+            LogUtils.e("IncomeRepository", "Greška pri filtriranju prihoda za račun i period", e, category = "income")
             return emptyList()
         }
     }
@@ -433,13 +515,59 @@ class IncomeRepository private constructor() {
         }
     }
     
+    /**
+     * Pomoćna funkcija za dobijanje datuma iz Firestore dokumenta
+     * koja podržava različite formate datuma (String, Timestamp, Date)
+     */
+    private fun getDateFromDocument(doc: DocumentSnapshot): String {
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        
+        try {
+            // IZMENA: Prvo pokušaj dobiti kao Timestamp (preferirani format)
+            val timestamp = doc.getTimestamp("date")
+            if (timestamp != null) {
+                return dateFormat.format(timestamp.toDate())
+            }
+            
+            // Zatim, bezbedno pokušaj dobiti kao Date
+            val date = doc.getDate("date")
+            if (date != null) {
+                return dateFormat.format(date)
+            }
+            
+            // Na kraju pokušaj dobiti kao String
+            try {
+                val dateStr = doc.getString("date")
+                if (dateStr != null && dateStr.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                    return dateStr
+                }
+            } catch (e: Exception) {
+                // Ignorišemo grešku za getString jer znamo da polje možda nije String
+                LogUtils.d("IncomeRepository", "Datum nije String: ${e.message}", category = "income")
+            }
+            
+            // Ako nije nijedan od podržanih tipova, vrati današnji datum
+            LogUtils.w("IncomeRepository", "Datum nije u prepoznatom formatu za dokument ID: ${doc.id}, koristim današnji datum", 
+                category = "income")
+            return dateFormat.format(Date())
+        } catch (e: Exception) {
+            LogUtils.e("IncomeRepository", "Greška pri konverziji datuma iz dokumenta ID: ${doc.id}", e, 
+                category = "income")
+            // U slučaju greške, vrati današnji datum
+            return dateFormat.format(Date())
+        }
+    }
+    
     companion object {
         @Volatile
         private var instance: IncomeRepository? = null
         
         fun getInstance(): IncomeRepository {
             return instance ?: synchronized(this) {
-                instance ?: IncomeRepository().also { instance = it }
+                val newInstance = IncomeRepository()
+                instance = newInstance
+                newInstance
             }
         }
         

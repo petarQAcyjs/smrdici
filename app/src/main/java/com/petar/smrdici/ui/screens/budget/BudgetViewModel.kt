@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @Suppress("UNUSED")
 class BudgetViewModel(
@@ -48,6 +50,18 @@ class BudgetViewModel(
     
     @Suppress("UNUSED")
     val selectedPeriod: StateFlow<Period> = _selectedPeriod.asStateFlow()
+    
+    // Nova promenljiva za offset perioda (koliko perioda unazad od današnjeg dana)
+    private val _periodOffset = MutableStateFlow(0) // 0 znači tekući period
+    
+    @Suppress("UNUSED")
+    val periodOffset: StateFlow<Int> = _periodOffset.asStateFlow()
+    
+    // Nova promenljiva za trenutno izabrani datum (za dnevni pregled)
+    private val _selectedDate = MutableStateFlow(Calendar.getInstance().time)
+    
+    @Suppress("UNUSED")
+    val selectedDate: StateFlow<Date> = _selectedDate.asStateFlow()
     
     // Expenses и Incomes - користе се у калкулацијама и ажурирању UI
     private val _expenses = MutableStateFlow<List<Expense>>(emptyList())
@@ -89,6 +103,15 @@ class BudgetViewModel(
     @Suppress("UNUSED")
     val budgetUsagePercent: StateFlow<Double> = _budgetUsagePercent.asStateFlow()
     
+    // Mutex za sinhronizaciju pristupa reloadTransactions metodi
+    private val reloadTransactionsMutex = Mutex()
+    
+    // Praćenje poslednjeg vremena poziva za debounce
+    private var lastReloadTransactionsCallTime = 0L
+    
+    // Minimalno vreme između uzastopnih poziva (debounce period u ms)
+    private val DEBOUNCE_PERIOD_MS = 1000L
+    
     init {
         // Додајемо log за početak inicijalizacije
         Log.d("BudgetViewModel", "===== INICIJALIZACIJA BUDGET VIEW MODELA =====")
@@ -126,9 +149,13 @@ class BudgetViewModel(
     @Suppress("UNUSED")
     fun updatePeriodIndex(index: Int) {
         if (_selectedPeriodIndex.value != index) {
+            // Resetujemo offset kada menjamo tip perioda
+            _periodOffset.value = 0
+            _selectedDate.value = Calendar.getInstance().time
+            
             _selectedPeriodIndex.value = index
             
-            // Ажурирамо и подешавања
+            // Ažuriramo i podešavanja
             val period = when (index) {
                 0 -> Period.DAILY
                 1 -> Period.WEEKLY
@@ -141,10 +168,10 @@ class BudgetViewModel(
             
             _selectedPeriod.value = period
             
-            // Ажурирамо подешавања
+            // Ažuriramo podešavanja
             viewModelScope.launch {
                 settingsViewModel.setPeriod(period)
-                // Поново учитај податке са новим периодом
+                // Poново учитај податке са новим периодом
                 loadTransactions()
             }
         }
@@ -160,35 +187,75 @@ class BudgetViewModel(
     @Suppress("UNUSED")
     fun reloadTransactions() {
         viewModelScope.launch {
+            // Provera debounce perioda - propuštamo poziv samo ako je prošlo dovoljno vremena
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastReloadTransactionsCallTime < DEBOUNCE_PERIOD_MS) {
+                Log.w("BudgetViewModel", "Debounce: Ignorišem poziv reloadTransactions() jer je pozvan pre manje od ${DEBOUNCE_PERIOD_MS}ms")
+                return@launch
+            }
+            
+            // Dodatna provera da li je već u toku učitavanje
+            if (_isLoading.value) {
+                Log.w("BudgetViewModel", "Učitavanje transakcija je već u toku, preskačem novi poziv")
+                return@launch
+            }
+            
+            // Koristimo mutex za sinhronizaciju pristupa - samo jedan poziv može ući u kritičnu sekciju
+            if (!reloadTransactionsMutex.tryLock()) {
+                Log.w("BudgetViewModel", "Mutex zaključan: Drugi reloadTransactions() poziv je već u toku, preskačem")
+                return@launch
+            }
+            
             try {
+                lastReloadTransactionsCallTime = currentTime
                 Log.d("BudgetViewModel", "===== POČETAK OSVEŽAVANJA TRANSAKCIJA - JAVNA METODA =====")
                 _isLoading.value = true
                 
-                // Pauziramo pre učitavanja da bismo bili sigurni da je UI spreman
-                kotlinx.coroutines.delay(100)
+                // Definišemo timeout za operaciju (10 sekundi)
+                val timeoutMs = 10000L
+                val startTime = System.currentTimeMillis()
                 
-                // Parelalno pokrećemo učitavanje transakcija
-                loadTransactions()
-                
-                // Učitavamo budžetski limit
-                loadBudgetLimit()
-                
-                // Učitavamo račune
-                loadAccounts()
-                
-                // Kratka pauza da osiguramo da su svi async pozivi imali vremena da završe
-                kotlinx.coroutines.delay(300)
-                
-                // Eksplicitno ažuriramo UI stanje na kraju
-                updateUiState()
-                
-                Log.d("BudgetViewModel", "Osvežavanje transakcija završeno!")
-                Log.d("BudgetViewModel", "STANJE NAKON OSVEŽAVANJA: expenses=${_expenses.value.size}, incomes=${_incomes.value.size}")
-                Log.d("BudgetViewModel", "STANJE UISTATE NAKON OSVEŽAVANJA: expenses=${_uiState.value.expenses.size}, incomes=${_uiState.value.incomes.size}")
-            } catch (e: Exception) {
-                Log.e("BudgetViewModel", "Greška pri osvežavanju transakcija", e)
+                try {
+                    // Koristimo withTimeout da izbegnemo zaglavljivanje operacije
+                    kotlinx.coroutines.withTimeout(timeoutMs) {
+                        // Pauziramo pre učitavanja da bismo bili sigurni da je UI spreman
+                        kotlinx.coroutines.delay(100)
+                        
+                        // Parelalno pokrećemo učitavanje transakcija
+                        loadTransactions()
+                        
+                        // Učitavamo budžetski limit
+                        loadBudgetLimit()
+                        
+                        // Učitavamo račune
+                        loadAccounts()
+                        
+                        // Kratka pauza da osiguramo da su svi async pozivi imali vremena da završe
+                        kotlinx.coroutines.delay(300)
+                        
+                        // Eksplicitno ažuriramo UI stanje na kraju
+                        updateUiState()
+                        
+                        Log.d("BudgetViewModel", "Osvežavanje transakcija završeno!")
+                        Log.d("BudgetViewModel", "STANJE NAKON OSVEŽAVANJA: expenses=${_expenses.value.size}, incomes=${_incomes.value.size}")
+                        Log.d("BudgetViewModel", "STANJE UISTATE NAKON OSVEŽAVANJA: expenses=${_uiState.value.expenses.size}, incomes=${_uiState.value.incomes.size}")
+                    }
+                } catch (e: Exception) {
+                    val elapsedMs = System.currentTimeMillis() - startTime
+                    if (e is kotlinx.coroutines.TimeoutCancellationException) {
+                        Log.e("BudgetViewModel", "TIMEOUT: Osvežavanje transakcija prekoračilo vremensko ograničenje (${elapsedMs}ms > ${timeoutMs}ms)", e)
+                        _uiState.value = _uiState.value.copy(error = "Osvežavanje transakcija je predugo trajalo i automatski je prekinuto.")
+                    } else {
+                        Log.e("BudgetViewModel", "GREŠKA: Osvežavanje transakcija nije uspelo (${elapsedMs}ms)", e)
+                        _uiState.value = _uiState.value.copy(error = "Greška prilikom osvežavanja transakcija: ${e.message}")
+                    }
+                } finally {
+                    _isLoading.value = false
+                    Log.d("BudgetViewModel", "===== ZAVRŠENO OSVEŽAVANJE TRANSAKCIJA =====")
+                }
             } finally {
-                _isLoading.value = false
+                // Uvek otključavamo mutex, čak i ako je došlo do greške
+                reloadTransactionsMutex.unlock()
             }
         }
     }
@@ -355,86 +422,6 @@ class BudgetViewModel(
             // Након учитавања расхода, ажурирамо проценат искоришћености буџета
             calculateBudgetUsage()
         }
-    }
-    
-    // Funkcija za dobijanje date-a u odabranom periodu
-    private fun calculatePeriodDates(period: Period): Pair<Date, Date> {
-        val calendar = Calendar.getInstance()
-        val endDate = calendar.time
-        
-        calendar.apply {
-            when (period) {
-                Period.DAILY -> {
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                }
-                Period.WEEKLY -> {
-                    set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                }
-                Period.MONTHLY -> {
-                    set(Calendar.DAY_OF_MONTH, 1)
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                }
-                Period.YEARLY -> {
-                    set(Calendar.DAY_OF_YEAR, 1)
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                }
-                Period.CUSTOM -> {
-                    // Dobavljamo prilagođeni dan početka perioda
-                    val customStartDay = settingsViewModel.customPeriodStartDay.value
-                    val currentDay = get(Calendar.DAY_OF_MONTH)
-                    
-                    // Postavljamo vreme na početak dana
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                    
-                    if (currentDay >= customStartDay) {
-                        // Ako je trenutni dan veći ili jednak danu početka perioda,
-                        // period počinje istog meseca
-                        set(Calendar.DAY_OF_MONTH, customStartDay)
-                    } else {
-                        // Ako je trenutni dan manji od dana početka perioda,
-                        // period počinje prethodnog meseca
-                        add(Calendar.MONTH, -1)
-                        set(Calendar.DAY_OF_MONTH, customStartDay)
-                    }
-                }
-                Period.ALL -> {
-                    // Za "Sve" opciju ne menjamo početni datum, ali stavljamo jako rani datum
-                    // kao početak kako bismo uzeli sve transakcije
-                    set(Calendar.YEAR, 2000)
-                    set(Calendar.MONTH, Calendar.JANUARY)
-                    set(Calendar.DAY_OF_MONTH, 1)
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                }
-            }
-        }
-        
-        val startDate = calendar.time
-        
-        // Za Period.CUSTOM moramo posebno izračunati krajnji datum
-        if (period == Period.CUSTOM) {
-            calendar.time = startDate
-            calendar.add(Calendar.MONTH, 1)
-            calendar.add(Calendar.DAY_OF_MONTH, -1)
-            calendar.set(Calendar.HOUR_OF_DAY, 23)
-            calendar.set(Calendar.MINUTE, 59)
-            calendar.set(Calendar.SECOND, 59)
-            return Pair(startDate, calendar.time)
-        }
-        
-        return Pair(startDate, endDate)
     }
     
     private fun loadIncomes() {
@@ -977,16 +964,55 @@ class BudgetViewModel(
         }
     }
     
-    // Јавна метода за добијање формата периода као текста
+    /**
+     * Vraća prikazni tekst za trenutni period, uključujući offset 
+     * (npr. "danas", "prošle nedelje", "januar 2024" itd.)
+     */
     @Suppress("UNUSED")
     fun getPeriodDisplayText(): String {
+        val offset = _periodOffset.value
+        val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+        val monthYearFormat = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale("sr"))
+        val yearFormat = java.text.SimpleDateFormat("yyyy", java.util.Locale.getDefault())
+        val shortDayMonthFormat = java.text.SimpleDateFormat("dd MMM", java.util.Locale("sr"))
+        
+        // Izračunavamo raspon datuma za trenutni period sa offsetom
+        val (startDate, endDate) = calculatePeriodDates(_selectedPeriod.value)
+        
         return when (_selectedPeriod.value) {
-            Period.DAILY -> "данас"
-            Period.WEEKLY -> "ове недеље"
-            Period.MONTHLY -> "овог месеца"
-            Period.YEARLY -> "ове године"
-            Period.CUSTOM -> "у овом периоду"
-            Period.ALL -> "укупно"
+            Period.DAILY -> {
+                when (offset) {
+                    0 -> "danas"
+                    1 -> "juče"
+                    else -> dateFormat.format(startDate)
+                }
+            }
+            Period.WEEKLY -> {
+                when (offset) {
+                    0 -> "ove nedelje"
+                    1 -> "prošle nedelje"
+                    else -> {
+                        // Format poput "12-19 Nov" za nedeljni raspon
+                        "${shortDayMonthFormat.format(startDate)} - ${shortDayMonthFormat.format(endDate)}"
+                    }
+                }
+            }
+            Period.MONTHLY -> {
+                when (offset) {
+                    0 -> "ovog meseca"
+                    1 -> "prošlog meseca"
+                    else -> monthYearFormat.format(startDate)
+                }
+            }
+            Period.YEARLY -> {
+                when (offset) {
+                    0 -> "ove godine"
+                    1 -> "prošle godine"
+                    else -> yearFormat.format(startDate)
+                }
+            }
+            Period.CUSTOM -> "u ovom periodu"
+            Period.ALL -> "ukupno"
         }
     }
     
@@ -1024,5 +1050,239 @@ class BudgetViewModel(
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
+    }
+    
+    /**
+     * Pomera period unazad (na prethodni dan, nedelju, mesec ili godinu)
+     */
+    @Suppress("UNUSED")
+    fun movePeriodBackward() {
+        _periodOffset.value = _periodOffset.value + 1
+        
+        // Ažuriramo selectedDate za dnevni pregled
+        if (_selectedPeriod.value == Period.DAILY) {
+            val calendar = Calendar.getInstance()
+            calendar.time = _selectedDate.value
+            calendar.add(Calendar.DAY_OF_YEAR, -1)
+            _selectedDate.value = calendar.time
+        }
+        
+        // Učitavamo transakcije za novi period
+        loadTransactions()
+    }
+    
+    /**
+     * Pomera period unapred (na sledeći dan, nedelju, mesec ili godinu)
+     * ali nikad preko trenutnog perioda
+     */
+    @Suppress("UNUSED")
+    fun movePeriodForward() {
+        if (_periodOffset.value > 0) {
+            _periodOffset.value = _periodOffset.value - 1
+            
+            // Ažuriramo selectedDate za dnevni pregled
+            if (_selectedPeriod.value == Period.DAILY) {
+                val calendar = Calendar.getInstance()
+                calendar.time = _selectedDate.value
+                calendar.add(Calendar.DAY_OF_YEAR, 1)
+                _selectedDate.value = calendar.time
+            }
+            
+            // Učitavamo transakcije za novi period
+            loadTransactions()
+        }
+    }
+    
+    /**
+     * Postavlja proizvoljan datum za dnevni pregled
+     */
+    @Suppress("UNUSED")
+    fun setSelectedDate(date: Date) {
+        // Računamo offset na osnovu datuma
+        val calendar = Calendar.getInstance()
+        val today = calendar.time
+        
+        val selectedCalendar = Calendar.getInstance()
+        selectedCalendar.time = date
+        
+        // Postavljamo vreme na ponoć
+        selectedCalendar.set(Calendar.HOUR_OF_DAY, 0)
+        selectedCalendar.set(Calendar.MINUTE, 0)
+        selectedCalendar.set(Calendar.SECOND, 0)
+        selectedCalendar.set(Calendar.MILLISECOND, 0)
+        
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        
+        // Računamo razliku u danima
+        val diffInMillis = calendar.timeInMillis - selectedCalendar.timeInMillis
+        val diffInDays = (diffInMillis / (1000 * 60 * 60 * 24)).toInt()
+        
+        _selectedDate.value = selectedCalendar.time
+        _periodOffset.value = diffInDays
+        
+        // Ako još nismo u dnevnom režimu, postavljamo ga
+        if (_selectedPeriod.value != Period.DAILY) {
+            _selectedPeriod.value = Period.DAILY
+            _selectedPeriodIndex.value = 0
+            
+            // Ažuriramo i podešavanja
+            viewModelScope.launch {
+                settingsViewModel.setPeriod(Period.DAILY)
+            }
+        }
+        
+        // Učitavamo transakcije za novi period
+        loadTransactions()
+    }
+    
+    /**
+     * Vraća se na trenutni period (današnji dan, tekuću nedelju, mesec, godinu)
+     */
+    @Suppress("UNUSED")
+    fun resetToCurrentPeriod() {
+        _periodOffset.value = 0
+        _selectedDate.value = Calendar.getInstance().time
+        
+        // Učitavamo transakcije za novi period
+        loadTransactions()
+    }
+    
+    // Funkcija za dobijanje date-a u odabranom periodu
+    private fun calculatePeriodDates(period: Period): Pair<Date, Date> {
+        val calendar = Calendar.getInstance()
+        
+        // Primenjujemo offset na kalendar pre računanja datuma
+        when (period) {
+            Period.DAILY -> calendar.add(Calendar.DAY_OF_YEAR, -_periodOffset.value)
+            Period.WEEKLY -> calendar.add(Calendar.WEEK_OF_YEAR, -_periodOffset.value)
+            Period.MONTHLY -> calendar.add(Calendar.MONTH, -_periodOffset.value)
+            Period.YEARLY -> calendar.add(Calendar.YEAR, -_periodOffset.value)
+            else -> {} // Za CUSTOM i ALL ne primenjujemo offset
+        }
+        
+        // Ako je period DAILY i imamo odabrani datum, koristimo taj datum
+        if (period == Period.DAILY && _periodOffset.value > 0) {
+            calendar.time = _selectedDate.value
+        }
+        
+        val endDate = calendar.time
+        
+        calendar.apply {
+            when (period) {
+                Period.DAILY -> {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                Period.WEEKLY -> {
+                    set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                Period.MONTHLY -> {
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                Period.YEARLY -> {
+                    set(Calendar.DAY_OF_YEAR, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                Period.CUSTOM -> {
+                    // Dobavljamo prilagođeni dan početka perioda
+                    val customStartDay = settingsViewModel.customPeriodStartDay.value
+                    val currentDay = get(Calendar.DAY_OF_MONTH)
+                    
+                    // Postavljamo vreme na početak dana
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    
+                    if (currentDay >= customStartDay) {
+                        // Ako je trenutni dan veći ili jednak danu početka perioda,
+                        // period počinje istog meseca
+                        set(Calendar.DAY_OF_MONTH, customStartDay)
+                    } else {
+                        // Ako je trenutni dan manji od dana početka perioda,
+                        // period počinje prethodnog meseca
+                        add(Calendar.MONTH, -1)
+                        set(Calendar.DAY_OF_MONTH, customStartDay)
+                    }
+                }
+                Period.ALL -> {
+                    // Za "Sve" opciju ne menjamo početni datum, ali stavljamo jako rani datum
+                    // kao početak kako bismo uzeli sve transakcije
+                    set(Calendar.YEAR, 2000)
+                    set(Calendar.MONTH, Calendar.JANUARY)
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+            }
+        }
+        
+        val startDate = calendar.time
+        
+        // Za Period.DAILY postavljamo endDate na kraj dana
+        if (period == Period.DAILY) {
+            calendar.time = startDate
+            calendar.set(Calendar.HOUR_OF_DAY, 23)
+            calendar.set(Calendar.MINUTE, 59)
+            calendar.set(Calendar.SECOND, 59)
+            return Pair(startDate, calendar.time)
+        }
+        
+        // Za Period.WEEKLY postavljamo endDate na kraj nedelje
+        if (period == Period.WEEKLY) {
+            calendar.time = startDate
+            calendar.add(Calendar.DAY_OF_WEEK, 6) // Dodaj 6 dana da dobiješ kraj nedelje
+            calendar.set(Calendar.HOUR_OF_DAY, 23)
+            calendar.set(Calendar.MINUTE, 59)
+            calendar.set(Calendar.SECOND, 59)
+            return Pair(startDate, calendar.time)
+        }
+        
+        // Za Period.MONTHLY postavljamo endDate na kraj meseca
+        if (period == Period.MONTHLY) {
+            calendar.time = startDate
+            calendar.add(Calendar.MONTH, 1)
+            calendar.add(Calendar.DAY_OF_MONTH, -1)
+            calendar.set(Calendar.HOUR_OF_DAY, 23)
+            calendar.set(Calendar.MINUTE, 59)
+            calendar.set(Calendar.SECOND, 59)
+            return Pair(startDate, calendar.time)
+        }
+        
+        // Za Period.YEARLY postavljamo endDate na kraj godine
+        if (period == Period.YEARLY) {
+            calendar.time = startDate
+            calendar.add(Calendar.YEAR, 1)
+            calendar.add(Calendar.DAY_OF_YEAR, -1)
+            calendar.set(Calendar.HOUR_OF_DAY, 23)
+            calendar.set(Calendar.MINUTE, 59)
+            calendar.set(Calendar.SECOND, 59)
+            return Pair(startDate, calendar.time)
+        }
+        
+        // Za Period.CUSTOM moramo posebno izračunati krajnji datum
+        if (period == Period.CUSTOM) {
+            calendar.time = startDate
+            calendar.add(Calendar.MONTH, 1)
+            calendar.add(Calendar.DAY_OF_MONTH, -1)
+            calendar.set(Calendar.HOUR_OF_DAY, 23)
+            calendar.set(Calendar.MINUTE, 59)
+            calendar.set(Calendar.SECOND, 59)
+            return Pair(startDate, calendar.time)
+        }
+        
+        return Pair(startDate, endDate)
     }
 } 

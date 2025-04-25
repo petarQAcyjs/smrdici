@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,10 +21,13 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseUser
+import com.petar.smrdici.ui.navigation.Screen
 
 /**
  * Komponenta za zaglavlje aplikacije.
@@ -55,7 +60,8 @@ fun AppHeader(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    color = Color.White
                 )
             }
         },
@@ -63,15 +69,17 @@ fun AppHeader(
             if (showBackButton) {
                 IconButton(onClick = { navController.navigateUp() }) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Nazad"
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Назад",
+                        tint = Color.White
                     )
                 }
             } else if (showMenu) {
                 IconButton(onClick = onMenuClick) {
                     Icon(
                         imageVector = Icons.Default.Menu,
-                        contentDescription = "Meni"
+                        contentDescription = "Мени",
+                        tint = Color.White
                     )
                 }
             } else {
@@ -79,12 +87,24 @@ fun AppHeader(
             }
         },
         actions = {
-            // Ovde možemo dodati akcije za desnu stranu (npr. profil, podešavanja)
-            Spacer(modifier = Modifier.width(48.dp))
+            // Profil ikonica
+            IconButton(
+                onClick = { 
+                    if (user != null) {
+                        navController.navigate(Screen.Profile.route)
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = "Профил",
+                    tint = Color.White
+                )
+            }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            containerColor = Color.Black,
+            titleContentColor = Color.White
         )
     )
 } 
