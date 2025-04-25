@@ -14,11 +14,20 @@ android {
         minSdk = 24
         //noinspection OldTargetApi Vaša aplikacija trenutno koristi targetSdk = 35, što je već Android 15, ali je to dovoljno novo i ne bih to menjao u ovom trenutku, jer vidim da je vaš compileSdk takođe postavljen na 35.
         //Međutim, postoji mogućnost da vas IDE upozorava jer je već u najavi Android 16. Ako želite da koristite najnoviju verziju, uradiću potrebne izmene, ali je za sada aplikacija usklađena sa najnovijim zahtevima za Google Play. Upozorenje možemo ignorisati ili ažurirati na Android 16 kada bude zvanično objavljen.
+        //noinspection OldTargetApi
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Искључујемо учитавање native библиотеке libpenguin.so
+        ndk {
+            abiFilters.add("armeabi-v7a")
+            abiFilters.add("arm64-v8a")
+            abiFilters.add("x86")
+            abiFilters.add("x86_64")
+        }
     }
 
     buildTypes {
@@ -48,6 +57,18 @@ android {
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.6"
+    }
+    
+    // Додајемо конфигурацију за спречавање покушаја учитавања непостојећих .dm фајлова
+    packaging {
+        resources {
+            excludes.add("META-INF/LICENSE")
+            excludes.add("META-INF/LICENSE.txt")
+            excludes.add("META-INF/NOTICE")
+            excludes.add("META-INF/NOTICE.txt")
+            excludes.add("META-INF/*.kotlin_module")
+            excludes.add("**/*.dm")
+        }
     }
 }
 
@@ -94,4 +115,14 @@ dependencies {
 
     // Додајемо или ажурирамо зависност за Material3
     implementation(libs.androidx.material3.library)
+    
+    // Gson за JSON сeријализацију
+    implementation(libs.gson)
+    
+    // Додатне зависности за решавање проблема са Google API
+    implementation(libs.play.services.auth)
+    implementation(libs.play.services.base)
+    
+    // Coroutines sync - za Mutex implementaciju
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 }

@@ -4,7 +4,7 @@ import androidx.annotation.Keep
 
 @Keep
 data class Account(
-    @field:JvmField val id: String = "",
+    @field:JvmField var id: String = "",
     @field:JvmField val name: String = "",
     @field:JvmField val balance: Double = 0.0,
     @field:JvmField val currency: String = "RSD",

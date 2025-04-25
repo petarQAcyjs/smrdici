@@ -3,6 +3,7 @@ package com.petar.smrdici.ui.auth
 
 import android.content.Context
 import android.content.IntentSender
+import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -24,38 +25,51 @@ class AuthViewModel : ViewModel() {
 
     private lateinit var oneTapClient: SignInClient
     private lateinit var signInRequest: BeginSignInRequest
+    
+    private val tag = "AuthViewModel"
 
     init {
         checkCurrentUser()
     }
 
     fun initGoogleSignIn(context: Context) {
-        oneTapClient = Identity.getSignInClient(context)
-        
-        // Конфигурација захтева за пријаву
-        signInRequest = BeginSignInRequest.builder()
-            .setGoogleIdTokenRequestOptions(
-                BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
-                    .setSupported(true)
-                    .setServerClientId("683999597671-0l004ln7l16meoo26ogk4mvcojndnsk7.apps.googleusercontent.com") // OAuth Client ID
-                    .setFilterByAuthorizedAccounts(false)
-                    .build()
-            )
-            .build()
+        try {
+            oneTapClient = Identity.getSignInClient(context)
+            
+            // Конфигурација захтева за пријаву
+            signInRequest = BeginSignInRequest.builder()
+                .setGoogleIdTokenRequestOptions(
+                    BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
+                        .setSupported(true)
+                        .setServerClientId("683999597671-0l004ln7l16meoo26ogk4mvcojndnsk7.apps.googleusercontent.com") // OAuth Client ID
+                        .setFilterByAuthorizedAccounts(false)
+                        .build()
+                )
+                .build()
+                
+            Log.d(tag, "Google Sign-In успешно иницијализован")
+        } catch (e: Exception) {
+            Log.e(tag, "Грешка при иницијализацији Google Sign-In", e)
+        }
     }
 
-    fun beginSignIn(onSuccess: (IntentSender) -> Unit, onFailure: (Exception) -> Unit) {
-        viewModelScope.launch {
-            try {
-                _authState.value = AuthState.Loading
-                
-                // Користимо нови метод за започињање пријаве
-                val result = oneTapClient.beginSignIn(signInRequest).await()
-                onSuccess(result.pendingIntent.intentSender)
-            } catch (e: Exception) {
-                onFailure(e)
-                _authState.value = AuthState.Error(e.message ?: "Грешка приликом покретања пријаве")
+    fun beginGoogleSignIn(onSuccess: (IntentSender) -> Unit, onError: (String) -> Unit) {
+        try {
+            _authState.value = AuthState.Loading
+            viewModelScope.launch {
+                try {
+                    val result = oneTapClient.beginSignIn(signInRequest).await()
+                    onSuccess(result.pendingIntent.intentSender)
+                } catch (e: Exception) {
+                    Log.e(tag, "Грешка при Google пријављивању", e)
+                    _authState.value = AuthState.Error(e.message ?: "Грешка при Google пријави")
+                    onError(e.message ?: "Грешка при Google пријави")
+                }
             }
+        } catch (e: Exception) {
+            Log.e(tag, "Грешка при покретању Google Sign-In", e)
+            _authState.value = AuthState.Error(e.message ?: "Неочекивана грешка")
+            onError(e.message ?: "Неочекивана грешка")
         }
     }
 
@@ -107,45 +121,45 @@ class AuthViewModel : ViewModel() {
     }
 
     fun signOut() {
-        android.util.Log.d("AuthViewModel", "Почетак одјављивања...")
+        Log.d(tag, "Почетак одјављивања...")
 
         // Прво постављамо стање на NotAuthenticated да обезбедимо да UI реагује
         _authState.value = AuthState.NotAuthenticated
-        android.util.Log.d("AuthViewModel", "Стање промењено на NotAuthenticated одмах")
+        Log.d(tag, "Стање промењено на NotAuthenticated одмах")
         
         // Одјављујемо се из Firebase
         try {
             auth.signOut()
-            android.util.Log.d("AuthViewModel", "Firebase одјава успешна")
+            Log.d(tag, "Firebase одјава успешна")
         } catch (e: Exception) {
-            android.util.Log.e("AuthViewModel", "Грешка приликом одјаве из Firebase: ${e.message}", e)
+            Log.e(tag, "Грешка приликом одјаве из Firebase: ${e.message}", e)
         }
         
         // Одјављујемо се из OneTap-а
         try {
             if (::oneTapClient.isInitialized) {
-                android.util.Log.d("AuthViewModel", "OneTapClient иницијализован, одјављујем се")
+                Log.d(tag, "OneTapClient иницијализован, одјављујем се")
                 oneTapClient.signOut()
-                android.util.Log.d("AuthViewModel", "OneTapClient одјава успешна")
+                Log.d(tag, "OneTapClient одјава успешна")
             } else {
-                android.util.Log.d("AuthViewModel", "OneTapClient није иницијализован")
+                Log.d(tag, "OneTapClient није иницијализован")
             }
         } catch (e: Exception) {
-            android.util.Log.e("AuthViewModel", "Грешка приликом Google одјаве: ${e.message}", e)
+            Log.e(tag, "Грешка приликом Google одјаве: ${e.message}", e)
         }
     }
 
     private fun checkCurrentUser() {
-        android.util.Log.d("AuthViewModel", "Проверавам тренутног корисника...")
+        Log.d(tag, "Проверавам тренутног корисника...")
         val currentUser = auth.currentUser
         if (currentUser != null) {
-            android.util.Log.d("AuthViewModel", "Корисник је пријављен: ${currentUser.email}")
+            Log.d(tag, "Корисник је пријављен: ${currentUser.email}")
             _authState.value = AuthState.Authenticated(currentUser)
         } else {
-            android.util.Log.d("AuthViewModel", "Није пронађен пријављени корисник")
+            Log.d(tag, "Није пронађен пријављени корисник")
             _authState.value = AuthState.NotAuthenticated
         }
-        android.util.Log.d("AuthViewModel", "Стање постављено на: ${_authState.value}")
+        Log.d(tag, "Стање постављено на: ${_authState.value}")
     }
 }
 

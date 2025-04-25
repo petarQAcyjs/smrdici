@@ -206,7 +206,7 @@ fun LoginScreen(
             // Google Sign-In дугме
             GoogleSignInButton(
                 onClick = {
-                    authViewModel.beginSignIn(
+                    authViewModel.beginGoogleSignIn(
                         onSuccess = { intentSender ->
                             try {
                                 googleSignInLauncher.launch(
@@ -216,8 +216,8 @@ fun LoginScreen(
                                 Log.e("LoginScreen", "Грешка при покретању IntentSender-а: ${e.message}")
                             }
                         },
-                        onFailure = { e ->
-                            Log.e("LoginScreen", "Грешка при пријави: ${e.message}")
+                        onError = { errorMsg ->
+                            Log.e("LoginScreen", "Грешка при пријави: $errorMsg")
                         }
                     )
                 },

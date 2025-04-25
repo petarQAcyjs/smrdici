@@ -1,3 +1,5 @@
+package com.petar.smrdici.data.model
+
 enum class ExpenseCategory {
     GROCERIES,
     UTILITIES,

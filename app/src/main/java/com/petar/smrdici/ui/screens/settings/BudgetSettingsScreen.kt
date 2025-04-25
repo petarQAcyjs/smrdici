@@ -1,5 +1,8 @@
 package com.petar.smrdici.ui.screens.settings
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -62,6 +66,7 @@ import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,7 +75,8 @@ fun BudgetSettingsScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
     budgetSettingsViewModel: BudgetSettingsViewModel = viewModel(factory = BudgetSettingsViewModel.Factory(LocalContext.current)),
-    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory())
+    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory()),
+    dataExportImportViewModel: DataExportImportViewModel = viewModel(factory = DataExportImportViewModel.Factory(LocalContext.current))
 ) {
     // Спречавамо непотребно учитавање EventRepository-а
     DisposableEffect(Unit) {
@@ -87,6 +93,74 @@ fun BudgetSettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     
+    // Пратимо стање процеса извоза/увоза
+    val exportSuccess by dataExportImportViewModel.exportSuccess.collectAsState()
+    val importSuccess by dataExportImportViewModel.importSuccess.collectAsState()
+    
+    var showImportConfirmDialog by remember { mutableStateOf(false) }
+    var selectedImportUri by remember { mutableStateOf<Uri?>(null) }
+    
+    // Додатна стања за напредни увоз
+    val importPreview by dataExportImportViewModel.importPreview.collectAsState()
+    val importProgress by dataExportImportViewModel.importProgress.collectAsState()
+    val importProgressText by dataExportImportViewModel.importProgressText.collectAsState()
+    val isImporting by dataExportImportViewModel.isImporting.collectAsState()
+    val selectedImportMode by dataExportImportViewModel.importMode.collectAsState()
+    
+    // Стање за приказ напредног дијалога
+    var showAdvancedImportDialog by remember { mutableStateOf(false) }
+    
+    // Launcher за бирање локације за чување извезених података
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri?.let {
+            dataExportImportViewModel.exportData(it)
+        }
+    }
+    
+    // Launcher за бирање локације за увоз података
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            // Уместо приказивања потврдног дијалога, учитавамо фајл за преглед
+            dataExportImportViewModel.loadImportFile(it)
+        }
+    }
+    
+    // Observer зa успешан извоз
+    LaunchedEffect(exportSuccess) {
+        exportSuccess?.let { success ->
+            if (success) {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Подаци су успешно извезени")
+                }
+            } else {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Грешка при извозу података")
+                }
+            }
+            dataExportImportViewModel.resetExportStatus()
+        }
+    }
+    
+    // Observer зa успешан увоз
+    LaunchedEffect(importSuccess) {
+        importSuccess?.let { success ->
+            if (success) {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Подаци су успешно увезени")
+                }
+            } else {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Грешка при увозу података")
+                }
+            }
+            dataExportImportViewModel.resetImportStatus()
+        }
+    }
+    
     // Функција за приказивање снекбара
     fun showSnackbar(message: String) {
         coroutineScope.launch {
@@ -98,7 +172,6 @@ fun BudgetSettingsScreen(
     var showCurrencyDialog by remember { mutableStateOf(false) }
     var showPeriodDialog by remember { mutableStateOf(false) }
     var showCustomPeriodDialog by remember { mutableStateOf(false) }
-    var showAddAccountDialog by remember { mutableStateOf(false) }
     
     // Добијамо вредности из ViewModel-а
     val currency by budgetSettingsViewModel.currency.collectAsState()
@@ -106,27 +179,9 @@ fun BudgetSettingsScreen(
     val customPeriodStartDay by budgetSettingsViewModel.customPeriodStartDay.collectAsState()
     val accounts by accountViewModel.accounts.collectAsState()
     
-    // Мапирамо Period енумерацију на стрингове за приказ
-    val periodStrings = mapOf(
-        Period.DAILY to "Дневно",
-        Period.WEEKLY to "Недељно",
-        Period.MONTHLY to "Месечно",
-        Period.YEARLY to "Годишње",
-        Period.CUSTOM to "Прилагођено",
-        Period.ALL to "Све"
-    )
-    
-    // Мапирамо Currency енумерацију на стрингове за приказ
-    val currencyStrings = mapOf(
-        Currency.RSD to "Динар (RSD)",
-        Currency.EUR to "Евро (EUR)",
-        Currency.USD to "Долар (USD)"
-    )
-    
     // Стање за падајуће меније
     var currencyExpanded by remember { mutableStateOf(false) }
     var periodExpanded by remember { mutableStateOf(false) }
-    var customPeriodExpanded by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
         accountViewModel.refreshAccounts()
@@ -293,6 +348,14 @@ fun BudgetSettingsScreen(
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            Text(
+                                text = "Приказ трансакција биће од изабраног дана једног месеца до дан пре тог датума следећег месеца. На пример, ако изаберете 15, период ће бити од 15. у месецу до 14. следећег месеца.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            
                             Spacer(modifier = Modifier.height(16.dp))
                             
                             Row(
@@ -371,9 +434,9 @@ fun BudgetSettingsScreen(
                             Spacer(modifier = Modifier.height(16.dp))
                             
                             Text(
-                                text = "Трансакције ће бити груписане од ${customPeriodStartDay}. дана у месецу до ${customPeriodStartDay - 1}. дана следећег месеца.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "Тренутни период: од ${customPeriodStartDay}. дана овог месеца до ${customPeriodStartDay - 1}. дана следећег месеца.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -443,18 +506,39 @@ fun BudgetSettingsScreen(
                         }
                         
                         // Дугме за додавање новог рачуна
-                        TextButton(
-                            onClick = {
-                                showAddAccountDialog = true
-                            },
-                            modifier = Modifier.align(Alignment.End)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Додај рачун")
+                            // Дугме за трансфер новца
+                            TextButton(
+                                onClick = {
+                                    navController.navigate(Screen.Transfer.route)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.SwapHoriz,
+                                    contentDescription = null
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Трансфер новца")
+                            }
+                            
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            // Дугме за додавање рачуна
+                            TextButton(
+                                onClick = {
+                                    navController.navigate(Screen.AddAccount.route)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = null
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Додај рачун")
+                            }
                         }
                     }
                 }
@@ -463,32 +547,26 @@ fun BudgetSettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 CategoriesCard(
                     onIncomeClick = { 
-                        showSnackbar("Управљање категоријама прихода ће бити доступно ускоро") 
+                        navController.navigate("income_categories")
                     },
                     onExpenseClick = { 
-                        showSnackbar("Управљање категоријама расхода ће бити доступно ускоро") 
+                        navController.navigate("expense_categories")
                     }
                 )
 
-                // Додајемо картицу за извоз/увоз података
-                Spacer(modifier = Modifier.height(16.dp))
-                ExportImportCard(
-                    onExportClick = { 
-                        showSnackbar("Извоз трансакција ће бити доступан ускоро") 
-                    },
-                    onImportClick = { 
-                        showSnackbar("Увоз трансакција ће бити доступан ускоро") 
-                    }
-                )
-
-                // За тестирање, додајте дугме које ће директно навигирати на екран за уређивање рачуна
-                TextButton(
-                    onClick = {
-                        // Користите фиксни ID за тестирање
-                        navController.navigate("edit_account/test_id")
-                    }
-                ) {
-                    Text("Тест навигације")
+                // Карта за извоз и увоз података
+                Section(title = "Извоз и увоз података") {
+                    ExportImportCard(
+                        onExportClick = {
+                            // Покрећемо извоз података
+                            exportLauncher.launch(dataExportImportViewModel.getExportFilename())
+                        },
+                        onImportClick = {
+                            // Приказујемо напредни дијалог за увоз
+                            showAdvancedImportDialog = true
+                            dataExportImportViewModel.resetImportPreview()
+                        }
+                    )
                 }
             }
         }
@@ -691,21 +769,37 @@ fun BudgetSettingsScreen(
             }
         )
     }
-
-    // Додајте дијалог за додавање новог рачуна
-    if (showAddAccountDialog) {
-        AddAccountDialog(
-            onDismiss = { showAddAccountDialog = false },
-            onAddAccount = { account ->
-                accountViewModel.addAccount(account)
-                // Освежавамо листу рачуна
-                accountViewModel.refreshAccounts()
-                
-                showAddAccountDialog = false
-                showSnackbar("Рачун успешно додат")
+    
+    // Напредни дијалог за увоз података
+    ImportDialog(
+        isVisible = showAdvancedImportDialog,
+        importPreview = importPreview,
+        importProgress = importProgress,
+        importProgressText = importProgressText,
+        isImporting = isImporting,
+        selectedImportMode = selectedImportMode,
+        onDismiss = {
+            if (!isImporting) {
+                showAdvancedImportDialog = false
+                dataExportImportViewModel.resetImportPreview()
             }
-        )
-    }
+        },
+        onSelectFile = {
+            importLauncher.launch("application/json")
+        },
+        onImportModeChange = { mode ->
+            dataExportImportViewModel.setImportMode(mode)
+        },
+        onImport = {
+            dataExportImportViewModel.importData()
+        },
+        onCancel = {
+            if (!isImporting) {
+                showAdvancedImportDialog = false
+                dataExportImportViewModel.resetImportPreview()
+            }
+        }
+    )
 }
 
 @Composable
@@ -819,4 +913,32 @@ private fun AccountItem(
 // Додајте ову функцију за дебаговање
 private fun logAccountDetails(account: Account) {
     android.util.Log.d("BudgetSettings", "Account: ${account.name}, ID: ${account.id}, Default: ${account.isDefault}")
+}
+
+@Composable
+fun CurrencyDropdown(currencies: List<String>, selectedCurrency: String, onCurrencySelected: (String) -> Unit) {
+    // ... existing code ...
+}
+
+/**
+ * Komponenta koja prikazuje naslovljenu sekciju sa sadržajem
+ */
+@Composable
+fun Section(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        content()
+    }
 } 

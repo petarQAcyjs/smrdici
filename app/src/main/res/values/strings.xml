@@ -1,4 +1,10 @@
 <resources>
     <string name="app_name">Smrdici</string>
     <!-- Неискоришћени string ресурси су уклоњени -->
+    
+    <!-- Stringovi za BudgetBattery -->
+    <string name="left_to_spend">Preostalo za potrošnju</string>
+    <string name="budget_exceeded_by">Budžet prekoračen za</string>
+    
+    <!-- Stringovi za budžet -->
 </resources>

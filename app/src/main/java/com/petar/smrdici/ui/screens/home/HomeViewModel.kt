@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.repository.EventRepository
 import kotlinx.coroutines.delay
@@ -17,7 +18,9 @@ import java.util.Locale
 
 class HomeViewModel() : ViewModel() {
     // Лења иницијализација EventRepository
-    private val eventRepository by lazy { EventRepository.create() }
+    private val eventRepository by lazy { 
+        EventRepository(FirebaseFirestore.getInstance(), FirebaseAuth.getInstance()) 
+    }
     
     private val _todayEvents = MutableStateFlow<List<Event>>(emptyList())
     val todayEvents: StateFlow<List<Event>> = _todayEvents
@@ -27,21 +30,28 @@ class HomeViewModel() : ViewModel() {
     
     private val auth = FirebaseAuth.getInstance()
     
+    // Застава за спречавање вишеструких истовремених учитавања
+    private var isLoadingEvents = false
+    
     init {
         // Учитавамо догађаје само када је HomeViewModel активан
         loadTodayEvents()
         
-        // Периодично освежавање да би се ажурирали догађаји који су прошли
-        viewModelScope.launch {
-            while (true) {
-                delay(60000) // Освежавање сваког минута
-                refreshEvents()
-            }
-        }
+        // УКЛАЊАМО БЕСКОНАЧНУ ПЕТЉУ ЗА ОСВЕЖАВАЊЕ
+        // viewModelScope.launch {
+        //     while (true) {
+        //         delay(60000)
+        //         refreshEvents()
+        //     }
+        // }
     }
     
     private fun loadTodayEvents() {
+        // Спречавамо вишеструка паралелна учитавања
+        if (isLoadingEvents) return
+        
         viewModelScope.launch {
+            isLoadingEvents = true
             try {
                 Log.d("HomeViewModel", "\n=== УЧИТАВАЊЕ ДАНАШЊИХ ДОГАЂАЈА ===")
                 // Проверавамо да ли је корисник пријављен
@@ -70,14 +80,14 @@ class HomeViewModel() : ViewModel() {
                 
                 // Учитавамо све догађаје за данас
                 eventRepository.getEvents(startOfDay, endOfDay)
-                    .onSuccess { events ->
+                    .collect { events ->
                         Log.d("HomeViewModel", "Учитано ${events.size} догађаја")
                         
                         // Филтрирамо само будуће догађаје
                         val currentTime = Calendar.getInstance().time
-                        val activeEvents = events.filter { event ->
-                            val endTime = event.endTime?.toDate() ?: Date(Long.MAX_VALUE)
-                            endTime >= currentTime
+                        val activeEvents = events.filter { event: Event ->
+                            val eventEndTime = event.endTime?.toDate() ?: Date(Long.MAX_VALUE)
+                            eventEndTime >= currentTime
                         }
                         
                         Log.d("HomeViewModel", """
@@ -87,22 +97,15 @@ class HomeViewModel() : ViewModel() {
                             - Тренутно време: ${formatDate(currentTime)}
                         """.trimIndent())
                         
-                        activeEvents.forEach { event ->
-                            Log.d("HomeViewModel", """
-                                Активан догађај:
-                                - Наслов: ${event.title}
-                                - Почетак: ${formatDate(event.startTime?.toDate())}
-                                - Крај: ${formatDate(event.endTime?.toDate())}
-                            """.trimIndent())
+                        // Обавезно проверавамо да ли је листа заиста различита пре ажурирања
+                        if (_todayEvents.value != activeEvents) {
+                            _todayEvents.value = activeEvents
                         }
-                        
-                        _todayEvents.value = activeEvents
-                    }
-                    .onFailure { e ->
-                        Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
                     }
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
+            } finally {
+                isLoadingEvents = false
             }
         }
     }
@@ -113,21 +116,30 @@ class HomeViewModel() : ViewModel() {
         } ?: "null"
     }
     
-    // Функција за ручно освежавање
-    private fun refreshEvents() {
-        loadTodayEvents()
-    }
-    
     // Функција за синхронизацију догађаја
     fun syncEvents() {
+        if (isLoadingEvents) {
+            Log.d("HomeViewModel", "Синхронизација у току, нећу поново покренути")
+            return
+        }
+        
         viewModelScope.launch {
             try {
+                Log.d("HomeViewModel", "Почињем синхронизацију догађаја...")
                 _syncStatus.value = SyncStatus.Syncing
+                isLoadingEvents = true
                 
+                // Прво освежимо догађаје и поставимо стање синхронизације
+                loadTodayEvents()
+                
+                // Затим покушавамо синхронизацију
+                Log.d("HomeViewModel", "Покрећем синхронизацију са сервером...")
                 eventRepository.syncEvents()
                     .onSuccess {
+                        Log.d("HomeViewModel", "Синхронизација успешна!")
                         _syncStatus.value = SyncStatus.Success
-                        refreshEvents()
+                        // Поново учитавамо догађаје након успешне синхронизације
+                        loadTodayEvents()
                     }
                     .onFailure { e ->
                         Log.e("HomeViewModel", "Грешка при синхронизацији", e)
@@ -137,9 +149,11 @@ class HomeViewModel() : ViewModel() {
                 Log.e("HomeViewModel", "Грешка при синхронизацији", e)
                 _syncStatus.value = SyncStatus.Error(e.message ?: "Непозната грешка")
             } finally {
-                // Враћамо статус на Idle након 3 секунде
-                delay(3000)
+                isLoadingEvents = false
+                // Враћамо статус на Idle након кратког времена
+                delay(1000)
                 _syncStatus.value = SyncStatus.Idle
+                Log.d("HomeViewModel", "Синхронизација завршена!")
             }
         }
     }

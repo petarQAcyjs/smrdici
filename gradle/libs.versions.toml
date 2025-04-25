@@ -1,23 +1,26 @@
 [versions]
 agp = "8.2.2"
+gson = "2.10.1"
 kotlin = "2.0.0"
-coreKtx = "1.15.0"
+coreKtx = "1.12.0"
 junit = "4.13.2"
 junitVersion = "1.2.1"
 espressoCore = "3.6.1"
 lifecycleRuntimeKtx = "2.8.7"
 activityCompose = "1.10.1"
-composeBom = "2025.03.01"
+composeBom = "2025.04.00"
 material = "1.7.8"
 navigation = "2.8.9"
 playServicesAuth = "21.3.0"
 calendarCompose = "2.4.1"
 lottie = "6.3.0"
-material3 = "1.3.1"
+material3 = "1.3.2"
 firebaseBom = "33.12.0"
+playServicesBase = "18.6.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
@@ -45,6 +48,7 @@ calendar-compose = { group = "com.kizitonwose.calendar", name = "compose", versi
 lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottie" }
 androidx-material3-library = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+play-services-base = { module = "com.google.android.gms:play-services-base", version.ref = "playServicesBase" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
