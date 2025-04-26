@@ -1,7 +1,6 @@
 package com.petar.smrdici.ui.screens.budget
 
 import android.util.Log
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -52,14 +50,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.google.firebase.Timestamp
+import com.petar.smrdici.data.model.Expense
+import com.petar.smrdici.data.model.ExpenseCategory
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
-import com.petar.smrdici.data.model.Expense
-import com.petar.smrdici.data.model.ExpenseCategory
-import com.petar.smrdici.data.repository.AccountRepository
-import com.petar.smrdici.data.repository.ExpenseRepository
 import com.petar.smrdici.ui.screens.settings.AccountViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable

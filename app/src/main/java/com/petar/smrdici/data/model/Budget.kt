@@ -31,11 +31,6 @@ data class Budget(
     // Tip budžeta (rashodi/prihodi)
     val type: BudgetType = BudgetType.EXPENSE
 ) {
-    // Pomoćna metoda za konverziju Timestamp objekta u Date objekat
-    fun getDateObject(): Date? {
-        return null // Ova metoda ne treba da se koristi direktno, pošto Budget ima dve date vrednosti
-    }
-    
     // Pomoćne metode za konverziju startDate i endDate u Date objekte
     fun getStartDateObject(): Date? {
         return startDate.getDateObject()
@@ -50,7 +45,7 @@ data class Budget(
 fun Timestamp.getDateObject(): Date? {
     return try {
         this.toDate()
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         null
     }
 }

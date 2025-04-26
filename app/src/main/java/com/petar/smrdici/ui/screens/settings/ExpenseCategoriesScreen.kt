@@ -34,9 +34,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.ExpenseCategory
+import com.petar.smrdici.data.model.CategoryManager
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,15 +48,22 @@ fun ExpenseCategoriesScreen(
     navController: NavController
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     
     // Lista kategorija rashoda
     val expenseCategories = remember { mutableStateListOf<String>() }
     
-    // Inicijalno popunimo listu svim dostupnim kategorijama iz enumeracije
+    // Koristimo CategoryManager za dobavljanje svih kategorija
+    val context = LocalContext.current
+    val categoryManager = remember { CategoryManager.getInstance(context) }
+    
+    // Inicijalno popunimo listu svim dostupnim kategorijama
     LaunchedEffect(Unit) {
         expenseCategories.clear()
-        ExpenseCategory.entries.forEach { 
-            expenseCategories.add(it.getDisplayName()) 
+        // Koristimo getAllExpenseCategories umesto direktnog pristupa enumeraciji
+        categoryManager.getAllExpenseCategories().forEach { categoryName ->
+            // Dobavljamo display name za svaku kategoriju
+            expenseCategories.add(categoryManager.getExpenseCategoryDisplayName(categoryName))
         }
     }
     
@@ -147,20 +158,31 @@ fun ExpenseCategoriesScreen(
                 OutlinedTextField(
                     value = newCategoryName,
                     onValueChange = { newCategoryName = it },
-                    label = { Text("Назив категорије") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Назив категорије") }
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (newCategoryName.isNotBlank() && !expenseCategories.contains(newCategoryName)) {
-                            expenseCategories.add(newCategoryName)
+                TextButton(onClick = {
+                    if (newCategoryName.isNotBlank()) {
+                        // Proveravamo da li kategorija već postoji
+                        if (!categoryManager.hasExpenseCategory(newCategoryName)) {
+                            // Dodajemo novu kategoriju
+                            categoryManager.addExpenseCategory(newCategoryName)
+                            // Osvežavamo listu
+                            expenseCategories.clear()
+                            categoryManager.getAllExpenseCategories().forEach { categoryName ->
+                                expenseCategories.add(categoryManager.getExpenseCategoryDisplayName(categoryName))
+                            }
                             showAddDialog = false
+                        } else {
+                            // Prikazujemo poruku da kategorija već postoji
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Категорија већ постоји!")
+                            }
                         }
                     }
-                ) {
-                    Text("Сачувај")
+                }) {
+                    Text("Додај")
                 }
             },
             dismissButton = {
@@ -180,22 +202,30 @@ fun ExpenseCategoriesScreen(
                 OutlinedTextField(
                     value = newCategoryName,
                     onValueChange = { newCategoryName = it },
-                    label = { Text("Назив категорије") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Нови назив категорије") }
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (newCategoryName.isNotBlank()) {
-                            val index = expenseCategories.indexOf(selectedCategory)
-                            if (index != -1) {
-                                expenseCategories[index] = newCategoryName
+                TextButton(onClick = {
+                    if (newCategoryName.isNotBlank() && selectedCategory.isNotBlank()) {
+                        // Proveravamo da li nova kategorija već postoji
+                        if (!categoryManager.hasExpenseCategory(newCategoryName) || newCategoryName == selectedCategory) {
+                            // Ažuriramo kategoriju
+                            categoryManager.updateExpenseCategory(selectedCategory, newCategoryName)
+                            // Osvežavamo listu
+                            expenseCategories.clear()
+                            categoryManager.getAllExpenseCategories().forEach { categoryName ->
+                                expenseCategories.add(categoryManager.getExpenseCategoryDisplayName(categoryName))
                             }
                             showEditDialog = false
+                        } else {
+                            // Prikazujemo poruku da kategorija već postoji
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Категорија већ постоји!")
+                            }
                         }
                     }
-                ) {
+                }) {
                     Text("Сачувај")
                 }
             },
@@ -212,14 +242,20 @@ fun ExpenseCategoriesScreen(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Обриши категорију") },
-            text = { Text("Да ли сте сигурни да желите да обришете категорију \"$selectedCategory\"?") },
+            text = { Text("Да ли сте сигурни да желите да обришете категорију '$selectedCategory'?") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        expenseCategories.remove(selectedCategory)
+                TextButton(onClick = {
+                    if (selectedCategory.isNotBlank()) {
+                        // Brišemo kategoriju
+                        categoryManager.deleteExpenseCategory(selectedCategory)
+                        // Osvežavamo listu
+                        expenseCategories.clear()
+                        categoryManager.getAllExpenseCategories().forEach { categoryName ->
+                            expenseCategories.add(categoryManager.getExpenseCategoryDisplayName(categoryName))
+                        }
                         showDeleteDialog = false
                     }
-                ) {
+                }) {
                     Text("Обриши")
                 }
             },

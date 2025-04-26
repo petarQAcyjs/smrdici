@@ -1,7 +1,6 @@
 package com.petar.smrdici.data.repository
 
 import android.util.Log
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore

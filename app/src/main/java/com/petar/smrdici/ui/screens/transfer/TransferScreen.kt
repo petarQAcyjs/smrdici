@@ -58,8 +58,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.Account
-import com.petar.smrdici.ui.theme.Purple40
-import com.petar.smrdici.ui.theme.Purple80
 import com.petar.smrdici.ui.theme.PurpleGrey40
 import java.text.SimpleDateFormat
 import java.util.Locale

@@ -1,6 +1,5 @@
 package com.petar.smrdici.ui.screens.settings
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -96,9 +95,6 @@ fun BudgetSettingsScreen(
     // Пратимо стање процеса извоза/увоза
     val exportSuccess by dataExportImportViewModel.exportSuccess.collectAsState()
     val importSuccess by dataExportImportViewModel.importSuccess.collectAsState()
-    
-    var showImportConfirmDialog by remember { mutableStateOf(false) }
-    var selectedImportUri by remember { mutableStateOf<Uri?>(null) }
     
     // Додатна стања за напредни увоз
     val importPreview by dataExportImportViewModel.importPreview.collectAsState()
@@ -913,11 +909,6 @@ private fun AccountItem(
 // Додајте ову функцију за дебаговање
 private fun logAccountDetails(account: Account) {
     android.util.Log.d("BudgetSettings", "Account: ${account.name}, ID: ${account.id}, Default: ${account.isDefault}")
-}
-
-@Composable
-fun CurrencyDropdown(currencies: List<String>, selectedCurrency: String, onCurrencySelected: (String) -> Unit) {
-    // ... existing code ...
 }
 
 /**

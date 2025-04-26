@@ -3,6 +3,7 @@ package com.petar.smrdici.data.model
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import androidx.core.content.edit
 
 /**
  * Menadžer za dinamičke kategorije koje mogu biti importovane
@@ -29,11 +30,13 @@ class CategoryManager private constructor(context: Context) {
             ExpenseCategory.valueOf(categoryName)
             // Ako ne baci exception, znači da kategorija već postoji kao enum
             return
-        } catch (e: IllegalArgumentException) {
+        } catch (_: IllegalArgumentException) {
             // Kategorija ne postoji u enum-u, dodajemo je u custom kategorije
             val updatedSet = customExpenseCategories.toMutableSet()
             updatedSet.add(categoryName)
-            prefs.edit().putStringSet(KEY_CUSTOM_EXPENSE_CATEGORIES, updatedSet).apply()
+            prefs.edit {
+                putStringSet(KEY_CUSTOM_EXPENSE_CATEGORIES, updatedSet)
+            }
             Log.d(TAG, "Dodata nova kategorija troškova: $categoryName")
         }
     }
@@ -47,11 +50,13 @@ class CategoryManager private constructor(context: Context) {
             IncomeCategory.valueOf(categoryName)
             // Ako ne baci exception, znači da kategorija već postoji kao enum
             return
-        } catch (e: IllegalArgumentException) {
+        } catch (_: IllegalArgumentException) {
             // Kategorija ne postoji u enum-u, dodajemo je u custom kategorije
             val updatedSet = customIncomeCategories.toMutableSet()
             updatedSet.add(categoryName)
-            prefs.edit().putStringSet(KEY_CUSTOM_INCOME_CATEGORIES, updatedSet).apply()
+            prefs.edit {
+                putStringSet(KEY_CUSTOM_INCOME_CATEGORIES, updatedSet)
+            }
             Log.d(TAG, "Dodata nova kategorija prihoda: $categoryName")
         }
     }
@@ -64,7 +69,7 @@ class CategoryManager private constructor(context: Context) {
             // Prvo pokušavamo dobiti iz enum-a
             val expenseCategory = ExpenseCategory.valueOf(categoryName)
             expenseCategory.getDisplayName()
-        } catch (e: IllegalArgumentException) {
+        } catch (_: IllegalArgumentException) {
             // Ako nije u enumu, proveravamo da li je u custom kategorijama
             if (customExpenseCategories.contains(categoryName)) {
                 categoryName
@@ -84,7 +89,7 @@ class CategoryManager private constructor(context: Context) {
             // Prvo pokušavamo dobiti iz enum-a
             val incomeCategory = IncomeCategory.valueOf(categoryName)
             incomeCategory.getDisplayName()
-        } catch (e: IllegalArgumentException) {
+        } catch (_: IllegalArgumentException) {
             // Ako nije u enumu, proveravamo da li je u custom kategorijama
             if (customIncomeCategories.contains(categoryName)) {
                 categoryName
@@ -119,7 +124,7 @@ class CategoryManager private constructor(context: Context) {
         return try {
             ExpenseCategory.valueOf(categoryName)
             true
-        } catch (e: IllegalArgumentException) {
+        } catch (_: IllegalArgumentException) {
             customExpenseCategories.contains(categoryName)
         }
     }
@@ -131,8 +136,66 @@ class CategoryManager private constructor(context: Context) {
         return try {
             IncomeCategory.valueOf(categoryName)
             true
-        } catch (e: IllegalArgumentException) {
+        } catch (_: IllegalArgumentException) {
             customIncomeCategories.contains(categoryName)
+        }
+    }
+    
+    /**
+     * Izmena postojeće kategorije troškova (samo za custom kategorije)
+     */
+    fun updateExpenseCategory(oldName: String, newName: String) {
+        if (customExpenseCategories.contains(oldName)) {
+            val updatedSet = customExpenseCategories.toMutableSet()
+            updatedSet.remove(oldName)
+            updatedSet.add(newName)
+            prefs.edit {
+                putStringSet(KEY_CUSTOM_EXPENSE_CATEGORIES, updatedSet)
+            }
+            Log.d(TAG, "Izmenjena kategorija troškova: $oldName -> $newName")
+        }
+    }
+
+    /**
+     * Izmena postojeće kategorije prihoda (samo za custom kategorije)
+     */
+    fun updateIncomeCategory(oldName: String, newName: String) {
+        if (customIncomeCategories.contains(oldName)) {
+            val updatedSet = customIncomeCategories.toMutableSet()
+            updatedSet.remove(oldName)
+            updatedSet.add(newName)
+            prefs.edit {
+                putStringSet(KEY_CUSTOM_INCOME_CATEGORIES, updatedSet)
+            }
+            Log.d(TAG, "Izmenjena kategorija prihoda: $oldName -> $newName")
+        }
+    }
+
+    /**
+     * Brisanje kategorije troškova (samo za custom kategorije)
+     */
+    fun deleteExpenseCategory(categoryName: String) {
+        if (customExpenseCategories.contains(categoryName)) {
+            val updatedSet = customExpenseCategories.toMutableSet()
+            updatedSet.remove(categoryName)
+            prefs.edit {
+                putStringSet(KEY_CUSTOM_EXPENSE_CATEGORIES, updatedSet)
+            }
+            Log.d(TAG, "Obrisana kategorija troškova: $categoryName")
+        }
+    }
+
+    /**
+     * Brisanje kategorije prihoda (samo za custom kategorije)
+     */
+    fun deleteIncomeCategory(categoryName: String) {
+        if (customIncomeCategories.contains(categoryName)) {
+            val updatedSet = customIncomeCategories.toMutableSet()
+            updatedSet.remove(categoryName)
+            prefs.edit {
+                putStringSet(KEY_CUSTOM_INCOME_CATEGORIES, updatedSet)
+            }
+            Log.d(TAG, "Obrisana kategorija prihoda: $categoryName")
         }
     }
     

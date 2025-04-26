@@ -52,6 +52,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -112,8 +113,7 @@ private fun getCurrencyForAccount(accounts: List<Account>, selectedAccountId: St
     return if (selectedAccountId != null) {
         accounts.find { it.id == selectedAccountId }?.currency ?: "RSD"
     } else {
-        val currencies = accounts.mapNotNull { it.currency }.distinct()
-        if (currencies.isEmpty()) "RSD" else currencies.first()
+        accounts.firstOrNull { true }?.currency ?: "RSD"
     }
 }
 
@@ -289,40 +289,45 @@ fun BudgetListScreen(
         val startTime = System.currentTimeMillis()
         LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Počinjem praćenje učitavanja")
         
-        // Ovo je sigurnosni mehanizam za slučaj da učitavanje traje predugo
-        try {
-            // Pokrećemo vremensko ograničenje za učitavanje (30 sekundi)
-            withTimeout(30_000) {
-                // Čekamo dok se isLoading ne promeni na false
-                // ali samo ako je trenutno true
-                if (isLoading) {
+        // Uzmi trenutnu vrednost isLoading parametra
+        val initialIsLoading = budgetsViewModel.isLoading.value
+        
+        // Nastavi samo ako je isLoading=true na početku
+        if (initialIsLoading) {
+            // Ovo je sigurnosni mehanizam za slučaj da učitavanje traje predugo
+            try {
+                // Pokrećemo vremensko ograničenje za učitavanje (30 sekundi)
+                withTimeout(30_000) {
+                    // Čekamo dok se isLoading ne promeni na false
                     budgetsViewModel.isLoading.first { !it }
                 }
-            }
-        } catch (_: Exception) {
-            try {
-                // Ako dođe do tajmauta, prisilno zaustavljamo učitavanje
-                LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Aktivirano forsiranje zaustavljanja učitavanja nakon 30 sekundi")
-                
-                // Takođe osiguravamo da se ne prikazuje isRefreshing
-                isRefreshing = false
-                
-                // Prikazujemo snackbar korisniku da je došlo do problema
-                scope.launch {
-                    snackbarHostState.showSnackbar("Učitavanje je trajalo predugo i automatski je zaustavljeno.")
+            } catch (_: Exception) {
+                try {
+                    // Ako dođe do tajmauta, prisilno zaustavljamo učitavanje
+                    LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Aktivirano forsiranje zaustavljanja učitavanja nakon 30 sekundi")
+                    
+                    // Takođe osiguravamo da se ne prikazuje isRefreshing
+                    isRefreshing = false
+                    
+                    // Prikazujemo snackbar korisniku da je došlo do problema
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Učitavanje je trajalo predugo i automatski je zaustavljeno.")
+                    }
+                } catch (e: Exception) {
+                    LogUtils.e("BudgetListScreen", "Greška pri forsiranom zaustavljanju učitavanja: ${e.message}")
                 }
-            } catch (e: Exception) {
-                LogUtils.e("BudgetListScreen", "Greška pri forsiranom zaustavljanju učitavanja: ${e.message}")
+            } catch (_: kotlinx.coroutines.CancellationException) {
+                // Ovaj deo se izvršava ako je coroutine otkazan, što je očekivano
+                // kada se isLoading promeni na false pre isteka timeuta
+                LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Otkazan nakon ${(System.currentTimeMillis() - startTime) / 1000} sekundi jer je učitavanje završeno")
             }
-        } catch (_: kotlinx.coroutines.CancellationException) {
-            // Ovaj deo se izvršava ako je coroutine otkazan, što je očekivano
-            // kada se isLoading promeni na false pre isteka timeuta
-            LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Otkazan nakon ${(System.currentTimeMillis() - startTime) / 1000} sekundi jer je učitavanje završeno")
+        } else {
+            LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Nije potrebno pratiti učitavanje jer isLoading=false na početku")
         }
     }
     
     // Stanje za tabove
-    var selectedTabIndex by remember { mutableStateOf(0) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("Расходи", "Приходи")
     
     // Pratimo promenu taba
@@ -369,9 +374,7 @@ fun BudgetListScreen(
         }
     }
     
-    // Lista perioda
-    val periodStrings = listOf("Дан", "Недеља", "Месец", "Година", "Период", "Све")
-    
+    // Učitavamo naloge i podatke o odabranom nalogu
     val accounts by budgetsViewModel.accounts.collectAsState(initial = emptyList())
     val selectedAccountId by budgetsViewModel.selectedAccountId.collectAsState()
     

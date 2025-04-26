@@ -2,10 +2,10 @@ package com.petar.smrdici.ui.screens.budget
 
 import android.content.Context
 import android.util.Log
+import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.core.content.edit
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Account
@@ -20,10 +20,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import java.util.Calendar
 import java.util.Date
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 @Suppress("UNUSED")
 class BudgetViewModel(
@@ -982,9 +981,9 @@ class BudgetViewModel(
     fun getPeriodDisplayText(): String {
         val offset = _periodOffset.value
         val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-        val monthYearFormat = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale("sr"))
+        val monthYearFormat = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale.forLanguageTag("sr"))
         val yearFormat = java.text.SimpleDateFormat("yyyy", java.util.Locale.getDefault())
-        val shortDayMonthFormat = java.text.SimpleDateFormat("dd MMM", java.util.Locale("sr"))
+        val shortDayMonthFormat = java.text.SimpleDateFormat("dd MMM", java.util.Locale.forLanguageTag("sr"))
         
         // Izračunavamo raspon datuma za trenutni period sa offsetom
         val (startDate, endDate) = calculatePeriodDates(_selectedPeriod.value)
