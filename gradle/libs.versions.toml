@@ -49,6 +49,7 @@ lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", versio
 androidx-material3-library = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 play-services-base = { module = "com.google.android.gms:play-services-base", version.ref = "playServicesBase" }
+kotlinx_coroutines_core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version = "1.7.3" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

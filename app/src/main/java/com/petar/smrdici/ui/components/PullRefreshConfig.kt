@@ -18,6 +18,7 @@ fun StandardPullRefreshIndicator(
     state: PullRefreshState,
     modifier: Modifier = Modifier
 ) {
+    // Koristimo jače kontrastne boje za bolju vidljivost
     PullRefreshIndicator(
         refreshing = refreshing,
         state = state,

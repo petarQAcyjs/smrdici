@@ -1,6 +1,5 @@
 package com.petar.smrdici.ui.screens.budget
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,27 +12,31 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -43,11 +46,13 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,21 +66,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.petar.smrdici.data.model.Account
+import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.Income
-import com.petar.smrdici.data.model.DisplayBudget
-import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.BudgetBattery
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import com.petar.smrdici.ui.screens.settings.Period
-import kotlinx.coroutines.launch
-import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.utils.LogUtils
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.flow.first
 
 /**
  * BudgetListScreen - Ekran za prikaz budžeta i transakcija
@@ -109,8 +113,7 @@ private fun getCurrencyForAccount(accounts: List<Account>, selectedAccountId: St
     return if (selectedAccountId != null) {
         accounts.find { it.id == selectedAccountId }?.currency ?: "RSD"
     } else {
-        val currencies = accounts.mapNotNull { it.currency }.distinct()
-        if (currencies.isEmpty()) "RSD" else currencies.first()
+        accounts.firstOrNull { true }?.currency ?: "RSD"
     }
 }
 
@@ -153,7 +156,7 @@ fun PeriodNavigationControls(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Dugme za navigaciju unazad
-            androidx.compose.material3.IconButton(
+            IconButton(
                 onClick = onNavigateBack
             ) {
                 Icon(
@@ -187,10 +190,10 @@ fun PeriodNavigationControls(
                     
                     // Ako nismo u trenutnom periodu, prikazujemo dugme za povratak
                     if (periodOffset > 0) {
-                        androidx.compose.material3.TextButton(
+                        TextButton(
                             onClick = onResetPeriod,
-                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                                contentColor = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary
                             )
                         ) {
                             Text("Vrati se na trenutni period")
@@ -200,7 +203,7 @@ fun PeriodNavigationControls(
             }
             
             // Dugme za navigaciju unapred (onemogućeno ako smo u trenutnom periodu)
-            androidx.compose.material3.IconButton(
+            IconButton(
                 onClick = onNavigateForward,
                 enabled = periodOffset > 0
             ) {
@@ -246,16 +249,16 @@ fun BudgetListScreen(
     val totalExpenseSpent by budgetsViewModel.totalExpenseSpent.collectAsState()
     val totalIncomeReceived by budgetsViewModel.totalIncomeReceived.collectAsState()
     val errorMessage by budgetsViewModel.errorMessage.collectAsState()
-    val displayExpenseBudgets by budgetsViewModel.displayExpenseBudgets.collectAsState()
-    val displayIncomeBudgets by budgetsViewModel.displayIncomeBudgets.collectAsState()
     val selectedPeriodIndex by budgetsViewModel.selectedPeriodIndex.collectAsState()
+    
+    // Logovanje promena stanja isLoading
+    LaunchedEffect(isLoading) {
+        LogUtils.d("BudgetListScreen", "Promena isLoading stanja: $isLoading")
+    }
     
     // Dobijamo transakcije iz BudgetViewModel
     val expenses by budgetViewModel.expenses.collectAsState(initial = emptyList())
     val incomes by budgetViewModel.incomes.collectAsState(initial = emptyList())
-    
-    // Dodatno - direktno pratimo UI stanje iz BudgetViewModel za dijagnostiku
-    val uiState by budgetViewModel.uiState.collectAsState()
     
     // Dodajemo logiku za osvežavanje podataka na pull-to-refresh
     val pullRefreshState = rememberPullRefreshState(
@@ -283,48 +286,48 @@ fun BudgetListScreen(
     
     // Sigurnosni mehanizam za slučaj da isLoading ostane 'zaglavljen' na true
     LaunchedEffect(Unit) {
-        // Ovo je globalni sigurnosni tajmer koji će isključiti indikator učitavanja
-        // ako ostane aktivan predugo (15 sekundi je više nego dovoljno za učitavanje)
-        while (true) {
-            if (isLoading) {
-                // Počinjemo brojanje vremena kada je isLoading true
-                val startTime = System.currentTimeMillis()
-                LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Počinjem praćenje učitavanja")
-                
-                // Čekamo 15 sekundi
-                kotlinx.coroutines.delay(15000)
-                
-                // Ako je i dalje isLoading nakon 15 sekundi, forsirano ga isključujemo
-                if (budgetsViewModel.isLoading.value) {
-                    LogUtils.e("BudgetListScreen", "SIGURNOSNI TAJMER: Forsiram isključivanje indikatora nakon ${(System.currentTimeMillis() - startTime) / 1000} sekundi")
-                    
-                    // Izvršavamo ovo u main thread-u jer modifikujemo UI stanje
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        try {
-                            // Forsirano isključujemo indikator učitavanja
-                            budgetsViewModel.forceStopLoading()
-                            
-                            // Takođe osiguravamo da se ne prikazuje isRefreshing
-                            isRefreshing = false
-                            
-                            // Prikazujemo snackbar korisniku da je došlo do problema
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Učitavanje je trajalo predugo i automatski je zaustavljeno.")
-                            }
-                        } catch (e: Exception) {
-                            LogUtils.e("BudgetListScreen", "Greška pri forsiranom zaustavljanju učitavanja: ${e.message}")
-                        }
-                    }
+        val startTime = System.currentTimeMillis()
+        LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Počinjem praćenje učitavanja")
+        
+        // Uzmi trenutnu vrednost isLoading parametra
+        val initialIsLoading = budgetsViewModel.isLoading.value
+        
+        // Nastavi samo ako je isLoading=true na početku
+        if (initialIsLoading) {
+            // Ovo je sigurnosni mehanizam za slučaj da učitavanje traje predugo
+            try {
+                // Pokrećemo vremensko ograničenje za učitavanje (30 sekundi)
+                withTimeout(30_000) {
+                    // Čekamo dok se isLoading ne promeni na false
+                    budgetsViewModel.isLoading.first { !it }
                 }
+            } catch (_: Exception) {
+                try {
+                    // Ako dođe do tajmauta, prisilno zaustavljamo učitavanje
+                    LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Aktivirano forsiranje zaustavljanja učitavanja nakon 30 sekundi")
+                    
+                    // Takođe osiguravamo da se ne prikazuje isRefreshing
+                    isRefreshing = false
+                    
+                    // Prikazujemo snackbar korisniku da je došlo do problema
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Učitavanje je trajalo predugo i automatski je zaustavljeno.")
+                    }
+                } catch (e: Exception) {
+                    LogUtils.e("BudgetListScreen", "Greška pri forsiranom zaustavljanju učitavanja: ${e.message}")
+                }
+            } catch (_: kotlinx.coroutines.CancellationException) {
+                // Ovaj deo se izvršava ako je coroutine otkazan, što je očekivano
+                // kada se isLoading promeni na false pre isteka timeuta
+                LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Otkazan nakon ${(System.currentTimeMillis() - startTime) / 1000} sekundi jer je učitavanje završeno")
             }
-            
-            // Čekamo pre sledeće provere (1 sekunda)
-            kotlinx.coroutines.delay(1000)
+        } else {
+            LogUtils.i("BudgetListScreen", "SIGURNOSNI TAJMER: Nije potrebno pratiti učitavanje jer isLoading=false na početku")
         }
     }
     
     // Stanje za tabove
-    var selectedTabIndex by remember { mutableStateOf(0) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("Расходи", "Приходи")
     
     // Pratimo promenu taba
@@ -335,26 +338,16 @@ fun BudgetListScreen(
     // Vrednosti budžeta
     val budgetLimit by budgetsViewModel.budgetLimit.collectAsState()
     
-    // Konvertujemo period u čitljiv tekst
-    val periodText = when(selectedPeriodIndex) {
-        0 -> "danas"
-        1 -> "ove sedmice"
-        2 -> "ovog meseca"
-        3 -> "ove godine"
-        4 -> "u ovom periodu"
-        else -> ""
-    }
-    
     // Pratimo offset perioda
     val periodOffset by budgetViewModel.periodOffset.collectAsState()
     
     // Pratimo izabrani datum (za dnevni prikaz)
     val selectedDate by budgetViewModel.selectedDate.collectAsState()
     
-    // Dinamično pratimo prikaz perioda koristeći remember i derivedStateOf
-    // Ovo će automatski osvežiti vrednost kada se promene zavisni parametri (selectedPeriod, periodOffset, selectedDate)
+    // Dinamično pratimo prikaz perioda kroz collectAsState
+    val selectedPeriod by budgetViewModel.selectedPeriod.collectAsState()
     val periodDisplayText by remember(
-        budgetViewModel.selectedPeriod.collectAsState().value,
+        selectedPeriod,
         periodOffset,
         selectedDate
     ) {
@@ -362,8 +355,8 @@ fun BudgetListScreen(
     }
     
     // LaunchedEffect za reagovanje na promene u periodu (za dijagnostiku)
-    LaunchedEffect(periodOffset, budgetViewModel.selectedPeriod.collectAsState().value, selectedDate) {
-        LogUtils.i("BudgetListScreen", "Period promenjen: offset=$periodOffset, period=${budgetViewModel.selectedPeriod.value}, periodText=${budgetViewModel.getPeriodDisplayText()}")
+    LaunchedEffect(periodOffset, selectedPeriod, selectedDate) {
+        LogUtils.i("BudgetListScreen", "Period promenjen: offset=$periodOffset, period=$selectedPeriod, periodText=${budgetViewModel.getPeriodDisplayText()}")
     }
     
     // Efekat za prikazivanje greške
@@ -381,9 +374,7 @@ fun BudgetListScreen(
         }
     }
     
-    // Lista perioda
-    val periodStrings = listOf("Дан", "Недеља", "Месец", "Година", "Период", "Све")
-    
+    // Učitavamo naloge i podatke o odabranom nalogu
     val accounts by budgetsViewModel.accounts.collectAsState(initial = emptyList())
     val selectedAccountId by budgetsViewModel.selectedAccountId.collectAsState()
     
@@ -469,7 +460,7 @@ fun BudgetListScreen(
                                 modifier = Modifier
                                     .background(
                                         color = Color(0xFF2E2E2E),
-                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                                        shape = RoundedCornerShape(8.dp)
                                     )
                                     .clickable { showPeriodDropdown = true }
                                     .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -494,13 +485,13 @@ fun BudgetListScreen(
                                 )
                             }
                             
-                            androidx.compose.material3.DropdownMenu(
+                            DropdownMenu(
                                 expanded = showPeriodDropdown,
                                 onDismissRequest = { showPeriodDropdown = false },
                                 modifier = Modifier.background(Color(0xFF2E2E2E))
                             ) {
                                 listOf("Dan", "Nedelja", "Mesec", "Godina", "Prilagođeno", "Sve").forEachIndexed { index, title ->
-                                    androidx.compose.material3.DropdownMenuItem(
+                                    DropdownMenuItem(
                                         text = { Text(title, color = Color.White) },
                                         onClick = {
                                             // Ovde ažuriramo period
@@ -510,9 +501,9 @@ fun BudgetListScreen(
                                         trailingIcon = {
                                             if (selectedPeriodIndex == index) {
                                                 Icon(
-                                                    imageVector = androidx.compose.material.icons.Icons.Default.Check,
+                                                    imageVector = Icons.Default.Check,
                                                     contentDescription = "Odabrano",
-                                                    tint = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                                    tint = MaterialTheme.colorScheme.primary
                                                 )
                                             }
                                         }
@@ -525,14 +516,14 @@ fun BudgetListScreen(
                 
                 // Kontrole za navigaciju kroz periode
                 PeriodNavigationControls(
-                    currentPeriod = budgetViewModel.selectedPeriod.value,
+                    currentPeriod = selectedPeriod,
                     currentPeriodText = periodDisplayText,
                     periodOffset = periodOffset,
                     onNavigateBack = { budgetViewModel.movePeriodBackward() },
                     onNavigateForward = { budgetViewModel.movePeriodForward() },
                     onResetPeriod = { budgetViewModel.resetToCurrentPeriod() },
                     onSelectDate = {
-                        if (budgetViewModel.selectedPeriod.value == Period.DAILY) {
+                        if (selectedPeriod == Period.DAILY) {
                             showDatePicker = true
                         }
                     }
@@ -637,14 +628,6 @@ fun BudgetListScreen(
                                 }
                                 
                                 Spacer(modifier = Modifier.height(8.dp))
-                                
-                                // Прогрес бар буџета
-                                val progress = if (budgetLimit > 0.0) (totalExpenseSpent / budgetLimit).coerceIn(0.0, 1.0) else 0.0
-                                val progressColor = when {
-                                    progress >= 1.0 -> Color.Red
-                                    progress >= 0.75 -> Color(0xFFFF9800) // Наранџаста
-                                    else -> Color(0xFF4CAF50) // Зелена
-                                }
                                 
                                 // Заменимо обичан прогрес бар са BudgetBattery компонентом
                                 BudgetBattery(
@@ -1062,16 +1045,16 @@ fun BudgetListScreen(
             // Prikazujemo DatePicker za izbor datuma u dnevnom režimu
             if (showDatePicker) {
                 // Dodajem suppress anotaciju za eksperimentalni API
-                @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-                val datePickerState = androidx.compose.material3.rememberDatePickerState(
+                @OptIn(ExperimentalMaterial3Api::class)
+                val datePickerState = rememberDatePickerState(
                     initialSelectedDateMillis = selectedDate.time
                 )
                 
-                @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-                androidx.compose.material3.DatePickerDialog(
+                @OptIn(ExperimentalMaterial3Api::class)
+                DatePickerDialog(
                     onDismissRequest = { showDatePicker = false },
                     confirmButton = {
-                        androidx.compose.material3.TextButton(
+                        TextButton(
                             onClick = {
                                 datePickerState.selectedDateMillis?.let { millis ->
                                     budgetViewModel.setSelectedDate(java.util.Date(millis))
@@ -1083,15 +1066,15 @@ fun BudgetListScreen(
                         }
                     },
                     dismissButton = {
-                        androidx.compose.material3.TextButton(
+                        TextButton(
                             onClick = { showDatePicker = false }
                         ) {
                             Text("Odustani")
                         }
                     }
                 ) {
-                    @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-                    androidx.compose.material3.DatePicker(
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    DatePicker(
                         state = datePickerState
                     )
                 }
@@ -1106,14 +1089,15 @@ fun BudgetListScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(50.dp) // Povećao sam veličinu indikatora za bolju vidljivost
                     )
                 }
             }
             
             // Indikator osvežavanja
             StandardPullRefreshIndicator(
-                refreshing = isRefreshing,
+                refreshing = isRefreshing || isLoading, // Dodao sam isLoading kao dodatni uslov
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter)
             )

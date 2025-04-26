@@ -149,7 +149,7 @@ fun AddEventScreen(
                 Button(
                     onClick = { showDatePicker = true }
                 ) {
-                    val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale("sr"))
+                    val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.forLanguageTag("sr"))
                     Text(dateFormat.format(formState.date))
                 }
             }

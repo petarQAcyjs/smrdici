@@ -162,29 +162,6 @@ class AccountRepository private constructor() {
         }
     }
     
-    suspend fun deleteAllAccounts() {
-        try {
-            val userId = auth.currentUser?.uid ?: return
-            
-            val snapshot = firestore.collection("users").document(userId)
-                .collection("accounts")
-                .get()
-                .await()
-            
-            for (document in snapshot.documents) {
-                firestore.collection("users").document(userId)
-                    .collection("accounts")
-                    .document(document.id)
-                    .delete()
-                    .await()
-            }
-            
-            loadAccounts()
-        } catch (e: Exception) {
-            Log.e(TAG, "Грешка при брисању свих рачуна", e)
-        }
-    }
-    
     // Додајемо нову методу за трансфер новца између рачуна
     suspend fun transferFunds(
         sourceAccountId: String, 

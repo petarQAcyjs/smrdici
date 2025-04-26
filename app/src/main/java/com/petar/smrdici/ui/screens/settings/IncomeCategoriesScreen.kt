@@ -31,12 +31,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.petar.smrdici.data.model.IncomeCategory
+import com.petar.smrdici.data.model.CategoryManager
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,15 +47,22 @@ fun IncomeCategoriesScreen(
     navController: NavController
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     
     // Lista kategorija prihoda
     val incomeCategories = remember { mutableStateListOf<String>() }
     
-    // Inicijalno popunimo listu svim dostupnim kategorijama iz enumeracije
+    // Koristimo CategoryManager za dobavljanje svih kategorija
+    val context = LocalContext.current
+    val categoryManager = remember { CategoryManager.getInstance(context) }
+    
+    // Inicijalno popunimo listu svim dostupnim kategorijama
     LaunchedEffect(Unit) {
         incomeCategories.clear()
-        IncomeCategory.entries.forEach { 
-            incomeCategories.add(it.getDisplayName()) 
+        // Koristimo getAllIncomeCategories umesto direktnog pristupa enumeraciji
+        categoryManager.getAllIncomeCategories().forEach { categoryName ->
+            // Dobavljamo display name za svaku kategoriju
+            incomeCategories.add(categoryManager.getIncomeCategoryDisplayName(categoryName))
         }
     }
     
@@ -147,20 +157,31 @@ fun IncomeCategoriesScreen(
                 OutlinedTextField(
                     value = newCategoryName,
                     onValueChange = { newCategoryName = it },
-                    label = { Text("Назив категорије") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Назив категорије") }
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (newCategoryName.isNotBlank() && !incomeCategories.contains(newCategoryName)) {
-                            incomeCategories.add(newCategoryName)
+                TextButton(onClick = {
+                    if (newCategoryName.isNotBlank()) {
+                        // Proveravamo da li kategorija već postoji
+                        if (!categoryManager.hasIncomeCategory(newCategoryName)) {
+                            // Dodajemo novu kategoriju
+                            categoryManager.addIncomeCategory(newCategoryName)
+                            // Osvežavamo listu
+                            incomeCategories.clear()
+                            categoryManager.getAllIncomeCategories().forEach { categoryName ->
+                                incomeCategories.add(categoryManager.getIncomeCategoryDisplayName(categoryName))
+                            }
                             showAddDialog = false
+                        } else {
+                            // Prikazujemo poruku da kategorija već postoji
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Категорија већ постоји!")
+                            }
                         }
                     }
-                ) {
-                    Text("Сачувај")
+                }) {
+                    Text("Додај")
                 }
             },
             dismissButton = {
@@ -180,22 +201,30 @@ fun IncomeCategoriesScreen(
                 OutlinedTextField(
                     value = newCategoryName,
                     onValueChange = { newCategoryName = it },
-                    label = { Text("Назив категорије") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Нови назив категорије") }
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (newCategoryName.isNotBlank()) {
-                            val index = incomeCategories.indexOf(selectedCategory)
-                            if (index != -1) {
-                                incomeCategories[index] = newCategoryName
+                TextButton(onClick = {
+                    if (newCategoryName.isNotBlank() && selectedCategory.isNotBlank()) {
+                        // Proveravamo da li nova kategorija već postoji
+                        if (!categoryManager.hasIncomeCategory(newCategoryName) || newCategoryName == selectedCategory) {
+                            // Ažuriramo kategoriju
+                            categoryManager.updateIncomeCategory(selectedCategory, newCategoryName)
+                            // Osvežavamo listu
+                            incomeCategories.clear()
+                            categoryManager.getAllIncomeCategories().forEach { categoryName ->
+                                incomeCategories.add(categoryManager.getIncomeCategoryDisplayName(categoryName))
                             }
                             showEditDialog = false
+                        } else {
+                            // Prikazujemo poruku da kategorija već postoji
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Категорија већ постоји!")
+                            }
                         }
                     }
-                ) {
+                }) {
                     Text("Сачувај")
                 }
             },
@@ -212,14 +241,20 @@ fun IncomeCategoriesScreen(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Обриши категорију") },
-            text = { Text("Да ли сте сигурни да желите да обришете категорију \"$selectedCategory\"?") },
+            text = { Text("Да ли сте сигурни да желите да обришете категорију '$selectedCategory'?") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        incomeCategories.remove(selectedCategory)
+                TextButton(onClick = {
+                    if (selectedCategory.isNotBlank()) {
+                        // Brišemo kategoriju
+                        categoryManager.deleteIncomeCategory(selectedCategory)
+                        // Osvežavamo listu
+                        incomeCategories.clear()
+                        categoryManager.getAllIncomeCategories().forEach { categoryName ->
+                            incomeCategories.add(categoryManager.getIncomeCategoryDisplayName(categoryName))
+                        }
                         showDeleteDialog = false
                     }
-                ) {
+                }) {
                     Text("Обриши")
                 }
             },
