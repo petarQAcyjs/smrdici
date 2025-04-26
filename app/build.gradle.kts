@@ -54,12 +54,29 @@ android {
         }
     }
     
+    // Dodajemo kompilacione opcije
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+    
+    // Potiskujemo upozorenja o zastarelim opcijama
+    tasks.withType<JavaCompile>().configureEach {
+        options.compilerArgs.add("-Xlint:-options")
+    }
+    
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+    
     buildFeatures {
         compose = true
         buildConfig = true
     }
+    
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
+    }
 }
 
 dependencies {

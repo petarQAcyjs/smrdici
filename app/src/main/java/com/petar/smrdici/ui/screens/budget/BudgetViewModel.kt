@@ -178,9 +178,37 @@ class BudgetViewModel(
     }
     
     private fun loadTransactions() {
-        Log.d("BudgetViewModel", "===== POČETAK UČITAVANJA TRANSAKCIJA - INTERNO =====")
-        loadExpenses()
-        loadIncomes()
+        viewModelScope.launch {
+            Log.d("BudgetViewModel", "===== POČETAK UČITAVANJA TRANSAKCIJA - INTERNO =====")
+            
+            // Postavljamo isLoading na true na početku
+            _isLoading.value = true
+            
+            try {
+                // Koristimo supervisorScope da dozvolimo da jedna operacija može da ne uspe bez uticaja na drugu
+                kotlinx.coroutines.supervisorScope {
+                    // Paralelno pokrenemo učitavanje troškova i prihoda
+                    val expensesJob = launch { loadExpensesInternal() }
+                    val incomesJob = launch { loadIncomesInternal() }
+                    
+                    // Čekamo da se oba završe
+                    expensesJob.join()
+                    incomesJob.join()
+                    
+                    // Nakon što su oba završena, ažuriramo UI stanje - samo jednom
+                    updateUiState()
+                    
+                    // Izračunavamo procenat iskorišćenosti budžeta nakon što su svi podaci učitani
+                    calculateBudgetUsage()
+                }
+            } catch (e: Exception) {
+                Log.e("BudgetViewModel", "Greška pri učitavanju transakcija", e)
+                _uiState.value = _uiState.value.copy(error = "Greška pri učitavanju transakcija: ${e.message}")
+            } finally {
+                _isLoading.value = false
+                Log.d("BudgetViewModel", "===== ZAVRŠENO UČITAVANJE TRANSAKCIJA =====")
+            }
+        }
     }
     
     // Јавна метода за експлицитно учитавање трансакција
@@ -218,23 +246,26 @@ class BudgetViewModel(
                 try {
                     // Koristimo withTimeout da izbegnemo zaglavljivanje operacije
                     kotlinx.coroutines.withTimeout(timeoutMs) {
-                        // Pauziramo pre učitavanja da bismo bili sigurni da je UI spreman
-                        kotlinx.coroutines.delay(100)
-                        
-                        // Parelalno pokrećemo učitavanje transakcija
-                        loadTransactions()
-                        
-                        // Učitavamo budžetski limit
-                        loadBudgetLimit()
-                        
-                        // Učitavamo račune
-                        loadAccounts()
-                        
-                        // Kratka pauza da osiguramo da su svi async pozivi imali vremena da završe
-                        kotlinx.coroutines.delay(300)
-                        
-                        // Eksplicitno ažuriramo UI stanje na kraju
-                        updateUiState()
+                        // Koristimo NonCancellable za najvažniji deo
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                            // Pauziramo pre učitavanja da bismo bili sigurni da je UI spreman
+                            kotlinx.coroutines.delay(100)
+                            
+                            // Učitavamo transakcije (ovo će interno postaviti i resetovati isLoading)
+                            loadTransactions()
+                            
+                            // Učitavamo budžetski limit
+                            loadBudgetLimit()
+                            
+                            // Učitavamo račune
+                            loadAccounts()
+                            
+                            // Kratka pauza da osiguramo da su svi async pozivi imali vremena da završe
+                            kotlinx.coroutines.delay(300)
+                            
+                            // Eksplicitno ažuriramo UI stanje na kraju
+                            updateUiState()
+                        }
                         
                         Log.d("BudgetViewModel", "Osvežavanje transakcija završeno!")
                         Log.d("BudgetViewModel", "STANJE NAKON OSVEŽAVANJA: expenses=${_expenses.value.size}, incomes=${_incomes.value.size}")
@@ -260,328 +291,307 @@ class BudgetViewModel(
         }
     }
     
+    // Nova interna metoda koja učitava troškove bez postavljanja isLoading i bez pozivanja updateUiState
+    private suspend fun loadExpensesInternal() {
+        // Dodajem log poruku na početku učitavanja
+        Log.d("BudgetViewModel", "===== POČETAK UČITAVANJA RASHODA (INTERNO) =====")
+        
+        // Користимо нове методе за учитавање расхода за одређени период
+        val currentPeriod = _selectedPeriod.value
+        val accountId = _selectedAccountId.value
+        
+        Log.d("BudgetViewModel", "Parametri za učitavanje rashoda: period=$currentPeriod, accountId=$accountId")
+        
+        try {
+            if (currentPeriod == Period.ALL) {
+                // За све периоде користимо getAllExpenses
+                if (accountId != null) {
+                    // Филтрирамо по рачуну
+                    try {
+                        Log.d("BudgetViewModel", "Učitavam SVE rashode i filtriram po računu: $accountId")
+                        expenseRepository.getAllExpenses().collect { allExpenses ->
+                            val filteredExpenses = allExpenses.filter { expense ->
+                                expense.accountId == accountId
+                            }
+                            Log.d("BudgetViewModel", "Ukupno učitano ${allExpenses.size} rashoda, nakon filtriranja: ${filteredExpenses.size}")
+                            // Dodajemo log za datume
+                            if (filteredExpenses.isNotEmpty()) {
+                                val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                val dates = filteredExpenses.take(5).map { 
+                                    dateFormat.format(it.getDateObject() ?: Date()) 
+                                }
+                                Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
+                            }
+                            _expenses.value = filteredExpenses
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) {
+                            // Игноришемо грешке отказивања корутине
+                            Log.d("BudgetViewModel", "Корутина за учитавање расхода је отказана")
+                        } else {
+                            throw e
+                        }
+                    }
+                } else {
+                    // Сви рачуни
+                    try {
+                        Log.d("BudgetViewModel", "Učitavam SVE rashode za sve račune")
+                        expenseRepository.getAllExpenses().collect { expenses ->
+                            Log.d("BudgetViewModel", "Ukupno učitano ${expenses.size} rashoda za sve račune")
+                            // Dodajemo log za datume
+                            if (expenses.isNotEmpty()) {
+                                val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                val dates = expenses.take(5).map { 
+                                    dateFormat.format(it.getDateObject() ?: Date()) 
+                                }
+                                Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
+                            }
+                            _expenses.value = expenses
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) {
+                            // Игноришемо грешке отказивања корутине
+                            Log.d("BudgetViewModel", "Корутина за учитавање расхода је отказана")
+                        } else {
+                            throw e
+                        }
+                    }
+                }
+            } else {
+                // За остаle периоде користимо getExpensesForPeriod
+                val (startDate, endDate) = calculatePeriodDates(currentPeriod)
+                val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                
+                Log.d("BudgetViewModel", "Учитавам расходе за период од ${dateFormat.format(startDate)} до ${dateFormat.format(endDate)}")
+                
+                if (accountId != null) {
+                    // Филтрирамо по рачуну и периоду - пошто нема готове методе, сами филтрирамо
+                    try {
+                        Log.d("BudgetViewModel", "Učitavam rashode za račun $accountId i filtriram po periodu")
+                        expenseRepository.getExpensesForAccount(accountId).collect { allExpensesForAccount ->
+                            Log.d("BudgetViewModel", "Učitano ${allExpensesForAccount.size} rashoda za račun pre filtriranja po datumu")
+                            val filteredExpenses = allExpensesForAccount.filter { expense ->
+                                val expenseDate = expense.getDateObject()
+                                expenseDate?.time ?: 0L >= startDate?.time ?: 0L && expenseDate?.time ?: 0L <= endDate?.time ?: 0L
+                            }
+                            Log.d("BudgetViewModel", "Nakon filtriranja po datumu: ${filteredExpenses.size} rashoda")
+                            // Dodajemo log za datume
+                            if (filteredExpenses.isNotEmpty()) {
+                                val dates = filteredExpenses.take(5).map { 
+                                    dateFormat.format(it.getDateObject() ?: Date()) 
+                                }
+                                Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
+                            }
+                            _expenses.value = filteredExpenses
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) {
+                            // Игноришемо грешке отказивања корутине
+                            Log.d("BudgetViewModel", "Корутина за учитавање расхода је отказана")
+                        } else {
+                            throw e
+                        }
+                    }
+                } else {
+                    // Сви рачуни за период
+                    try {
+                        Log.d("BudgetViewModel", "Učitavam rashode za SVE račune za određeni period")
+                        expenseRepository.getExpensesForPeriod(startDate, endDate).collect { expenses ->
+                            Log.d("BudgetViewModel", "Ukupno učitano ${expenses.size} rashoda za period")
+                            // Dodajemo log za datume
+                            if (expenses.isNotEmpty()) {
+                                val dates = expenses.take(5).map { 
+                                    dateFormat.format(it.getDateObject() ?: Date()) 
+                                }
+                                Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
+                            }
+                            _expenses.value = expenses
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) {
+                            // Игноришемо грешке отказивања корутине
+                            Log.d("BudgetViewModel", "Корутина за учитавање расхода је отказана")
+                        } else {
+                            throw e
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) {
+                // Игноришемо грешке отказивања корутине
+                Log.d("BudgetViewModel", "Корутина за учитавање расхода је отказана")
+            } else {
+                Log.e("BudgetViewModel", "Грешка при учитавању расхода", e)
+                _uiState.value = _uiState.value.copy(error = "Грешка при учитавању расхода: ${e.message}")
+            }
+        }
+        
+        Log.d("BudgetViewModel", "===== ZAVRŠENO UČITAVANJE RASHODA (INTERNO) =====")
+    }
+    
+    // Nova interna metoda koja učitava prihode bez postavljanja isLoading i bez pozivanja updateUiState
+    private suspend fun loadIncomesInternal() {
+        // Dodajem log poruku na početku učitavanja
+        Log.d("BudgetViewModel", "===== POČETAK UČITAVANJA PRIHODA (INTERNO) =====")
+        
+        // Користимо нове методе за учитавање прихода за одређени период
+        val currentPeriod = _selectedPeriod.value
+        val accountId = _selectedAccountId.value
+        
+        Log.d("BudgetViewModel", "Parametri za učitavanje prihoda: period=$currentPeriod, accountId=$accountId")
+        
+        try {
+            if (currentPeriod == Period.ALL) {
+                // За све периоде користимо getAllIncomes
+                if (accountId != null) {
+                    // Филтрирамо по рачуну
+                    try {
+                        Log.d("BudgetViewModel", "Učitavam SVE prihode i filtriram po računu: $accountId")
+                        incomeRepository.getAllIncomes().collect { allIncomes ->
+                            val filteredIncomes = allIncomes.filter { income ->
+                                income.accountId == accountId
+                            }
+                            Log.d("BudgetViewModel", "Ukupno učitano ${allIncomes.size} prihoda, nakon filtriranja: ${filteredIncomes.size}")
+                            // Dodajemo log za datume
+                            if (filteredIncomes.isNotEmpty()) {
+                                val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                val dates = filteredIncomes.take(5).map { 
+                                    dateFormat.format(it.getDateObject() ?: Date()) 
+                                }
+                                Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
+                            }
+                            _incomes.value = filteredIncomes
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) {
+                            // Игноришемо грешке отказивања корутине
+                            Log.d("BudgetViewModel", "Корутина за учитавање прихода је отказана")
+                        } else {
+                            throw e
+                        }
+                    }
+                } else {
+                    // Сви рачуни
+                    try {
+                        Log.d("BudgetViewModel", "Učitavam SVE prihode za sve račune")
+                        incomeRepository.getAllIncomes().collect { incomes ->
+                            Log.d("BudgetViewModel", "Ukupno učitano ${incomes.size} prihoda za sve račune")
+                            // Dodajemo log za datume
+                            if (incomes.isNotEmpty()) {
+                                val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                val dates = incomes.take(5).map { 
+                                    dateFormat.format(it.getDateObject() ?: Date()) 
+                                }
+                                Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
+                            }
+                            _incomes.value = incomes
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) {
+                            // Игноришемо грешке отказивања корутине
+                            Log.d("BudgetViewModel", "Корутина за учитавање прихода је отказана")
+                        } else {
+                            throw e
+                        }
+                    }
+                }
+            } else {
+                // За остаle периоде користимо getIncomesForPeriod
+                val (startDate, endDate) = calculatePeriodDates(currentPeriod)
+                
+                Log.d("BudgetViewModel", "Учитавам приходе за период од $startDate до $endDate")
+                
+                if (accountId != null) {
+                    // Филтрирамо по рачуну и периоду - пошто нема готове методе, сами филтрирамо
+                    try {
+                        Log.d("BudgetViewModel", "Učitavam prihode za račun $accountId i filtriram po periodu")
+                        incomeRepository.getAllIncomes().collect { allIncomes ->
+                            Log.d("BudgetViewModel", "Učitano ${allIncomes.size} prihoda za račun pre filtriranja po datumu")
+                            val filteredIncomes = allIncomes.filter { income ->
+                                val incomeDate = income.getDateObject()
+                                incomeDate?.time ?: 0L >= startDate?.time ?: 0L && incomeDate?.time ?: 0L <= endDate?.time ?: 0L &&
+                                income.accountId == accountId
+                            }
+                            Log.d("BudgetViewModel", "Nakon filtriranja po datumu: ${filteredIncomes.size} prihoda")
+                            // Dodajemo log za datume
+                            if (filteredIncomes.isNotEmpty()) {
+                                val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                val dates = filteredIncomes.take(5).map { 
+                                    dateFormat.format(it.getDateObject() ?: Date()) 
+                                }
+                                Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
+                            }
+                            _incomes.value = filteredIncomes
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) {
+                            // Игноришемо грешке отказивања корутине
+                            Log.d("BudgetViewModel", "Корутина за учитавање прихода је отказана")
+                        } else {
+                            throw e
+                        }
+                    }
+                } else {
+                    // Сви рачуни за период
+                    try {
+                        Log.d("BudgetViewModel", "Učitavam prihode za SVE račune za određeni period")
+                        incomeRepository.getIncomesForPeriod(startDate, endDate).collect { incomes ->
+                            Log.d("BudgetViewModel", "Ukupno učitano ${incomes.size} prihoda za period")
+                            // Dodajemo log za datume
+                            if (incomes.isNotEmpty()) {
+                                val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                                val dates = incomes.take(5).map { 
+                                    dateFormat.format(it.getDateObject() ?: Date()) 
+                                }
+                                Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
+                            }
+                            _incomes.value = incomes
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) {
+                            // Игноришемо грешке отказивања корутине
+                            Log.d("BudgetViewModel", "Корутина за учитавање прихода је отказана")
+                        } else {
+                            throw e
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) {
+                // Игноришемо грешке отказивања корутине
+                Log.d("BudgetViewModel", "Корутина за учитавање прихода је отказана")
+            } else {
+                Log.e("BudgetViewModel", "Грешка при учитавању прихода", e)
+                _uiState.value = _uiState.value.copy(error = "Грешка при учитавању прихода: ${e.message}")
+            }
+        }
+        
+        Log.d("BudgetViewModel", "===== ZAVRŠENO UČITAVANJE PRIHODA (INTERNO) =====")
+    }
+    
+    // Postojeće metode loadExpenses i loadIncomes sada pozivaju interne metode i postavljaju isLoading
     private fun loadExpenses() {
         viewModelScope.launch {
             _isLoading.value = true
-            
-            // Dodajem log poruku na početku učitavanja
-            Log.d("BudgetViewModel", "===== POČETAK UČITAVANJA RASHODA =====")
-            
-            // Користимо нове методе за учитавање расхода за одређени период
-            val currentPeriod = _selectedPeriod.value
-            val accountId = _selectedAccountId.value
-            
-            Log.d("BudgetViewModel", "Parametri za učitavanje rashoda: period=$currentPeriod, accountId=$accountId")
-            
             try {
-                if (currentPeriod == Period.ALL) {
-                    // За све периоде користимо getAllExpenses
-                    if (accountId != null) {
-                        // Филтрирамо по рачуну
-                        try {
-                            Log.d("BudgetViewModel", "Učitavam SVE rashode i filtriram po računu: $accountId")
-                            expenseRepository.getAllExpenses().collect { allExpenses ->
-                                val filteredExpenses = allExpenses.filter { expense ->
-                                    expense.accountId == accountId
-                                }
-                                Log.d("BudgetViewModel", "Ukupno učitano ${allExpenses.size} rashoda, nakon filtriranja: ${filteredExpenses.size}")
-                                // Dodajemo log za datume
-                                if (filteredExpenses.isNotEmpty()) {
-                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-                                    val dates = filteredExpenses.take(5).map { 
-                                        dateFormat.format(it.getDateObject() ?: Date()) 
-                                    }
-                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
-                                }
-                                _expenses.value = filteredExpenses
-                                _isLoading.value = false
-                                
-                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
-                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _expenses na ${filteredExpenses.size} elemenata i pozivam updateUiState()")
-                                updateUiState()
-                            }
-                        } catch (e: Exception) {
-                            if (e is kotlinx.coroutines.CancellationException) {
-                                // Игноришемо грешке отказивања корутине
-                                Log.d("BudgetViewModel", "Корутина за учитавање расхода је отказана")
-                            } else {
-                                throw e
-                            }
-                        }
-                    } else {
-                        // Сви рачуни
-                        try {
-                            Log.d("BudgetViewModel", "Učitavam SVE rashode za sve račune")
-                            expenseRepository.getAllExpenses().collect { expenses ->
-                                Log.d("BudgetViewModel", "Ukupno učitano ${expenses.size} rashoda za sve račune")
-                                // Dodajemo log za datume
-                                if (expenses.isNotEmpty()) {
-                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-                                    val dates = expenses.take(5).map { 
-                                        dateFormat.format(it.getDateObject() ?: Date()) 
-                                    }
-                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
-                                }
-                                _expenses.value = expenses
-                                _isLoading.value = false
-                                
-                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
-                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _expenses na ${expenses.size} elemenata i pozivam updateUiState()")
-                                updateUiState()
-                            }
-                        } catch (e: Exception) {
-                            if (e is kotlinx.coroutines.CancellationException) {
-                                // Игноришемо грешке отказивања корутине
-                                Log.d("BudgetViewModel", "Корутина за учитавање расхода је отказана")
-                            } else {
-                                throw e
-                            }
-                        }
-                    }
-                } else {
-                    // За остале периоде користимо getExpensesForPeriod
-                    val (startDate, endDate) = calculatePeriodDates(currentPeriod)
-                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-                    
-                    Log.d("BudgetViewModel", "Учитавам расходе за период од ${dateFormat.format(startDate)} до ${dateFormat.format(endDate)}")
-                    
-                    if (accountId != null) {
-                        // Филтрирамо по рачуну и периоду - пошто нема готове методе, сами филтрирамо
-                        try {
-                            Log.d("BudgetViewModel", "Učitavam rashode za račun $accountId i filtriram po periodu")
-                            expenseRepository.getExpensesForAccount(accountId).collect { allExpensesForAccount ->
-                                Log.d("BudgetViewModel", "Učitano ${allExpensesForAccount.size} rashoda za račun pre filtriranja po datumu")
-                                val filteredExpenses = allExpensesForAccount.filter { expense ->
-                                    val expenseDate = expense.getDateObject()
-                                    expenseDate?.time ?: 0L >= startDate?.time ?: 0L && expenseDate?.time ?: 0L <= endDate?.time ?: 0L
-                                }
-                                Log.d("BudgetViewModel", "Nakon filtriranja po datumu: ${filteredExpenses.size} rashoda")
-                                // Dodajemo log za datume
-                                if (filteredExpenses.isNotEmpty()) {
-                                    val dates = filteredExpenses.take(5).map { 
-                                        dateFormat.format(it.getDateObject() ?: Date()) 
-                                    }
-                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
-                                }
-                                _expenses.value = filteredExpenses
-                                _isLoading.value = false
-                                
-                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
-                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _expenses na ${filteredExpenses.size} elemenata i pozivam updateUiState()")
-                                updateUiState()
-                            }
-                        } catch (e: Exception) {
-                            if (e is kotlinx.coroutines.CancellationException) {
-                                // Игноришемо грешке отказивања корутине
-                                Log.d("BudgetViewModel", "Корутина за учитавање расхода је отказана")
-                            } else {
-                                throw e
-                            }
-                        }
-                    } else {
-                        // Сви рачуни за период
-                        try {
-                            Log.d("BudgetViewModel", "Učitavam rashode za SVE račune za određeni period")
-                            expenseRepository.getExpensesForPeriod(startDate, endDate).collect { expenses ->
-                                Log.d("BudgetViewModel", "Ukupno učitano ${expenses.size} rashoda za period")
-                                // Dodajemo log za datume
-                                if (expenses.isNotEmpty()) {
-                                    val dates = expenses.take(5).map { 
-                                        dateFormat.format(it.getDateObject() ?: Date()) 
-                                    }
-                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 rashoda: $dates")
-                                }
-                                _expenses.value = expenses
-                                _isLoading.value = false
-                                
-                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
-                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _expenses na ${expenses.size} elemenata i pozivam updateUiState()")
-                                updateUiState()
-                            }
-                        } catch (e: Exception) {
-                            if (e is kotlinx.coroutines.CancellationException) {
-                                // Игноришемо грешке отказивања корутине
-                                Log.d("BudgetViewModel", "Корутина за учитавање расхода је отказана")
-                            } else {
-                                throw e
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) {
-                    // Игноришемо грешке отказивања корутине
-                    Log.d("BudgetViewModel", "Корутина за учитавање расхода је отказана")
-                } else {
-                    Log.e("BudgetViewModel", "Грешка при учитавању расхода", e)
-                    _uiState.value = _uiState.value.copy(error = "Грешка при учитавању расхода: ${e.message}")
-                }
+                loadExpensesInternal()
+                calculateBudgetUsage()
+                updateUiState()
+            } finally {
                 _isLoading.value = false
             }
-            
-            // Након учитавања расхода, ажурирамо проценат искоришћености буџета
-            calculateBudgetUsage()
         }
     }
     
     private fun loadIncomes() {
         viewModelScope.launch {
             _isLoading.value = true
-            
-            // Dodajem log poruku na početku učitavanja
-            Log.d("BudgetViewModel", "===== POČETAK UČITAVANJA PRIHODA =====")
-            
-            // Користимо нове методе за учитавање прихода за одређени период
-            val currentPeriod = _selectedPeriod.value
-            val accountId = _selectedAccountId.value
-            
-            Log.d("BudgetViewModel", "Parametri za učitavanje prihoda: period=$currentPeriod, accountId=$accountId")
-            
             try {
-                if (currentPeriod == Period.ALL) {
-                    // За све периоде користимо getAllIncomes
-                    if (accountId != null) {
-                        // Филтрирамо по рачуну
-                        try {
-                            Log.d("BudgetViewModel", "Učitavam SVE prihode i filtriram po računu: $accountId")
-                            incomeRepository.getAllIncomes().collect { allIncomes ->
-                                val filteredIncomes = allIncomes.filter { income ->
-                                    income.accountId == accountId
-                                }
-                                Log.d("BudgetViewModel", "Ukupno učitano ${allIncomes.size} prihoda, nakon filtriranja: ${filteredIncomes.size}")
-                                // Dodajemo log za datume
-                                if (filteredIncomes.isNotEmpty()) {
-                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-                                    val dates = filteredIncomes.take(5).map { 
-                                        dateFormat.format(it.getDateObject() ?: Date()) 
-                                    }
-                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
-                                }
-                                _incomes.value = filteredIncomes
-                                _isLoading.value = false
-                                
-                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
-                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _incomes na ${filteredIncomes.size} elemenata i pozivam updateUiState()")
-                                updateUiState()
-                            }
-                        } catch (e: Exception) {
-                            if (e is kotlinx.coroutines.CancellationException) {
-                                // Игноришемо грешке отказивања корутине
-                                Log.d("BudgetViewModel", "Корутина за учитавање прихода је отказана")
-                            } else {
-                                throw e
-                            }
-                        }
-                    } else {
-                        // Сви рачуни
-                        try {
-                            Log.d("BudgetViewModel", "Učitavam SVE prihode za sve račune")
-                            incomeRepository.getAllIncomes().collect { incomes ->
-                                Log.d("BudgetViewModel", "Ukupno učitano ${incomes.size} prihoda za sve račune")
-                                // Dodajemo log za datume
-                                if (incomes.isNotEmpty()) {
-                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-                                    val dates = incomes.take(5).map { 
-                                        dateFormat.format(it.getDateObject() ?: Date()) 
-                                    }
-                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
-                                }
-                                _incomes.value = incomes
-                                _isLoading.value = false
-                                
-                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
-                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _incomes na ${incomes.size} elemenata i pozivam updateUiState()")
-                                updateUiState()
-                            }
-                        } catch (e: Exception) {
-                            if (e is kotlinx.coroutines.CancellationException) {
-                                // Игноришемо грешке отказивања корутине
-                                Log.d("BudgetViewModel", "Корутина за учитавање прихода је отказана")
-                            } else {
-                                throw e
-                            }
-                        }
-                    }
-                } else {
-                    // За остале периоде користимо getIncomesForPeriod
-                    val (startDate, endDate) = calculatePeriodDates(currentPeriod)
-                    
-                    Log.d("BudgetViewModel", "Учитавам приходе за период од $startDate до $endDate")
-                    
-                    if (accountId != null) {
-                        // Филтрирамо по рачуну и периоду - пошто нема готове методе, сами филтрирамо
-                        try {
-                            Log.d("BudgetViewModel", "Učitavam prihode za račun $accountId i filtriram po periodu")
-                            incomeRepository.getAllIncomes().collect { allIncomes ->
-                                Log.d("BudgetViewModel", "Učitano ${allIncomes.size} prihoda za račun pre filtriranja po datumu")
-                                val filteredIncomes = allIncomes.filter { income ->
-                                    val incomeDate = income.getDateObject()
-                                    incomeDate?.time ?: 0L >= startDate?.time ?: 0L && incomeDate?.time ?: 0L <= endDate?.time ?: 0L &&
-                                    income.accountId == accountId
-                                }
-                                Log.d("BudgetViewModel", "Nakon filtriranja po datumu: ${filteredIncomes.size} prihoda")
-                                // Dodajemo log za datume
-                                if (filteredIncomes.isNotEmpty()) {
-                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-                                    val dates = filteredIncomes.take(5).map { 
-                                        dateFormat.format(it.getDateObject() ?: Date()) 
-                                    }
-                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
-                                }
-                                _incomes.value = filteredIncomes
-                                _isLoading.value = false
-                                
-                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
-                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _incomes na ${filteredIncomes.size} elemenata i pozivam updateUiState()")
-                                updateUiState()
-                            }
-                        } catch (e: Exception) {
-                            if (e is kotlinx.coroutines.CancellationException) {
-                                // Игноришемо грешке отказивања корутине
-                                Log.d("BudgetViewModel", "Корутина за учитавање прихода је отказана")
-                            } else {
-                                throw e
-                            }
-                        }
-                    } else {
-                        // Сви рачуни за период
-                        try {
-                            Log.d("BudgetViewModel", "Učitavam prihode za SVE račune za određeni period")
-                            incomeRepository.getIncomesForPeriod(startDate, endDate).collect { incomes ->
-                                Log.d("BudgetViewModel", "Ukupno učitano ${incomes.size} prihoda za period")
-                                // Dodajemo log za datume
-                                if (incomes.isNotEmpty()) {
-                                    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-                                    val dates = incomes.take(5).map { 
-                                        dateFormat.format(it.getDateObject() ?: Date()) 
-                                    }
-                                    Log.d("BudgetViewModel", "Primeri datuma prvih 5 prihoda: $dates")
-                                }
-                                _incomes.value = incomes
-                                _isLoading.value = false
-                                
-                                // KRITIČNI DEO: Moramo obavezno pozvati updateUiState()
-                                Log.d("BudgetViewModel", "VAŽNO: Postavljam vrednost _incomes na ${incomes.size} elemenata i pozivam updateUiState()")
-                                updateUiState()
-                            }
-                        } catch (e: Exception) {
-                            if (e is kotlinx.coroutines.CancellationException) {
-                                // Игноришемо грешке отказивања корутине
-                                Log.d("BudgetViewModel", "Корутина за учитавање прихода је отказана")
-                            } else {
-                                throw e
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) {
-                    // Игноришемо грешке отказивања корутине
-                    Log.d("BudgetViewModel", "Корутина за учитавање прихода је отказана")
-                } else {
-                    Log.e("BudgetViewModel", "Грешка при учитавању прихода", e)
-                    _uiState.value = _uiState.value.copy(error = "Грешка при учитавању прихода: ${e.message}")
-                }
+                loadIncomesInternal()
+                updateUiState()
+            } finally {
                 _isLoading.value = false
             }
         }

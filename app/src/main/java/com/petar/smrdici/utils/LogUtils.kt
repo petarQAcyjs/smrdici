@@ -1,6 +1,7 @@
 package com.petar.smrdici.utils
 
 import android.util.Log
+import java.util.*
 
 /**
  * Utility klasa za optimizovano logovanje
@@ -170,6 +171,7 @@ object LogUtils {
         
         // Formatiramo statistiku za bolju čitljivost
         val formattedStats = String.format(
+            Locale.getDefault(),
             "$prefix Statistika (stavki: %d): ukupno=%.2f, prosek=%.2f, min=%.2f, max=%.2f",
             count, sum, avg, min, max
         )
@@ -198,6 +200,7 @@ object LogUtils {
                 val percentage = (distribution[i] * 100.0 / count).toInt()
                 
                 Log.d(tag, String.format(
+                    Locale.getDefault(),
                     "$prefix Opseg %.2f-%.2f: %d stavki (%d%%)",
                     lowerBound, upperBound, distribution[i], percentage
                 ))

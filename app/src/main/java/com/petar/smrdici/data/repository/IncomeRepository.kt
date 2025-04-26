@@ -56,8 +56,23 @@ class IncomeRepository private constructor() {
             
             val incomeToAdd = income.copy(id = incomeId, date = validDate)
             
+            // Pretvaramo validDate string u Date objekat, pa u Timestamp za Firebase
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val dateObject = dateFormat.parse(validDate) ?: Date()
+            
+            // Kreiramo mapu podataka koja će biti sačuvana u Firestore
+            val incomeMap = mapOf(
+                "id" to incomeId,
+                "amount" to incomeToAdd.amount,
+                "description" to incomeToAdd.description,
+                "category" to incomeToAdd.category,
+                "date" to com.google.firebase.Timestamp(dateObject), // Koristimo Timestamp umesto String
+                "accountId" to incomeToAdd.accountId
+            )
+            
             // Чувамо приход у бази података
-            userIncomesCollection.document(incomeId).set(incomeToAdd).await()
+            userIncomesCollection.document(incomeId).set(incomeMap).await()
             
             // Ажурирамо баланс рачуна (повећавамо га) само ако је затражено
             if (updateAccountBalance) {
@@ -517,44 +532,55 @@ class IncomeRepository private constructor() {
     
     /**
      * Pomoćna funkcija za dobijanje datuma iz Firestore dokumenta
-     * koja podržava različite formate datuma (String, Timestamp, Date)
      */
     private fun getDateFromDocument(doc: DocumentSnapshot): String {
         val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
         dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
         
         try {
-            // IZMENA: Prvo pokušaj dobiti kao Timestamp (preferirani format)
-            val timestamp = doc.getTimestamp("date")
-            if (timestamp != null) {
-                return dateFormat.format(timestamp.toDate())
-            }
+            // Prvo dobavljamo vrednost kao Object da bismo proverili tip
+            val dateField = doc.get("date")
             
-            // Zatim, bezbedno pokušaj dobiti kao Date
-            val date = doc.getDate("date")
-            if (date != null) {
-                return dateFormat.format(date)
-            }
-            
-            // Na kraju pokušaj dobiti kao String
-            try {
-                val dateStr = doc.getString("date")
-                if (dateStr != null && dateStr.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
-                    return dateStr
+            when (dateField) {
+                is com.google.firebase.Timestamp -> {
+                    return dateFormat.format(dateField.toDate())
                 }
-            } catch (e: Exception) {
-                // Ignorišemo grešku za getString jer znamo da polje možda nije String
-                LogUtils.d("IncomeRepository", "Datum nije String: ${e.message}", category = "income")
+                is String -> {
+                    // Ako je string u očekivanom formatu, vratimo ga direktno
+                    if (dateField.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                        return dateField
+                    }
+                    // Pokušaj parsiranje ako je u nekom drugom string formatu
+                    return try {
+                        val parsedDate = dateFormat.parse(dateField)
+                        dateFormat.format(parsedDate ?: Date())
+                    } catch (e: Exception) {
+                        LogUtils.w("IncomeRepository", 
+                            "Neispravan format string datuma za dokument ID: ${doc.id}, koristim današnji datum", 
+                            category = "income")
+                        dateFormat.format(Date())
+                    }
+                }
+                is java.util.Date -> {
+                    return dateFormat.format(dateField)
+                }
+                null -> {
+                    LogUtils.w("IncomeRepository", 
+                        "Datum je null za dokument ID: ${doc.id}, koristim današnji datum", 
+                        category = "income")
+                    return dateFormat.format(Date())
+                }
+                else -> {
+                    LogUtils.w("IncomeRepository", 
+                        "Nepoznat tip datuma (${dateField.javaClass.name}) za dokument ID: ${doc.id}, koristim današnji datum", 
+                        category = "income")
+                    return dateFormat.format(Date())
+                }
             }
-            
-            // Ako nije nijedan od podržanih tipova, vrati današnji datum
-            LogUtils.w("IncomeRepository", "Datum nije u prepoznatom formatu za dokument ID: ${doc.id}, koristim današnji datum", 
-                category = "income")
-            return dateFormat.format(Date())
         } catch (e: Exception) {
-            LogUtils.e("IncomeRepository", "Greška pri konverziji datuma iz dokumenta ID: ${doc.id}", e, 
+            LogUtils.e("IncomeRepository", 
+                "Greška pri konverziji datuma iz dokumenta ID: ${doc.id}", e, 
                 category = "income")
-            // U slučaju greške, vrati današnji datum
             return dateFormat.format(Date())
         }
     }

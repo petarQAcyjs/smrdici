@@ -504,40 +504,58 @@ class ExpenseRepository private constructor() {
         }
     }
     
-    // Na kraju klase dodati helper funkciju za konverziju datuma
+    // На kraju klase dodati helper funkciju за конверзију датума
     /**
      * Pomoćna funkcija za dobijanje datuma iz Firestore dokumenta
-     * koja podržava različite formate datuma (String, Timestamp, Date)
      */
     private fun getDateFromDocument(doc: DocumentSnapshot): String {
         val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
         dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
         
         try {
-            // Prvo pokušaj dobiti kao Timestamp (preferirani format)
-            val timestamp = doc.getTimestamp("date")
-            if (timestamp != null) {
-                return dateFormat.format(timestamp.toDate())
-            }
+            // Prvo dobavljamo vrednost kao Object da bismo proverili tip
+            val dateField = doc.get("date")
             
-            // Ako nije Timestamp, pokušaj dobiti kao String
-            val dateStr = doc.getString("date")
-            if (dateStr != null && dateStr.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
-                return dateStr
+            when (dateField) {
+                is com.google.firebase.Timestamp -> {
+                    return dateFormat.format(dateField.toDate())
+                }
+                is String -> {
+                    // Ako je string u očekivanom formatu, vratimo ga direktno
+                    if (dateField.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                        return dateField
+                    }
+                    // Pokušaj parsiranje ako je u nekom drugom string formatu
+                    return try {
+                        val parsedDate = dateFormat.parse(dateField)
+                        dateFormat.format(parsedDate ?: Date())
+                    } catch (e: Exception) {
+                        LogUtils.w("ExpenseRepository", 
+                            "Neispravan format string datuma za dokument ID: ${doc.id}, koristim današnji datum", 
+                            category = "expense")
+                        dateFormat.format(Date())
+                    }
+                }
+                is java.util.Date -> {
+                    return dateFormat.format(dateField)
+                }
+                null -> {
+                    LogUtils.w("ExpenseRepository", 
+                        "Datum je null za dokument ID: ${doc.id}, koristim današnji datum", 
+                        category = "expense")
+                    return dateFormat.format(Date())
+                }
+                else -> {
+                    LogUtils.w("ExpenseRepository", 
+                        "Nepoznat tip datuma (${dateField.javaClass.name}) za dokument ID: ${doc.id}, koristim današnji datum", 
+                        category = "expense")
+                    return dateFormat.format(Date())
+                }
             }
-            
-            // Ako nije String, pokušaj dobiti kao Date
-            val date = doc.getDate("date")
-            if (date != null) {
-                return dateFormat.format(date)
-            }
-            
-            // Ako nije nijedan od podržanih tipova, vrati današnji datum
-            LogUtils.w("ExpenseRepository", "Datum nije u prepoznatom formatu za dokument ID: ${doc.id}, koristim današnji datum")
-            return dateFormat.format(Date())
         } catch (e: Exception) {
-            LogUtils.e("ExpenseRepository", "Greška pri konverziji datuma iz dokumenta ID: ${doc.id}", e)
-            // U slučaju greške, vrati današnji datum
+            LogUtils.e("ExpenseRepository", 
+                "Greška pri konverziji datuma iz dokumenta ID: ${doc.id}", e, 
+                category = "expense")
             return dateFormat.format(Date())
         }
     }

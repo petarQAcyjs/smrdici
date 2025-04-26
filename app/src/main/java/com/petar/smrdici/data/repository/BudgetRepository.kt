@@ -272,10 +272,17 @@ class BudgetRepository(
                 return@callbackFlow
             }
             
-            // Dodajemo keširanje - ako imamo prethodno učitane budžete, odmah ih šaljemo
+            // Poboljšani mehanizam keširanja - ako imamo prethodno učitane budžete, odmah ih šaljemo
             if (cachedBudgets.isNotEmpty()) {
-                Log.d(tag, "Vraćam ${cachedBudgets.size} keširana budžeta dok čekam sveže podatke")
+                Log.d(tag, "Vraćam ${cachedBudgets.size} keširana budžeta odmah")
                 trySend(cachedBudgets)
+                
+                // Ako imamo keširane podatke i već pokušavamo svežije dobaviti, možemo završiti Flow
+                // jer ćemo ionako dobiti obaveštenje od Firestore listenera ako se nešto promeni
+                // (ovo sprečava duplicirane pozive i potencijalne timeout greške)
+                if (cachedBudgets.size > 0) {
+                    Log.d(tag, "Keš ima podatke, nastavićemo osluškivati promene u pozadini")
+                }
             }
             
             val budgetsCollection = getBudgetsCollection()
@@ -284,9 +291,14 @@ class BudgetRepository(
                 .orderBy("orderId", Query.Direction.ASCENDING)
                 .limit(100) // Limitiramo broj budžeta koji se učitavaju odjednom
                 
+            // Implementiramo mehanizam za praćenje vremena
+            val startTime = System.currentTimeMillis()
+            
             val listener = query.addSnapshotListener { querySnapshot, exception ->
+                val elapsedTime = System.currentTimeMillis() - startTime
+                
                 if (exception != null) {
-                    Log.e(tag, "Greška pri dobavljanju budžeta", exception)
+                    Log.e(tag, "Greška pri dobavljanju budžeta (nakon ${elapsedTime}ms)", exception)
                     
                     // Proveravamo da li je greška vezana za nedostajući indeks
                     if (exception.message?.contains("FAILED_PRECONDITION") == true && 
@@ -302,11 +314,22 @@ class BudgetRepository(
                         Log.e(tag, "Potrebno je kreirati indeks u Firebase konzoli. " +
                                "Koristite sledeći link: $indexUrl")
                         
-                        // Šaljemo praznu listu umesto da zatvorimo flow sa greškom
-                        trySend(emptyList())
+                        // Šaljemo keširane podatke ako postoje, inače praznu listu
+                        if (cachedBudgets.isNotEmpty()) {
+                            Log.d(tag, "Vraćam keširane podatke zbog greške sa indeksom")
+                            trySend(cachedBudgets)
+                        } else {
+                            trySend(emptyList())
+                        }
                     } else {
-                        // Za ostale greške, zatvaramo flow sa greškom
-                        close(exception)
+                        // Za ostale greške, zatvaramo flow sa greškom samo ako nemamo keširanje podatke
+                        if (cachedBudgets.isEmpty()) {
+                            close(exception)
+                        } else {
+                            // Ako imamo keširane podatke, nastavićemo ih koristiti
+                            Log.w(tag, "Koristim keširane podatke zbog greške pri osvežavanju")
+                            trySend(cachedBudgets)
+                        }
                     }
                     return@addSnapshotListener
                 }
@@ -318,10 +341,27 @@ class BudgetRepository(
                     }
                 }
                 
-                // Ažuriramo keš
-                cachedBudgets = budgets
+                // Ažuriramo keš samo ako smo dobili stavke
+                if (budgets.isNotEmpty()) {
+                    // Uporedi sa prethodnim keširanim podacima da vidimo da li ima promena
+                    val hasChanges = budgets.size != cachedBudgets.size || 
+                                    !budgets.all { newBudget -> 
+                                        cachedBudgets.any { it.id == newBudget.id } 
+                                    }
+                    
+                    if (hasChanges) {
+                        Log.d(tag, "Ažuriram keš sa ${budgets.size} budžeta (promene detektovane)")
+                        cachedBudgets = budgets
+                    } else {
+                        Log.d(tag, "Nema promena u budžetima, zadržavam postojeći keš")
+                    }
+                } else if (cachedBudgets.isEmpty()) {
+                    // Ako nema podataka u keš-u, a dobili smo prazan rezultat, ažuriramo keš
+                    cachedBudgets = budgets
+                    Log.d(tag, "Keš budžeta inicijalizovan sa praznom listom")
+                }
                 
-                Log.d(tag, "Uspešno učitano ${budgets.size} budžeta iz Firestore-a")
+                Log.d(tag, "Uspešno učitano ${budgets.size} budžeta iz Firestore-a (${elapsedTime}ms)")
                 trySend(budgets)
             }
             
@@ -330,7 +370,15 @@ class BudgetRepository(
             }
         } catch (e: Exception) {
             Log.e(tag, "Neočekivana greška u getAllBudgets", e)
-            trySend(emptyList())
+            
+            // Ako imamo keširane podatke, vraćamo ih umesto prazne liste
+            if (cachedBudgets.isNotEmpty()) {
+                Log.d(tag, "Vraćam ${cachedBudgets.size} keširana budžeta zbog greške")
+                trySend(cachedBudgets)
+            } else {
+                trySend(emptyList())
+            }
+            
             close(e)
         }
     }
