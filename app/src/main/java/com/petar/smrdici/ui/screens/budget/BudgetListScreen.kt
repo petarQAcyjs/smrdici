@@ -22,6 +22,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
@@ -276,10 +278,10 @@ fun PeriodNavigationControls(
 @Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
 @Composable
 fun BudgetListScreen(
-    navController: NavController,
     budgetsViewModel: BudgetsViewModel = viewModel(factory = BudgetsViewModel.Factory(LocalContext.current)),
     budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current)),
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = viewModel(),
+    navController: NavController
 ) {
     // Za snackbar poruke
     val snackbarHostState = remember { SnackbarHostState() }
@@ -471,8 +473,12 @@ fun BudgetListScreen(
                 FloatingActionButton(
                     onClick = { 
                         when (selectedTabIndex) {
-                            0 -> navController.navigate(Screen.AddExpense.route)
-                            1 -> navController.navigate(Screen.AddIncome.route)
+                            0 -> {
+                                // Implement the logic to navigate to add expense screen
+                            }
+                            1 -> {
+                                // Implement the logic to navigate to add income screen
+                            }
                         }
                     },
                     containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -732,12 +738,20 @@ fun BudgetListScreen(
                                     is Expense -> ExpenseListItem(
                                         expense = transaction,
                                         formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
-                                        accounts = accounts
+                                        accounts = accounts,
+                                        onEdit = { expense -> 
+                                            navController.navigate(Screen.EditExpense.route.replace("{expenseId}", expense.id))
+                                        },
+                                        onDelete = { expense -> budgetViewModel.deleteExpense(expense.id) }
                                     )
                                     is Income -> IncomeListItem(
                                         income = transaction,
                                         formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
-                                        accounts = accounts
+                                        accounts = accounts,
+                                        onEdit = { income -> 
+                                            navController.navigate(Screen.EditIncome.route.replace("{incomeId}", income.id))
+                                        },
+                                        onDelete = { income -> budgetViewModel.deleteIncome(income.id) }
                                     )
                                     else -> {
                                         LogUtils.e("BudgetListScreen", "Nepoznat tip transakcije: ${transaction.javaClass.name}")
@@ -986,12 +1000,20 @@ fun BudgetListScreen(
                                     is Expense -> ExpenseListItem(
                                         expense = transaction,
                                         formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
-                                        accounts = accounts
+                                        accounts = accounts,
+                                        onEdit = { expense -> 
+                                            navController.navigate(Screen.EditExpense.route.replace("{expenseId}", expense.id))
+                                        },
+                                        onDelete = { expense -> budgetViewModel.deleteExpense(expense.id) }
                                     )
                                     is Income -> IncomeListItem(
                                         income = transaction,
                                         formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
-                                        accounts = accounts
+                                        accounts = accounts,
+                                        onEdit = { income -> 
+                                            navController.navigate(Screen.EditIncome.route.replace("{incomeId}", income.id))
+                                        },
+                                        onDelete = { income -> budgetViewModel.deleteIncome(income.id) }
                                     )
                                     else -> {
                                         LogUtils.e("BudgetListScreen", "Nepoznat tip transakcije: ${transaction.javaClass.name}")
@@ -1166,31 +1188,28 @@ enum class SortOrder {
 fun ExpenseListItem(
     expense: Expense,
     formatAmount: (Double) -> String,
-    accounts: List<Account>
+    accounts: List<Account>,
+    onEdit: (Expense) -> Unit,
+    onDelete: (Expense) -> Unit
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
     val account = accounts.find { it.id == expense.accountId }
-    // Koristimo getFormattedDate metodu za prikazivanje datuma
-    val dateFormatted = expense.getFormattedDate()
-    
-    // Koristimo CategoryManager za dobijanje imena kategorije
-    val context = LocalContext.current
-    val categoryManager = CategoryManager.getInstance(context)
-    val categoryName = categoryManager.getExpenseCategoryDisplayName(expense.category)
+    val categoryName = expense.category
+    val dateFormatted = expense.date
     
     Card(
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF303436)
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
+            containerColor = Color(0xFF2C2C2C)
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Levi deo - kategorija i opis
@@ -1229,14 +1248,58 @@ fun ExpenseListItem(
                 }
             }
             
-            // Desni deo - iznos
-            Text(
-                text = formatAmount(expense.amount),
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFFFF9800), // Narandžasta za troškove
-                fontWeight = FontWeight.Bold
-            )
+            // Desni deo - iznos i akcije
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = formatAmount(expense.amount),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFFFF9800), // Narandžasta za troškove
+                    fontWeight = FontWeight.Bold
+                )
+                
+                IconButton(onClick = { onEdit(expense) }) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Измени расход",
+                        tint = Color.White
+                    )
+                }
+                
+                IconButton(onClick = { showDeleteDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Обриши расход",
+                        tint = Color.Red
+                    )
+                }
+            }
         }
+    }
+    
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Обриши расход") },
+            text = { Text("Да ли сте сигурни да желите да обришете овај расход?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(expense)
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("Обриши", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Откажи")
+                }
+            }
+        )
     }
 }
 
@@ -1244,31 +1307,28 @@ fun ExpenseListItem(
 fun IncomeListItem(
     income: Income,
     formatAmount: (Double) -> String,
-    accounts: List<Account>
+    accounts: List<Account>,
+    onEdit: (Income) -> Unit,
+    onDelete: (Income) -> Unit
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
     val account = accounts.find { it.id == income.accountId }
-    // Koristimo getFormattedDate metodu za prikazivanje datuma
-    val dateFormatted = income.getFormattedDate()
-    
-    // Koristimo CategoryManager za dobijanje imena kategorije
-    val context = LocalContext.current
-    val categoryManager = CategoryManager.getInstance(context)
-    val categoryName = categoryManager.getIncomeCategoryDisplayName(income.category)
+    val categoryName = income.category
+    val dateFormatted = income.date
     
     Card(
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF303436)
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
+            containerColor = Color(0xFF2C2C2C)
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Levi deo - kategorija i opis
@@ -1307,13 +1367,57 @@ fun IncomeListItem(
                 }
             }
             
-            // Desni deo - iznos
-            Text(
-                text = formatAmount(income.amount),
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFF4CAF50), // Zelena za prihode
-                fontWeight = FontWeight.Bold
-            )
+            // Desni deo - iznos i akcije
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = formatAmount(income.amount),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFF4CAF50), // Zelena za prihode
+                    fontWeight = FontWeight.Bold
+                )
+                
+                IconButton(onClick = { onEdit(income) }) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Измени приход",
+                        tint = Color.White
+                    )
+                }
+                
+                IconButton(onClick = { showDeleteDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Обриши приход",
+                        tint = Color.Red
+                    )
+                }
+            }
         }
+    }
+    
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Обриши приход") },
+            text = { Text("Да ли сте сигурни да желите да обришете овај приход?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(income)
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("Обриши", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Откажи")
+                }
+            }
+        )
     }
 } 

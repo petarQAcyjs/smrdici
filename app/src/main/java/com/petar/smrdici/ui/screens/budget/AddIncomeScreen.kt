@@ -144,7 +144,7 @@ fun AddIncomeScreen(
         
         // Валидација износа
         if (amount.isEmpty()) {
-            amountError = "Износ је обавезан"
+            amountError = "Унесите износ"
             isValid = false
         } else {
             try {
@@ -155,15 +155,15 @@ fun AddIncomeScreen(
                 } else {
                     amountError = ""
                 }
-            } catch (_: Exception) {
-                amountError = "Неисправан износ"
+            } catch (e: NumberFormatException) {
+                amountError = "Невалидан формат износа"
                 isValid = false
             }
         }
         
         // Валидација категорије
         if (selectedCategory == null) {
-            categoryError = "Категорија је обавезна"
+            categoryError = "Изаберите категорију"
             isValid = false
         } else {
             categoryError = ""
@@ -171,7 +171,7 @@ fun AddIncomeScreen(
         
         // Валидација рачуна
         if (selectedAccountId.isEmpty()) {
-            accountError = "Рачун је обавезан"
+            accountError = "Изаберите рачун"
             isValid = false
         } else {
             accountError = ""
@@ -182,85 +182,78 @@ fun AddIncomeScreen(
     
     // Функција за чување прихода
     fun saveIncome() {
-        if (!validateForm()) {
-            return
-        }
+        if (!validateForm()) return
         
         isLoading = true
         
-        // Форматирамо датум у "YYYY-MM-DD" формат
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        dateFormat.timeZone = TimeZone.getTimeZone("UTC")
-        val formattedDate = dateFormat.format(Date(selectedDate))
-        
-        // Креирамо нови објекат прихода
-        val income = Income(
-            amount = amount.toDouble(),
-            description = description,
-            category = selectedCategory?.name ?: IncomeCategory.OTHER.name,
-            date = formattedDate,
-            accountId = selectedAccountId
-        )
-        
-        Log.d("AddIncomeScreen", "Чувам приход: $income")
-        
-        // Користимо viewModelScope уместо локалног scope-а из композиције
-        // Ово спречава отказивање корутине када се композиција промени
         budgetViewModel.viewModelScope.launch {
             try {
-                // Дефинишемо променљиву резултата пре NonCancellable контекста
-                val result = withContext(NonCancellable) {
-                    // Користимо NonCancellable контекст да спречимо отказивање операције чувања
-                    // Ово је важно за операције које морају да се заврше и не смеју бити прекинуте
-                    // чак и ако се корутина отказује (нпр. због навигације)
-                    
-                    // Користимо budgetViewModel уместо директног приступа репозиторијуму
-                    val saveResult = budgetViewModel.addIncome(income)
-                    
-                    if (saveResult.isSuccess) {
-                        Log.d("AddIncomeScreen", "Приход је успешно сачуван")
-                    } else {
-                        // Додадимо опцију да логујемо грешку са додатним информацијама
-                        val exception = saveResult.exceptionOrNull()
-                        Log.e("AddIncomeScreen", "Грешка при чувању прихода: ${exception?.message}", exception)
-                    }
-                    
-                    // Враћамо резултат из NonCancellable блока
-                    saveResult
-                }
+                val amountValue = amount.toDouble()
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+                val dateStr = dateFormat.format(Date(selectedDate))
                 
-                // UI ажурирања извршавамо на главној нити, ван NonCancellable контекста
-                withContext(Dispatchers.Main) {
-                    if (result.isSuccess) {
-                        snackbarHostState.showSnackbar("Приход је успешно сачуван")
-                        // Враћамо се на претходни екран
-                        navController.popBackStack()
-                    } else {
-                        snackbarHostState.showSnackbar("Грешка при чувању прихода: ${result.exceptionOrNull()?.message}")
-                    }
-                    
-                    isLoading = false
-                }
-            } catch (@Suppress("UNUSED_PARAMETER") e: Exception) {
-                // Обрађујемо изузетке, али игноришемо JobCancellationException који се нормално дешава при навигацији
-                if (e is kotlinx.coroutines.CancellationException) {
-                    // Само логујемо, не приказујемо грешку кориснику јер је успешно сачувано
-                    Log.d("AddIncomeScreen", "Корутина је отказана након успешног чувања: ${e.message}")
+                val income = Income(
+                    id = "",
+                    amount = amountValue,
+                    description = description,
+                    category = selectedCategory!!.name,
+                    date = dateStr,
+                    accountId = selectedAccountId
+                )
+                
+                val result = budgetViewModel.addIncome(income)
+                
+                if (result.isSuccess) {
+                    snackbarHostState.showSnackbar("Приход је успешно сачуван")
+                    navController.popBackStack()
                 } else {
-                    // За остале грешке показујемо поруку
-                    Log.e("AddIncomeScreen", "Грешка при чувању прихода", e)
-                    
-                    withContext(Dispatchers.Main + NonCancellable) {
-                        snackbarHostState.showSnackbar("Грешка при чувању прихода: ${e.message}")
-                        isLoading = false
-                    }
+                    snackbarHostState.showSnackbar("Грешка при чувању прихода: ${result.exceptionOrNull()?.message}")
                 }
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Грешка при чувању прихода: ${e.message}")
+            } finally {
+                isLoading = false
             }
         }
     }
     
-    // Форматер за датум
-    val dateFormatter = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+    // Формат датума
+    val dateFormatter = remember {
+        SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+    }
+    
+    // DatePicker дијалог
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDate
+        )
+        
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            selectedDate = it
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDatePicker = false }
+                ) {
+                    Text("Откажи")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
     
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -488,40 +481,8 @@ fun AddIncomeScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isLoading
             ) {
-                Text("Сачувај приход")
+                Text("Сачувај")
             }
-            
-            Spacer(modifier = Modifier.height(32.dp))
-        }
-    }
-    
-    // Дијалог за избор датума
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate)
-        
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let {
-                            selectedDate = it
-                        }
-                        showDatePicker = false
-                    }
-                ) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showDatePicker = false }
-                ) {
-                    Text("Откажи")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
         }
     }
 } 

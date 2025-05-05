@@ -111,6 +111,13 @@ class BudgetViewModel(
     // Minimalno vreme između uzastopnih poziva (debounce period u ms)
     private val DEBOUNCE_PERIOD_MS = 1000L
     
+    // Add missing state for categories
+    private val _expenseCategories = MutableStateFlow<List<String>>(emptyList())
+    val expenseCategories: StateFlow<List<String>> = _expenseCategories.asStateFlow()
+
+    private val _incomeCategories = MutableStateFlow<List<String>>(emptyList())
+    val incomeCategories: StateFlow<List<String>> = _incomeCategories.asStateFlow()
+    
     init {
         // Додајемо log за početak inicijalizacije
         Log.d("BudgetViewModel", "===== INICIJALIZACIJA BUDGET VIEW MODELA =====")
@@ -143,6 +150,10 @@ class BudgetViewModel(
         
         // Учитавамо рачуне
         loadAccounts()
+        
+        // Add initialization of categories
+        _expenseCategories.value = listOf("Food", "Transport", "Bills", "Entertainment", "Shopping", "Other")
+        _incomeCategories.value = listOf("Salary", "Bonus", "Investment", "Gift", "Other")
     }
     
     @Suppress("UNUSED")
@@ -1292,5 +1303,27 @@ class BudgetViewModel(
         }
         
         return Pair(startDate, endDate)
+    }
+
+    fun updateExpense(expense: Expense) {
+        viewModelScope.launch {
+            try {
+                expenseRepository.updateExpense(expense)
+                loadTransactions()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message ?: "Failed to update expense")
+            }
+        }
+    }
+
+    fun updateIncome(income: Income) {
+        viewModelScope.launch {
+            try {
+                incomeRepository.updateIncome(income)
+                loadTransactions()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message ?: "Failed to update income")
+            }
+        }
     }
 } 
