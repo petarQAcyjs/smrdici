@@ -68,6 +68,8 @@ fun NavGraph(
             }
         }
     }
+    // Create BudgetViewModel ONCE here and share it
+    val budgetViewModel: BudgetViewModel = viewModel(factory = budgetViewModelFactory)
 
     NavHost(
         navController = navController,
@@ -85,14 +87,14 @@ fun NavGraph(
         
         composable(route = Screen.Budget.route) {
             MainLayout {
-                BudgetScreen(navController = navController)
+                BudgetScreen(navController = navController, budgetViewModel = budgetViewModel)
             }
         }
         
         // Nova ruta za listu budžeta
         composable(route = Screen.BudgetList.route) {
             MainLayout {
-                BudgetListScreen(navController = navController)
+                BudgetListScreen(navController = navController, budgetViewModel = budgetViewModel)
             }
         }
         
@@ -226,20 +228,18 @@ fun NavGraph(
             )
         ) { backStackEntry ->
             val expenseId = backStackEntry.arguments?.getString("expenseId") ?: ""
-            Log.d("NavGraph", "Navigated to EditExpenseScreen with expenseId=$expenseId")
-            val budgetViewModel: BudgetViewModel = viewModel(factory = budgetViewModelFactory)
             val expenses = budgetViewModel.expenses.value
-            Log.d("NavGraph", "Current expenses list: ${'$'}{expenses.map { it.id }}")
+            Log.d("NavGraph", "Current expenses list: ${expenses.map { it.id }}")
             val expense = expenses.find { it.id == expenseId }
             if (expense != null) {
-                Log.d("NavGraph", "Expense found: ${'$'}expense")
+                Log.d("NavGraph", "Expense found: $expense")
                 EditExpenseScreen(
                     expense = expense,
                     onNavigateBack = { navController.popBackStack() },
                     budgetViewModel = budgetViewModel
                 )
             } else {
-                Log.e("NavGraph", "Expense with id $expenseId not found! Current expense IDs: ${'$'}{expenses.map { it.id }}")
+                Log.e("NavGraph", "Expense with id $expenseId not found! Current expense IDs: ${expenses.map { it.id }}")
             }
         }
         
@@ -252,20 +252,18 @@ fun NavGraph(
             )
         ) { backStackEntry ->
             val incomeId = backStackEntry.arguments?.getString("incomeId") ?: ""
-            Log.d("NavGraph", "Navigated to EditIncomeScreen with incomeId=$incomeId")
-            val budgetViewModel: BudgetViewModel = viewModel(factory = budgetViewModelFactory)
             val incomes = budgetViewModel.incomes.value
-            Log.d("NavGraph", "Current incomes list: ${'$'}{incomes.map { it.id }}")
+            Log.d("NavGraph", "Current incomes list: ${incomes.map { it.id }}")
             val income = incomes.find { it.id == incomeId }
             if (income != null) {
-                Log.d("NavGraph", "Income found: ${'$'}income")
+                Log.d("NavGraph", "Income found: $income")
                 EditIncomeScreen(
                     income = income,
                     onNavigateBack = { navController.popBackStack() },
                     budgetViewModel = budgetViewModel
                 )
             } else {
-                Log.e("NavGraph", "Income with id ${'$'}incomeId not found!")
+                Log.e("NavGraph", "Income with id $incomeId not found! Current income IDs: ${incomes.map { it.id }}")
             }
         }
     }

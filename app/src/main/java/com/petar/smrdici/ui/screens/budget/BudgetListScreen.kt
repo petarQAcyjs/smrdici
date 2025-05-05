@@ -84,6 +84,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.first
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.screens.budget.BudgetViewModel
 
 /**
  * BudgetListScreen - Ekran za prikaz budžeta i transakcija

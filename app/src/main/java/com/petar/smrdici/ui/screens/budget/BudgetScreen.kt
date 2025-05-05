@@ -27,6 +27,7 @@ import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
+import com.petar.smrdici.ui.screens.budget.BudgetViewModel
 
 /**
  * Tranzicioni ekran koji automatski preusmerava na BudgetListScreen.
@@ -36,7 +37,8 @@ import com.petar.smrdici.ui.navigation.Screen
 @Composable
 fun BudgetScreen(
     navController: NavController,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = viewModel(),
+    budgetViewModel: BudgetViewModel
 ) {
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is AuthState.Authenticated) {
