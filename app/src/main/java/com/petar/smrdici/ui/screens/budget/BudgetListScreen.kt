@@ -587,6 +587,27 @@ fun BudgetListScreen(
                                         tint = Color.White
                                     )
                                 }
+                                DropdownMenu(
+                                    expanded = showAccountsDropdown,
+                                    onDismissRequest = { showAccountsDropdown = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Сви рачуни") },
+                                        onClick = {
+                                            budgetsViewModel.filterByAccount(null)
+                                            showAccountsDropdown = false
+                                        }
+                                    )
+                                    accounts.forEach { account ->
+                                        DropdownMenuItem(
+                                            text = { Text(account.name) },
+                                            onClick = {
+                                                budgetsViewModel.filterByAccount(account.id)
+                                                showAccountsDropdown = false
+                                            }
+                                        )
+                                    }
+                                }
                                 
                                 Spacer(modifier = Modifier.height(12.dp))
                                 
@@ -608,26 +629,6 @@ fun BudgetListScreen(
                                 
                                 // Додајемо прогрес бар буџета који се може кликнути
                                 Spacer(modifier = Modifier.height(16.dp))
-                                
-                                // Наслов прогрес бара
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = "Буџет за ${periodDisplayText}:",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = Color.White.copy(alpha = 0.8f)
-                                    )
-                                    
-                                    Text(
-                                        text = if (budgetLimit > 0.0) budgetsViewModel.formatAmount(budgetLimit) else "Није подешено",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = Color.White.copy(alpha = 0.8f)
-                                    )
-                                }
-                                
-                                Spacer(modifier = Modifier.height(8.dp))
                                 
                                 // Заменимо обичан прогрес бар са BudgetBattery компонентом
                                 BudgetBattery(
@@ -845,6 +846,27 @@ fun BudgetListScreen(
                                         contentDescription = "Одабери рачун",
                                         tint = Color.White
                                     )
+                                }
+                                DropdownMenu(
+                                    expanded = showAccountsDropdown,
+                                    onDismissRequest = { showAccountsDropdown = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Сви рачуни") },
+                                        onClick = {
+                                            budgetsViewModel.filterByAccount(null)
+                                            showAccountsDropdown = false
+                                        }
+                                    )
+                                    accounts.forEach { account ->
+                                        DropdownMenuItem(
+                                            text = { Text(account.name) },
+                                            onClick = {
+                                                budgetsViewModel.filterByAccount(account.id)
+                                                showAccountsDropdown = false
+                                            }
+                                        )
+                                    }
                                 }
                                 
                                 Spacer(modifier = Modifier.height(12.dp))

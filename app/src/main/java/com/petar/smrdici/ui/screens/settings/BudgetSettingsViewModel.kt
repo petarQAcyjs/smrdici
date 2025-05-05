@@ -16,16 +16,6 @@ enum class Currency(val code: String, val symbol: String, val value: String) {
     GBP("GBP", "£", "Фунта (GBP)")
 }
 
-// Енумерација за периоде
-enum class Period(val value: String) {
-    DAILY("Дневно"),
-    WEEKLY("Недељно"),
-    MONTHLY("Месечно"),
-    YEARLY("Годишње"),
-    CUSTOM("Прилагођено"),
-    ALL("Све")
-}
-
 class BudgetSettingsViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
     private val _currency = MutableStateFlow(Currency.RSD)
     val currency: StateFlow<Currency> = _currency
