@@ -133,7 +133,8 @@ class SmrdiciApplication : Application() {
                 throwable.message?.contains("QSPM AIDL service") == true ||
                 throwable.stackTrace.any { it.className.contains("ziparchive") } ||
                 throwable.message?.contains("Unknown calling package name 'com.google.android.gms'") == true ||
-                throwable.stackTrace.any { it.className.contains("GoogleApiManager") }) {
+                throwable.stackTrace.any { it.className.contains("GoogleApiManager") } ||
+                (throwable is SecurityException && throwable.message?.contains("Unknown calling package name 'com.google.android.gms'") == true)) {
                 // Прескачемо логовање, јер су ово грешке које нас не занимају
                 Log.d(TAG, "Филтриран познати exception: ${throwable.message}")
             } else {

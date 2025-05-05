@@ -80,6 +80,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.first
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
 
 /**
  * BudgetListScreen - Ekran za prikaz budžeta i transakcija
@@ -128,16 +130,20 @@ fun PeriodNavigationControls(
     onNavigateBack: () -> Unit,
     onNavigateForward: () -> Unit,
     onResetPeriod: () -> Unit,
-    onSelectDate: () -> Unit
+    onSelectDate: () -> Unit,
+    onPeriodSelected: (Int) -> Unit,
+    selectedPeriodIndex: Int
 ) {
+    var showPeriodDropdown by remember { mutableStateOf(false) }
+    
     // Za Period.ALL ne prikazujemo kontrole za navigaciju, samo naslov
     if (currentPeriod == Period.ALL) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clickable { showPeriodDropdown = true },
+            contentAlignment = Alignment.Center
         ) {
             Text(
                 text = currentPeriodText.replaceFirstChar { it.uppercase() },
@@ -145,6 +151,30 @@ fun PeriodNavigationControls(
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
+            DropdownMenu(
+                expanded = showPeriodDropdown,
+                onDismissRequest = { showPeriodDropdown = false },
+                modifier = Modifier.background(Color(0xFF2E2E2E))
+            ) {
+                listOf("Dan", "Nedelja", "Mesec", "Godina", "Prilagođeno", "Sve").forEachIndexed { index, title ->
+                    DropdownMenuItem(
+                        text = { Text(title, color = Color.White) },
+                        onClick = {
+                            onPeriodSelected(index)
+                            showPeriodDropdown = false
+                        },
+                        trailingIcon = {
+                            if (selectedPeriodIndex == index) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Odabrano",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    )
+                }
+            }
         }
     } else {
         // Za ostale periode prikazujemo pune kontrole
@@ -165,7 +195,7 @@ fun PeriodNavigationControls(
                 )
             }
             
-            // Tekst perioda (klikabilan za izbor datuma u dnevnom režimu)
+            // Tekst perioda (klikabilan za izbor perioda ili datuma)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -173,7 +203,7 @@ fun PeriodNavigationControls(
                         if (currentPeriod == Period.DAILY) {
                             Modifier.clickable { onSelectDate() }
                         } else {
-                            Modifier
+                            Modifier.clickable { showPeriodDropdown = true }
                         }
                     ),
                 contentAlignment = Alignment.Center
@@ -200,6 +230,32 @@ fun PeriodNavigationControls(
                         }
                     }
                 }
+                
+                // Dropdown za izbor perioda
+                DropdownMenu(
+                    expanded = showPeriodDropdown,
+                    onDismissRequest = { showPeriodDropdown = false },
+                    modifier = Modifier.background(Color(0xFF2E2E2E))
+                ) {
+                    listOf("Dan", "Nedelja", "Mesec", "Godina", "Prilagođeno", "Sve").forEachIndexed { index, title ->
+                        DropdownMenuItem(
+                            text = { Text(title, color = Color.White) },
+                            onClick = {
+                                onPeriodSelected(index)
+                                showPeriodDropdown = false
+                            },
+                            trailingIcon = {
+                                if (selectedPeriodIndex == index) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Odabrano",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
             }
             
             // Dugme za navigaciju unapred (onemogućeno ako smo u trenutnom periodu)
@@ -222,7 +278,8 @@ fun PeriodNavigationControls(
 fun BudgetListScreen(
     navController: NavController,
     budgetsViewModel: BudgetsViewModel = viewModel(factory = BudgetsViewModel.Factory(LocalContext.current)),
-    budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current))
+    budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current)),
+    authViewModel: AuthViewModel = viewModel()
 ) {
     // Za snackbar poruke
     val snackbarHostState = remember { SnackbarHostState() }
@@ -391,6 +448,11 @@ fun BudgetListScreen(
     var showBudgetLimitDialog by remember { mutableStateOf(false) }
     var budgetLimitInput by remember { mutableStateOf("") }
     
+    val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is AuthState.Authenticated) {
+        (authState as AuthState.Authenticated).user
+    } else null
+    
     // Komponente UI
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -400,7 +462,7 @@ fun BudgetListScreen(
                 title = "Budžet",
                 navController = navController,
                 showBackButton = true,
-                user = null
+                user = user
             )
         },
         floatingActionButton = {
@@ -437,96 +499,16 @@ fun BudgetListScreen(
                     .verticalScroll(scrollState)
             ) {
                 // Dodajemo komponente za izbor perioda i kretanje kroz periode
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Period:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White
-                    )
-                    
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .background(
-                                        color = Color(0xFF2E2E2E),
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable { showPeriodDropdown = true }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Text(
-                                    text = when (selectedPeriodIndex) {
-                                        0 -> "Dan"
-                                        1 -> "Nedelja"
-                                        2 -> "Mesec"
-                                        3 -> "Godina"
-                                        4 -> "Prilagođeno"
-                                        5 -> "Sve"
-                                        else -> "Mesec"
-                                    },
-                                    color = Color.White,
-                                    modifier = Modifier.padding(end = 4.dp)
-                                )
-                                Icon(
-                                    imageVector = Icons.Default.ArrowDropDown,
-                                    contentDescription = "Izbor perioda",
-                                    tint = Color.White
-                                )
-                            }
-                            
-                            DropdownMenu(
-                                expanded = showPeriodDropdown,
-                                onDismissRequest = { showPeriodDropdown = false },
-                                modifier = Modifier.background(Color(0xFF2E2E2E))
-                            ) {
-                                listOf("Dan", "Nedelja", "Mesec", "Godina", "Prilagođeno", "Sve").forEachIndexed { index, title ->
-                                    DropdownMenuItem(
-                                        text = { Text(title, color = Color.White) },
-                                        onClick = {
-                                            // Ovde ažuriramo period
-                                            budgetViewModel.updatePeriodIndex(index)
-                                            showPeriodDropdown = false
-                                        },
-                                        trailingIcon = {
-                                            if (selectedPeriodIndex == index) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = "Odabrano",
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Kontrole za navigaciju kroz periode
                 PeriodNavigationControls(
-                    currentPeriod = selectedPeriod,
-                    currentPeriodText = periodDisplayText,
-                    periodOffset = periodOffset,
+                    currentPeriod = budgetViewModel.selectedPeriod.collectAsState().value,
+                    currentPeriodText = budgetViewModel.getPeriodDisplayText(),
+                    periodOffset = budgetViewModel.periodOffset.collectAsState().value,
                     onNavigateBack = { budgetViewModel.movePeriodBackward() },
                     onNavigateForward = { budgetViewModel.movePeriodForward() },
                     onResetPeriod = { budgetViewModel.resetToCurrentPeriod() },
-                    onSelectDate = {
-                        if (selectedPeriod == Period.DAILY) {
-                            showDatePicker = true
-                        }
-                    }
+                    onSelectDate = { showDatePicker = true },
+                    onPeriodSelected = { index -> budgetViewModel.updatePeriodIndex(index) },
+                    selectedPeriodIndex = budgetViewModel.selectedPeriodIndex.collectAsState().value
                 )
                 
                 // Tabovi za rashode i prihode
