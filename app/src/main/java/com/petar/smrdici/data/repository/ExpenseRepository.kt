@@ -89,6 +89,67 @@ class ExpenseRepository private constructor() {
         }
     }
     
+    // Ажурирање постојећег расхода
+    suspend fun updateExpense(expense: Expense): Result<Expense> {
+        return try {
+            LogUtils.i("ExpenseRepository", "Ažuriram rashod: $expense", category = "expense")
+            
+            // Проверавамо да ли је ID валидан
+            if (expense.id.isEmpty()) {
+                return Result.failure(IllegalArgumentException("Невалидан ID расхода"))
+            }
+            
+            // Прво налазимо стари расход да бисмо добили стари износ
+            val oldExpenseDoc = userExpensesCollection.document(expense.id).get().await()
+            val oldExpense = oldExpenseDoc.toObject(Expense::class.java)
+            
+            // Осигурамо да имамо валидан датум у формату "YYYY-MM-DD"
+            val validDate = if (expense.date.isEmpty() || !expense.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                dateFormat.format(Date())
+            } else {
+                expense.date
+            }
+            
+            val expenseToUpdate = expense.copy(date = validDate)
+            
+            // Pretvaramo validDate string u Date objekat, pa u Timestamp za Firebase
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val dateObject = dateFormat.parse(validDate) ?: Date()
+            
+            // Kreiramo mapu podataka koja će biti sačuvana u Firestore
+            val expenseMap = mapOf(
+                "id" to expenseToUpdate.id,
+                "amount" to expenseToUpdate.amount,
+                "description" to expenseToUpdate.description,
+                "category" to expenseToUpdate.category,
+                "date" to com.google.firebase.Timestamp(dateObject),
+                "accountId" to expenseToUpdate.accountId
+            )
+            
+            // Ажурирамо расход у бази података
+            userExpensesCollection.document(expenseToUpdate.id).set(expenseMap).await()
+            
+            // Ажурирамо баланс рачуна
+            if (oldExpense != null) {
+                // Враћамо стари износ (повећавамо баланс)
+                accountRepository?.updateAccountBalance(oldExpense.accountId, oldExpense.amount)
+                // Одузимамо нови износ (смањујемо баланс)
+                accountRepository?.updateAccountBalance(expenseToUpdate.accountId, -expenseToUpdate.amount)
+            }
+            
+            // Ажурирамо локални кеш
+            refreshExpenses()
+            
+            Result.success(expenseToUpdate)
+        } catch (e: Exception) {
+            LogUtils.e("ExpenseRepository", "Greška pri ažuriranju rashoda", e, category = "expense")
+            Result.failure(e)
+        }
+    }
+    
     // Брисање расхода
     suspend fun deleteExpense(expenseId: String): Result<Unit> {
         return try {

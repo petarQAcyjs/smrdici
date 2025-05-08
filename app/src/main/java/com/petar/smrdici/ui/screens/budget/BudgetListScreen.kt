@@ -22,6 +22,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
@@ -80,6 +82,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.first
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.screens.budget.BudgetViewModel
 
 /**
  * BudgetListScreen - Ekran za prikaz budžeta i transakcija
@@ -128,16 +133,20 @@ fun PeriodNavigationControls(
     onNavigateBack: () -> Unit,
     onNavigateForward: () -> Unit,
     onResetPeriod: () -> Unit,
-    onSelectDate: () -> Unit
+    onSelectDate: () -> Unit,
+    onPeriodSelected: (Int) -> Unit,
+    selectedPeriodIndex: Int
 ) {
+    var showPeriodDropdown by remember { mutableStateOf(false) }
+    
     // Za Period.ALL ne prikazujemo kontrole za navigaciju, samo naslov
     if (currentPeriod == Period.ALL) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clickable { showPeriodDropdown = true },
+            contentAlignment = Alignment.Center
         ) {
             Text(
                 text = currentPeriodText.replaceFirstChar { it.uppercase() },
@@ -145,6 +154,30 @@ fun PeriodNavigationControls(
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
+            DropdownMenu(
+                expanded = showPeriodDropdown,
+                onDismissRequest = { showPeriodDropdown = false },
+                modifier = Modifier.background(Color(0xFF2E2E2E))
+            ) {
+                listOf("Dan", "Nedelja", "Mesec", "Godina", "Prilagođeno", "Sve").forEachIndexed { index, title ->
+                    DropdownMenuItem(
+                        text = { Text(title, color = Color.White) },
+                        onClick = {
+                            onPeriodSelected(index)
+                            showPeriodDropdown = false
+                        },
+                        trailingIcon = {
+                            if (selectedPeriodIndex == index) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Odabrano",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    )
+                }
+            }
         }
     } else {
         // Za ostale periode prikazujemo pune kontrole
@@ -165,7 +198,7 @@ fun PeriodNavigationControls(
                 )
             }
             
-            // Tekst perioda (klikabilan za izbor datuma u dnevnom režimu)
+            // Tekst perioda (klikabilan za izbor perioda ili datuma)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -173,7 +206,7 @@ fun PeriodNavigationControls(
                         if (currentPeriod == Period.DAILY) {
                             Modifier.clickable { onSelectDate() }
                         } else {
-                            Modifier
+                            Modifier.clickable { showPeriodDropdown = true }
                         }
                     ),
                 contentAlignment = Alignment.Center
@@ -200,6 +233,32 @@ fun PeriodNavigationControls(
                         }
                     }
                 }
+                
+                // Dropdown za izbor perioda
+                DropdownMenu(
+                    expanded = showPeriodDropdown,
+                    onDismissRequest = { showPeriodDropdown = false },
+                    modifier = Modifier.background(Color(0xFF2E2E2E))
+                ) {
+                    listOf("Dan", "Nedelja", "Mesec", "Godina", "Prilagođeno", "Sve").forEachIndexed { index, title ->
+                        DropdownMenuItem(
+                            text = { Text(title, color = Color.White) },
+                            onClick = {
+                                onPeriodSelected(index)
+                                showPeriodDropdown = false
+                            },
+                            trailingIcon = {
+                                if (selectedPeriodIndex == index) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Odabrano",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
             }
             
             // Dugme za navigaciju unapred (onemogućeno ako smo u trenutnom periodu)
@@ -220,9 +279,10 @@ fun PeriodNavigationControls(
 @Suppress("UNUSED_VARIABLE", "UNUSED_PARAMETER")
 @Composable
 fun BudgetListScreen(
-    navController: NavController,
     budgetsViewModel: BudgetsViewModel = viewModel(factory = BudgetsViewModel.Factory(LocalContext.current)),
-    budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current))
+    budgetViewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory(LocalContext.current)),
+    authViewModel: AuthViewModel = viewModel(),
+    navController: NavController
 ) {
     // Za snackbar poruke
     val snackbarHostState = remember { SnackbarHostState() }
@@ -391,6 +451,11 @@ fun BudgetListScreen(
     var showBudgetLimitDialog by remember { mutableStateOf(false) }
     var budgetLimitInput by remember { mutableStateOf("") }
     
+    val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is AuthState.Authenticated) {
+        (authState as AuthState.Authenticated).user
+    } else null
+    
     // Komponente UI
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -400,7 +465,7 @@ fun BudgetListScreen(
                 title = "Budžet",
                 navController = navController,
                 showBackButton = true,
-                user = null
+                user = user
             )
         },
         floatingActionButton = {
@@ -409,8 +474,12 @@ fun BudgetListScreen(
                 FloatingActionButton(
                     onClick = { 
                         when (selectedTabIndex) {
-                            0 -> navController.navigate(Screen.AddExpense.route)
-                            1 -> navController.navigate(Screen.AddIncome.route)
+                            0 -> {
+                                // Implement the logic to navigate to add expense screen
+                            }
+                            1 -> {
+                                // Implement the logic to navigate to add income screen
+                            }
                         }
                     },
                     containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -437,96 +506,16 @@ fun BudgetListScreen(
                     .verticalScroll(scrollState)
             ) {
                 // Dodajemo komponente za izbor perioda i kretanje kroz periode
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Period:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White
-                    )
-                    
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .background(
-                                        color = Color(0xFF2E2E2E),
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable { showPeriodDropdown = true }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Text(
-                                    text = when (selectedPeriodIndex) {
-                                        0 -> "Dan"
-                                        1 -> "Nedelja"
-                                        2 -> "Mesec"
-                                        3 -> "Godina"
-                                        4 -> "Prilagođeno"
-                                        5 -> "Sve"
-                                        else -> "Mesec"
-                                    },
-                                    color = Color.White,
-                                    modifier = Modifier.padding(end = 4.dp)
-                                )
-                                Icon(
-                                    imageVector = Icons.Default.ArrowDropDown,
-                                    contentDescription = "Izbor perioda",
-                                    tint = Color.White
-                                )
-                            }
-                            
-                            DropdownMenu(
-                                expanded = showPeriodDropdown,
-                                onDismissRequest = { showPeriodDropdown = false },
-                                modifier = Modifier.background(Color(0xFF2E2E2E))
-                            ) {
-                                listOf("Dan", "Nedelja", "Mesec", "Godina", "Prilagođeno", "Sve").forEachIndexed { index, title ->
-                                    DropdownMenuItem(
-                                        text = { Text(title, color = Color.White) },
-                                        onClick = {
-                                            // Ovde ažuriramo period
-                                            budgetViewModel.updatePeriodIndex(index)
-                                            showPeriodDropdown = false
-                                        },
-                                        trailingIcon = {
-                                            if (selectedPeriodIndex == index) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = "Odabrano",
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Kontrole za navigaciju kroz periode
                 PeriodNavigationControls(
-                    currentPeriod = selectedPeriod,
-                    currentPeriodText = periodDisplayText,
-                    periodOffset = periodOffset,
+                    currentPeriod = budgetViewModel.selectedPeriod.collectAsState().value,
+                    currentPeriodText = budgetViewModel.getPeriodDisplayText(),
+                    periodOffset = budgetViewModel.periodOffset.collectAsState().value,
                     onNavigateBack = { budgetViewModel.movePeriodBackward() },
                     onNavigateForward = { budgetViewModel.movePeriodForward() },
                     onResetPeriod = { budgetViewModel.resetToCurrentPeriod() },
-                    onSelectDate = {
-                        if (selectedPeriod == Period.DAILY) {
-                            showDatePicker = true
-                        }
-                    }
+                    onSelectDate = { showDatePicker = true },
+                    onPeriodSelected = { index -> budgetViewModel.updatePeriodIndex(index) },
+                    selectedPeriodIndex = budgetViewModel.selectedPeriodIndex.collectAsState().value
                 )
                 
                 // Tabovi za rashode i prihode
@@ -750,12 +739,20 @@ fun BudgetListScreen(
                                     is Expense -> ExpenseListItem(
                                         expense = transaction,
                                         formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
-                                        accounts = accounts
+                                        accounts = accounts,
+                                        onEdit = { expense -> 
+                                            navController.navigate(Screen.EditExpense.route.replace("{expenseId}", expense.id))
+                                        },
+                                        onDelete = { expense -> budgetViewModel.deleteExpense(expense.id) }
                                     )
                                     is Income -> IncomeListItem(
                                         income = transaction,
                                         formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
-                                        accounts = accounts
+                                        accounts = accounts,
+                                        onEdit = { income -> 
+                                            navController.navigate(Screen.EditIncome.route.replace("{incomeId}", income.id))
+                                        },
+                                        onDelete = { income -> budgetViewModel.deleteIncome(income.id) }
                                     )
                                     else -> {
                                         LogUtils.e("BudgetListScreen", "Nepoznat tip transakcije: ${transaction.javaClass.name}")
@@ -1004,12 +1001,20 @@ fun BudgetListScreen(
                                     is Expense -> ExpenseListItem(
                                         expense = transaction,
                                         formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
-                                        accounts = accounts
+                                        accounts = accounts,
+                                        onEdit = { expense -> 
+                                            navController.navigate(Screen.EditExpense.route.replace("{expenseId}", expense.id))
+                                        },
+                                        onDelete = { expense -> budgetViewModel.deleteExpense(expense.id) }
                                     )
                                     is Income -> IncomeListItem(
                                         income = transaction,
                                         formatAmount = { amount -> budgetsViewModel.formatAmount(amount) },
-                                        accounts = accounts
+                                        accounts = accounts,
+                                        onEdit = { income -> 
+                                            navController.navigate(Screen.EditIncome.route.replace("{incomeId}", income.id))
+                                        },
+                                        onDelete = { income -> budgetViewModel.deleteIncome(income.id) }
                                     )
                                     else -> {
                                         LogUtils.e("BudgetListScreen", "Nepoznat tip transakcije: ${transaction.javaClass.name}")
@@ -1184,31 +1189,28 @@ enum class SortOrder {
 fun ExpenseListItem(
     expense: Expense,
     formatAmount: (Double) -> String,
-    accounts: List<Account>
+    accounts: List<Account>,
+    onEdit: (Expense) -> Unit,
+    onDelete: (Expense) -> Unit
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
     val account = accounts.find { it.id == expense.accountId }
-    // Koristimo getFormattedDate metodu za prikazivanje datuma
-    val dateFormatted = expense.getFormattedDate()
-    
-    // Koristimo CategoryManager za dobijanje imena kategorije
-    val context = LocalContext.current
-    val categoryManager = CategoryManager.getInstance(context)
-    val categoryName = categoryManager.getExpenseCategoryDisplayName(expense.category)
+    val categoryName = expense.category
+    val dateFormatted = expense.date
     
     Card(
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF303436)
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
+            containerColor = Color(0xFF2C2C2C)
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Levi deo - kategorija i opis
@@ -1247,14 +1249,58 @@ fun ExpenseListItem(
                 }
             }
             
-            // Desni deo - iznos
-            Text(
-                text = formatAmount(expense.amount),
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFFFF9800), // Narandžasta za troškove
-                fontWeight = FontWeight.Bold
-            )
+            // Desni deo - iznos i akcije
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = formatAmount(expense.amount),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFFFF9800), // Narandžasta za troškove
+                    fontWeight = FontWeight.Bold
+                )
+                
+                IconButton(onClick = { onEdit(expense) }) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Измени расход",
+                        tint = Color.White
+                    )
+                }
+                
+                IconButton(onClick = { showDeleteDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Обриши расход",
+                        tint = Color.Red
+                    )
+                }
+            }
         }
+    }
+    
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Обриши расход") },
+            text = { Text("Да ли сте сигурни да желите да обришете овај расход?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(expense)
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("Обриши", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Откажи")
+                }
+            }
+        )
     }
 }
 
@@ -1262,31 +1308,28 @@ fun ExpenseListItem(
 fun IncomeListItem(
     income: Income,
     formatAmount: (Double) -> String,
-    accounts: List<Account>
+    accounts: List<Account>,
+    onEdit: (Income) -> Unit,
+    onDelete: (Income) -> Unit
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
     val account = accounts.find { it.id == income.accountId }
-    // Koristimo getFormattedDate metodu za prikazivanje datuma
-    val dateFormatted = income.getFormattedDate()
-    
-    // Koristimo CategoryManager za dobijanje imena kategorije
-    val context = LocalContext.current
-    val categoryManager = CategoryManager.getInstance(context)
-    val categoryName = categoryManager.getIncomeCategoryDisplayName(income.category)
+    val categoryName = income.category
+    val dateFormatted = income.date
     
     Card(
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF303436)
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
+            containerColor = Color(0xFF2C2C2C)
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Levi deo - kategorija i opis
@@ -1325,13 +1368,57 @@ fun IncomeListItem(
                 }
             }
             
-            // Desni deo - iznos
-            Text(
-                text = formatAmount(income.amount),
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFF4CAF50), // Zelena za prihode
-                fontWeight = FontWeight.Bold
-            )
+            // Desni deo - iznos i akcije
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = formatAmount(income.amount),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFF4CAF50), // Zelena za prihode
+                    fontWeight = FontWeight.Bold
+                )
+                
+                IconButton(onClick = { onEdit(income) }) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Измени приход",
+                        tint = Color.White
+                    )
+                }
+                
+                IconButton(onClick = { showDeleteDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Обриши приход",
+                        tint = Color.Red
+                    )
+                }
+            }
         }
+    }
+    
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Обриши приход") },
+            text = { Text("Да ли сте сигурни да желите да обришете овај приход?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(income)
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("Обриши", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Откажи")
+                }
+            }
+        )
     }
 } 

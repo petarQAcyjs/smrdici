@@ -92,6 +92,67 @@ class IncomeRepository private constructor() {
         }
     }
     
+    // Ажурирање постојећег прихода
+    suspend fun updateIncome(income: Income): Result<Income> {
+        return try {
+            LogUtils.i("IncomeRepository", "Ažuriram prihod: $income", category = "income")
+            
+            // Проверавамо да ли је ID валидан
+            if (income.id.isEmpty()) {
+                return Result.failure(IllegalArgumentException("Невалидан ID прихода"))
+            }
+            
+            // Прво налазимо стари приход да бисмо добили стари износ
+            val oldIncomeDoc = userIncomesCollection.document(income.id).get().await()
+            val oldIncome = oldIncomeDoc.toObject(Income::class.java)
+            
+            // Осигурамо да имамо валидан датум у формату "YYYY-MM-DD"
+            val validDate = if (income.date.isEmpty() || !income.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                dateFormat.format(Date())
+            } else {
+                income.date
+            }
+            
+            val incomeToUpdate = income.copy(date = validDate)
+            
+            // Pretvaramo validDate string u Date objekat, pa u Timestamp za Firebase
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val dateObject = dateFormat.parse(validDate) ?: Date()
+            
+            // Kreiramo mapu podataka koja će biti sačuvana u Firestore
+            val incomeMap = mapOf(
+                "id" to incomeToUpdate.id,
+                "amount" to incomeToUpdate.amount,
+                "description" to incomeToUpdate.description,
+                "category" to incomeToUpdate.category,
+                "date" to com.google.firebase.Timestamp(dateObject),
+                "accountId" to incomeToUpdate.accountId
+            )
+            
+            // Ажурирамо приход у бази података
+            userIncomesCollection.document(incomeToUpdate.id).set(incomeMap).await()
+            
+            // Ажурирамо баланс рачуна
+            if (oldIncome != null) {
+                // Одузимамо стари износ (смањујемо баланс)
+                accountRepository?.updateAccountBalance(oldIncome.accountId, -oldIncome.amount)
+                // Додајемо нови износ (повећавамо баланс)
+                accountRepository?.updateAccountBalance(incomeToUpdate.accountId, incomeToUpdate.amount)
+            }
+            
+            // Ажурирамо локални кеш
+            refreshIncomes()
+            
+            Result.success(incomeToUpdate)
+        } catch (e: Exception) {
+            LogUtils.e("IncomeRepository", "Greška pri ažuriranju prihoda", e, category = "income")
+            Result.failure(e)
+        }
+    }
+    
     // Брисање прихода
     suspend fun deleteIncome(incomeId: String): Result<Unit> {
         return try {

@@ -111,6 +111,13 @@ class BudgetViewModel(
     // Minimalno vreme između uzastopnih poziva (debounce period u ms)
     private val DEBOUNCE_PERIOD_MS = 1000L
     
+    // Add missing state for categories
+    private val _expenseCategories = MutableStateFlow<List<String>>(emptyList())
+    val expenseCategories: StateFlow<List<String>> = _expenseCategories.asStateFlow()
+
+    private val _incomeCategories = MutableStateFlow<List<String>>(emptyList())
+    val incomeCategories: StateFlow<List<String>> = _incomeCategories.asStateFlow()
+    
     init {
         // Додајемо log за početak inicijalizacije
         Log.d("BudgetViewModel", "===== INICIJALIZACIJA BUDGET VIEW MODELA =====")
@@ -143,6 +150,10 @@ class BudgetViewModel(
         
         // Учитавамо рачуне
         loadAccounts()
+        
+        // Add initialization of categories
+        _expenseCategories.value = listOf("Food", "Transport", "Bills", "Entertainment", "Shopping", "Other")
+        _incomeCategories.value = listOf("Salary", "Bonus", "Investment", "Gift", "Other")
     }
     
     @Suppress("UNUSED")
@@ -974,54 +985,19 @@ class BudgetViewModel(
     }
     
     /**
-     * Vraća prikazni tekst za trenutni period, uključujući offset 
-     * (npr. "danas", "prošle nedelje", "januar 2024" itd.)
+     * Vraća tekst za prikaz trenutnog perioda
      */
-    @Suppress("UNUSED")
     fun getPeriodDisplayText(): String {
-        val offset = _periodOffset.value
         val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-        val monthYearFormat = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale.forLanguageTag("sr"))
-        val yearFormat = java.text.SimpleDateFormat("yyyy", java.util.Locale.getDefault())
-        val shortDayMonthFormat = java.text.SimpleDateFormat("dd MMM", java.util.Locale.forLanguageTag("sr"))
-        
-        // Izračunavamo raspon datuma za trenutni period sa offsetom
         val (startDate, endDate) = calculatePeriodDates(_selectedPeriod.value)
         
         return when (_selectedPeriod.value) {
-            Period.DAILY -> {
-                when (offset) {
-                    0 -> "danas"
-                    1 -> "juče"
-                    else -> dateFormat.format(startDate)
-                }
-            }
-            Period.WEEKLY -> {
-                when (offset) {
-                    0 -> "ove nedelje"
-                    1 -> "prošle nedelje"
-                    else -> {
-                        // Format poput "12-19 Nov" za nedeljni raspon
-                        "${shortDayMonthFormat.format(startDate)} - ${shortDayMonthFormat.format(endDate)}"
-                    }
-                }
-            }
-            Period.MONTHLY -> {
-                when (offset) {
-                    0 -> "ovog meseca"
-                    1 -> "prošlog meseca"
-                    else -> monthYearFormat.format(startDate)
-                }
-            }
-            Period.YEARLY -> {
-                when (offset) {
-                    0 -> "ove godine"
-                    1 -> "prošle godine"
-                    else -> yearFormat.format(startDate)
-                }
-            }
-            Period.CUSTOM -> "u ovom periodu"
-            Period.ALL -> "ukupno"
+            Period.DAILY -> dateFormat.format(_selectedDate.value)
+            Period.WEEKLY -> "Nedelja ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
+            Period.MONTHLY -> "Mesec ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
+            Period.YEARLY -> "Godina ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
+            Period.CUSTOM -> "Period ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
+            Period.ALL -> "Svi periodi"
         }
     }
     
@@ -1069,12 +1045,30 @@ class BudgetViewModel(
         _periodOffset.value = _periodOffset.value + 1
         
         // Ažuriramo selectedDate za dnevni pregled
-        if (_selectedPeriod.value == Period.DAILY) {
-            val calendar = Calendar.getInstance()
-            calendar.time = _selectedDate.value
-            calendar.add(Calendar.DAY_OF_YEAR, -1)
-            _selectedDate.value = calendar.time
+        val calendar = Calendar.getInstance()
+        calendar.time = _selectedDate.value
+        
+        when (_selectedPeriod.value) {
+            Period.DAILY -> {
+                calendar.add(Calendar.DAY_OF_YEAR, -1)
+            }
+            Period.WEEKLY -> {
+                calendar.add(Calendar.WEEK_OF_YEAR, -1)
+            }
+            Period.MONTHLY -> {
+                calendar.add(Calendar.MONTH, -1)
+            }
+            Period.YEARLY -> {
+                calendar.add(Calendar.YEAR, -1)
+            }
+            Period.CUSTOM -> {
+                // Za custom period, pomeramo se za mesec unazad
+                calendar.add(Calendar.MONTH, -1)
+            }
+            else -> {} // Za ALL ne radimo ništa
         }
+        
+        _selectedDate.value = calendar.time
         
         // Učitavamo transakcije za novi period
         loadTransactions()
@@ -1090,12 +1084,30 @@ class BudgetViewModel(
             _periodOffset.value = _periodOffset.value - 1
             
             // Ažuriramo selectedDate za dnevni pregled
-            if (_selectedPeriod.value == Period.DAILY) {
-                val calendar = Calendar.getInstance()
-                calendar.time = _selectedDate.value
-                calendar.add(Calendar.DAY_OF_YEAR, 1)
-                _selectedDate.value = calendar.time
+            val calendar = Calendar.getInstance()
+            calendar.time = _selectedDate.value
+            
+            when (_selectedPeriod.value) {
+                Period.DAILY -> {
+                    calendar.add(Calendar.DAY_OF_YEAR, 1)
+                }
+                Period.WEEKLY -> {
+                    calendar.add(Calendar.WEEK_OF_YEAR, 1)
+                }
+                Period.MONTHLY -> {
+                    calendar.add(Calendar.MONTH, 1)
+                }
+                Period.YEARLY -> {
+                    calendar.add(Calendar.YEAR, 1)
+                }
+                Period.CUSTOM -> {
+                    // Za custom period, pomeramo se za mesec unapred
+                    calendar.add(Calendar.MONTH, 1)
+                }
+                else -> {} // Za ALL ne radimo ništa
             }
+            
+            _selectedDate.value = calendar.time
             
             // Učitavamo transakcije za novi period
             loadTransactions()
@@ -1169,7 +1181,8 @@ class BudgetViewModel(
             Period.WEEKLY -> calendar.add(Calendar.WEEK_OF_YEAR, -_periodOffset.value)
             Period.MONTHLY -> calendar.add(Calendar.MONTH, -_periodOffset.value)
             Period.YEARLY -> calendar.add(Calendar.YEAR, -_periodOffset.value)
-            else -> {} // Za CUSTOM i ALL ne primenjujemo offset
+            Period.CUSTOM -> calendar.add(Calendar.MONTH, -_periodOffset.value) // Dodajemo offset i za CUSTOM period
+            else -> {} // Za ALL ne primenjujemo offset
         }
         
         // Ako je period DAILY i imamo odabrani datum, koristimo taj datum
@@ -1214,16 +1227,13 @@ class BudgetViewModel(
                     set(Calendar.MINUTE, 0)
                     set(Calendar.SECOND, 0)
                     
-                    if (currentDay >= customStartDay) {
-                        // Ako je trenutni dan veći ili jednak danu početka perioda,
-                        // period počinje istog meseca
-                        set(Calendar.DAY_OF_MONTH, customStartDay)
-                    } else {
+                    if (currentDay < customStartDay) {
                         // Ako je trenutni dan manji od dana početka perioda,
                         // period počinje prethodnog meseca
                         add(Calendar.MONTH, -1)
-                        set(Calendar.DAY_OF_MONTH, customStartDay)
                     }
+                    // Postavljamo dan početka perioda
+                    set(Calendar.DAY_OF_MONTH, customStartDay)
                 }
                 Period.ALL -> {
                     // Za "Sve" opciju ne menjamo početni datum, ali stavljamo jako rani datum
@@ -1293,5 +1303,27 @@ class BudgetViewModel(
         }
         
         return Pair(startDate, endDate)
+    }
+
+    fun updateExpense(expense: Expense) {
+        viewModelScope.launch {
+            try {
+                expenseRepository.updateExpense(expense)
+                loadTransactions()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message ?: "Failed to update expense")
+            }
+        }
+    }
+
+    fun updateIncome(income: Income) {
+        viewModelScope.launch {
+            try {
+                incomeRepository.updateIncome(income)
+                loadTransactions()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message ?: "Failed to update income")
+            }
+        }
     }
 } 
