@@ -67,12 +67,20 @@ object LogUtils {
         if (category != null && !Config.ENABLED_CATEGORIES.contains(category.lowercase())) {
             return false
         }
-        
         return true
+    }
+
+    /**
+     * Log verbose messages - najdetaljnije informacije
+*/
+    fun v(tag: String, message: String, category: String? = null) {
+        if (Config.ENABLE_DETAILED_LOGS && Config.DETAIL_LEVEL == DetailLevel.VERBOSE && shouldLog(tag, category)) {
+            Log.v(tag, message)
+        }
     }
     
     /**
-     * Loguj osnovne informacije - uvek vidljivo
+     * Log informative messages - korisne informacije o stanju aplikacije
      */
     fun i(tag: String, message: String, category: String? = null) {
         if (shouldLog(tag, category)) {
@@ -81,16 +89,16 @@ object LogUtils {
     }
     
     /**
-     * Loguj detalje samo ako je uključeno detaljno logovanje
+     * Log debug messages - informacije korisne za debug, ali ne toliko bitne kao verbose
      */
-    fun d(tag: String, message: String, category: String? = null, detailLevel: DetailLevel = DetailLevel.NORMAL) {
-        if (Config.ENABLE_DETAILED_LOGS && detailLevel.ordinal <= Config.DETAIL_LEVEL.ordinal && shouldLog(tag, category)) {
+    fun d(tag: String, message: String, category: String? = null) {
+        if (Config.ENABLE_DETAILED_LOGS && shouldLog(tag, category)) {
             Log.d(tag, message)
         }
     }
     
     /**
-     * Loguj upozorenja - uvek vidljivo
+     * Log warning messages - potencijalni problemi ili neočekivane situacije
      */
     fun w(tag: String, message: String, category: String? = null) {
         if (shouldLog(tag, category)) {
@@ -99,7 +107,7 @@ object LogUtils {
     }
     
     /**
-     * Loguj greške - uvek vidljivo
+     * Log error messages - ozbiljni problemi koji mogu uticati na funkcionalnost
      */
     fun e(tag: String, message: String, throwable: Throwable? = null, category: String? = null) {
         if (shouldLog(tag, category)) {
@@ -112,7 +120,7 @@ object LogUtils {
     }
     
     /**
-     * Loguj kolekciju stavki sa ograničenjem broja
+     * Log a collection of items with a limit on the number of items logged
      */
     public inline fun <T> logCollection(
         tag: String,
@@ -136,19 +144,19 @@ object LogUtils {
         
         val itemsToLog = collection.take(maxItems)
         
-        Log.d(tag, "$prefix Ukupno ${collection.size} stavki:")
+        d(tag, "$prefix Ukupno ${collection.size} stavki:")
         
         itemsToLog.forEachIndexed { index, item ->
-            Log.d(tag, "$prefix Stavka #${index + 1}: ${transform(item)}")
+            d(tag, "$prefix Stavka #${index + 1}: ${transform(item)}")
         }
         
         if (size > maxItems) {
-            Log.d(tag, "$prefix ...i još ${size - maxItems} stavki")
+            d(tag, "$prefix ...i još ${size - maxItems} stavki")
         }
     }
     
     /**
-     * Loguj statistiku za kolekciju numeričkih vrednosti
+     * Log numeric statistics for a collection of numeric values
      */
     public fun logNumericStats(
         tag: String,
@@ -169,18 +177,18 @@ object LogUtils {
         
         val count = values.size
         
-        // Formatiramo statistiku za bolju čitljivost
+        // Format the statistics for better readability
         val formattedStats = String.format(
             Locale.getDefault(),
             "$prefix Statistika (stavki: %d): ukupno=%.2f, prosek=%.2f, min=%.2f, max=%.2f",
             count, sum, avg, min, max
         )
         
-        Log.d(tag, formattedStats)
+        d(tag, formattedStats)
         
-        // Ako je detaljni nivo VERBOSE, dodajemo i distribuciju vrednosti
+        // If the detail level is VERBOSE, add the distribution of values
         if (detailLevel == DetailLevel.VERBOSE && Config.DETAIL_LEVEL == DetailLevel.VERBOSE) {
-            // Raspoređujemo vrednosti u grupe
+            // Group the values into segments
             val segments = 5
             val range = if (max > min) max - min else 1.0
             val step = range / segments
@@ -193,13 +201,13 @@ object LogUtils {
                 distribution[index]++
             }
             
-            // Logujemo distribuciju
+            // Log the distribution
             for (i in 0 until segments) {
                 val lowerBound = min + i * step
                 val upperBound = if (i < segments - 1) min + (i + 1) * step else max
                 val percentage = (distribution[i] * 100.0 / count).toInt()
                 
-                Log.d(tag, String.format(
+                d(tag, String.format(
                     Locale.getDefault(),
                     "$prefix Opseg %.2f-%.2f: %d stavki (%d%%)",
                     lowerBound, upperBound, distribution[i], percentage
@@ -207,4 +215,4 @@ object LogUtils {
             }
         }
     }
-} 
+}

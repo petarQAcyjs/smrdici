@@ -77,11 +77,11 @@ class AuthViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 _authState.value = AuthState.Loading
-                
+
                 // Извлачимо кориснички акредитив из резултата активности
                 val credential = oneTapClient.getSignInCredentialFromIntent(result.data)
                 val idToken = credential.googleIdToken
-                
+
                 if (idToken != null) {
                     // Пријава на Firebase са Google токеном
                     val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
@@ -91,6 +91,7 @@ class AuthViewModel : ViewModel() {
                     _authState.value = AuthState.Error("Недостаје ID токен")
                 }
             } catch (e: Exception) {
+                Log.e(tag, "Грешка при обради Google Sign-In резултата", e)
                 _authState.value = AuthState.Error(e.message ?: "Грешка приликом пријаве")
             }
         }

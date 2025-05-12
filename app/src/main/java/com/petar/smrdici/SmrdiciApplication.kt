@@ -48,7 +48,7 @@ class SmrdiciApplication : Application() {
     private fun initLogging() {
         // Postavljamo opcije logovanja - može biti konfigurisano na osnovu build tipa
         // ili BuildConfig.DEBUG uslova
-        val isDebugBuild = true // TODO: Zameniti sa BuildConfig.DEBUG u produkciji
+        val isDebugBuild = BuildConfig.DEBUG
         
         // Osnovna konfiguracija
         LogUtils.Config.ENABLE_DETAILED_LOGS = isDebugBuild
@@ -222,4 +222,4 @@ class SmrdiciApplication : Application() {
         
         Log.d("SmrdiciApplication", "Repozitorijumi inicijalizovani")
     }
-} 
+}
