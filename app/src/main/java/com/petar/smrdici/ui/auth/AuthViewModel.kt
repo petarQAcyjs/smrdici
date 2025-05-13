@@ -120,32 +120,32 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    private fun signOutFromProvider(signOutAction: suspend () -> Unit, providerName: String) {
+        try {
+            signOutAction()
+            Log.d(tag, "$providerName одјава успешна")
+        } catch (e: Exception) {
+            Log.e(tag, "Грешка приликом одјаве из $providerName: ${e.message}", e)
+        }
+    }
+
     fun signOut() {
         Log.d(tag, "Почетак одјављивања...")
 
         // Прво постављамо стање на NotAuthenticated да обезбедимо да UI реагује
         _authState.value = AuthState.NotAuthenticated
         Log.d(tag, "Стање промењено на NotAuthenticated одмах")
-        
-        // Одјављујемо се из Firebase
-        try {
-            auth.signOut()
-            Log.d(tag, "Firebase одјава успешна")
-        } catch (e: Exception) {
-            Log.e(tag, "Грешка приликом одјаве из Firebase: ${e.message}", e)
-        }
-        
-        // Одјављујемо се из OneTap-а
-        try {
+
+        viewModelScope.launch {
+            // Одјављујемо се из Firebase
+            signOutFromProvider({ auth.signOut() }, "Firebase")
+
+            // Одјављујемо се из OneTap-а
             if (::oneTapClient.isInitialized) {
-                Log.d(tag, "OneTapClient иницијализован, одјављујем се")
-                oneTapClient.signOut()
-                Log.d(tag, "OneTapClient одјава успешна")
+                signOutFromProvider({ oneTapClient.signOut() }, "OneTapClient")
             } else {
                 Log.d(tag, "OneTapClient није иницијализован")
             }
-        } catch (e: Exception) {
-            Log.e(tag, "Грешка приликом Google одјаве: ${e.message}", e)
         }
     }
 
