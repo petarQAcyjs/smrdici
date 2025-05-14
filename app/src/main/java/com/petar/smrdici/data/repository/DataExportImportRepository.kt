@@ -133,8 +133,6 @@ class DataExportImportRepository private constructor(private val context: Contex
         return date
     }
     
-    private val gson = GsonBuilder().create()
-    
     /**
      * Извози податке апликације у JSON формату на одређену локацију
      * @param uri URI локације за чување података

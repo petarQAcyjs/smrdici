@@ -121,11 +121,13 @@ class AuthViewModel : ViewModel() {
     }
 
     private fun signOutFromProvider(signOutAction: suspend () -> Unit, providerName: String) {
-        try {
-            signOutAction()
-            Log.d(tag, "$providerName одјава успешна")
-        } catch (e: Exception) {
-            Log.e(tag, "Грешка приликом одјаве из $providerName: ${e.message}", e)
+        viewModelScope.launch {
+            try {
+                signOutAction()
+                Log.d(tag, "$providerName одјава успешна")
+            } catch (e: Exception) {
+                Log.e(tag, "Грешка приликом одјаве из $providerName: ${e.message}", e)
+            }
         }
     }
 
