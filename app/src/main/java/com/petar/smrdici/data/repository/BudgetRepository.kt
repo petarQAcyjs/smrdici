@@ -24,20 +24,21 @@ class BudgetRepository(
     private val auth: FirebaseAuth
 ) {
     private val tag = "BudgetRepository"
-    
+
     // Keširani budžeti za brži pristup
     private var cachedBudgets: List<Budget> = emptyList()
-    
+
     init {
         // Pokrenimo migraciju podataka ako je potrebno
         auth.currentUser?.let { user ->
             migrateBudgets(user.uid)
         }
     }
-    
+
     companion object {
-        @Volatile private var instance: BudgetRepository? = null
-        
+        @Volatile
+        private var instance: BudgetRepository? = null
+
         /**
          * Singleton pristup repozitorijumu
          */
@@ -50,13 +51,13 @@ class BudgetRepository(
             }
         }
     }
-    
+
     // Vraća kolekciju budžeta za trenutnog korisnika
     private fun getBudgetsCollection(): CollectionReference {
         val userId = auth.currentUser?.uid ?: throw Exception("Korisnik nije prijavljen")
         return firestore.collection("users").document(userId).collection("budgets")
     }
-    
+
     /**
      * Migraciona metoda koja premešta budžete iz stare strukture u novu
      */
@@ -69,13 +70,13 @@ class BudgetRepository(
                     Log.d(tag, "Nema budžeta za migraciju")
                     return@addOnSuccessListener
                 }
-                
+
                 Log.d(tag, "Migracija ${snapshot.size()} budžeta za korisnika $userId")
-                
+
                 // Za svaki budžet u staroj kolekciji
                 snapshot.documents.forEach { document ->
                     val budgetData = document.data
-                    
+
                     if (budgetData != null) {
                         // Kopiramo u novu strukturu
                         val userBudgetsCollection = firestore.collection("users").document(userId).collection("budgets")
@@ -83,7 +84,7 @@ class BudgetRepository(
                             .set(budgetData)
                             .addOnSuccessListener {
                                 Log.d(tag, "Uspešno migriran budžet ${document.id}")
-                                
+
                                 // Brišemo iz stare kolekcije nakon uspešne migracije
                                 firestore.collection("budgets").document(document.id)
                                     .delete()
@@ -104,7 +105,7 @@ class BudgetRepository(
                 Log.e(tag, "Greška pri dobavljanju budžeta za migraciju", e)
             }
     }
-    
+
     /**
      * Pomoćna funkcija za konverziju DocumentSnapshot u Budget
      */
@@ -125,7 +126,7 @@ class BudgetRepository(
             } catch (e: Exception) {
                 BudgetType.EXPENSE
             }
-            
+
             Budget(
                 id = id,
                 name = name,
@@ -143,7 +144,7 @@ class BudgetRepository(
             null
         }
     }
-    
+
     /**
      * Resetuje keš budžeta
      */
@@ -151,7 +152,7 @@ class BudgetRepository(
         Log.d(tag, "Resetovanje keša budžeta")
         cachedBudgets = emptyList()
     }
-    
+
     /**
      * Dodaje novi budžet u bazu
      */
@@ -159,7 +160,7 @@ class BudgetRepository(
         return try {
             val user = auth.currentUser ?: throw Exception("Korisnik nije prijavljen")
             val budgetsCollection = getBudgetsCollection()
-            
+
             // Kreiramo mapu sa podacima za Firestore
             val budgetData = hashMapOf(
                 "id" to budget.id,
@@ -175,7 +176,7 @@ class BudgetRepository(
                 "userId" to user.uid,
                 "createdAt" to Timestamp.now()
             )
-            
+
             // Ako nema ID, koristimo automatski generisani
             val documentId = if (budget.id.isEmpty()) {
                 val docRef = budgetsCollection.add(budgetData).await()
@@ -185,10 +186,10 @@ class BudgetRepository(
                 docRef.set(budgetData).await()
                 budget.id
             }
-            
+
             // Resetujemo keš jer su se podaci promenili
             invalidateCache()
-            
+
             // Vraćamo uspešno kreiran budžet sa ID-em
             Result.success(budget.copy(id = documentId))
         } catch (e: Exception) {
@@ -196,7 +197,7 @@ class BudgetRepository(
             Result.failure(e)
         }
     }
-    
+
     /**
      * Ažurira postojeći budžet
      */
@@ -204,12 +205,12 @@ class BudgetRepository(
         return try {
             if (auth.currentUser === null) throw Exception("Korisnik nije prijavljen")
             val budgetsCollection = getBudgetsCollection()
-            
+
             // Proveravamo da li budžet postoji
             if (budget.id.isEmpty()) {
                 throw Exception("Budžet mora imati ID za ažuriranje")
             }
-            
+
             // Kreiramo mapu sa podacima za ažuriranje
             val budgetData = hashMapOf(
                 "name" to budget.name,
@@ -223,13 +224,13 @@ class BudgetRepository(
                 "type" to budget.type.name,
                 "updatedAt" to Timestamp.now()
             )
-            
+
             // Ažuriramo dokument
             budgetsCollection.document(budget.id).update(budgetData as Map<String, Any>).await()
-            
+
             // Resetujemo keš jer su se podaci promenili
             invalidateCache()
-            
+
             // Vraćamo uspešno ažuriran budžet
             Result.success(budget)
         } catch (e: Exception) {
@@ -237,7 +238,7 @@ class BudgetRepository(
             Result.failure(e)
         }
     }
-    
+
     /**
      * Briše budžet iz baze
      */
@@ -245,25 +246,122 @@ class BudgetRepository(
         return try {
             if (auth.currentUser === null) throw Exception("Korisnik nije prijavljen")
             val budgetsCollection = getBudgetsCollection()
-            
+
             // Brišemo budžet
             val docRef = budgetsCollection.document(budgetId)
             docRef.delete().await()
-            
+
             // Resetujemo keš jer su se podaci promenili
             invalidateCache()
-            
+
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(tag, "Greška pri brisanju budžeta", e)
             Result.failure(e)
         }
     }
-    
+
     /**
      * Vraća sve budžete korisnika kao Flow
      */
-    fun getAllBudgets(): Flow<List<Budget>> = callbackFlow {
+    fun getAllBudgets(): Flow<List<Budget>> = getBudgetsFlow()
+
+    /**
+     * Vraća budžete određenog tipa (rashodi/prihodi)
+     */
+    fun getBudgetsByType(type: BudgetType): Flow<List<Budget>> = getBudgetsFlow(type = type)
+
+    /**
+     * Vraća budžete za određeni račun
+     */
+    fun getBudgetsForAccount(accountId: String): Flow<List<Budget>> = getBudgetsFlow(accountId = accountId)
+
+    /**
+     * Vraća budžete za određenu kategoriju
+     */
+    fun getBudgetsForCategory(categoryId: String): Flow<List<Budget>> = getBudgetsFlow(categoryId = categoryId)
+
+    /**
+     * Creates a query for budgets based on the given parameters.
+     */
+    private fun createQuery(
+        budgetsCollection: CollectionReference,
+        type: BudgetType? = null,
+        accountId: String? = null,
+        categoryId: String? = null
+    ): Query {
+        var query: Query = budgetsCollection.whereEqualTo("isActive", true).orderBy("orderId", Query.Direction.ASCENDING)
+
+        if (type != null) {
+            query = query.whereEqualTo("type", type.name)
+        }
+
+        if (accountId != null) {
+            query = query.whereEqualTo("accountId", accountId)
+        }
+
+        if (categoryId != null) {
+            query = query.whereArrayContains("categoryIds", categoryId)
+        }
+
+        return query
+    }
+
+    /**
+     * Handles the snapshot and exceptions for budget queries.
+     */
+    private fun handleSnapshot(
+        querySnapshot: com.google.firebase.firestore.QuerySnapshot?,
+        exception: java.lang.Exception?,
+        type: BudgetType? = null,
+        accountId: String? = null,
+        categoryId: String? = null
+    ): List<Budget> {
+        if (exception != null) {
+            Log.e(tag, "Greška pri dobavljanju budžeta", exception)
+
+            // Proveravamo da li je greška vezana za nedostajući indeks
+            if (exception.message?.contains("FAILED_PRECONDITION") == true &&
+                exception.message?.contains("The query requires an index") == true) {
+
+                // Izvlačimo URL za kreiranje indeksa iz poruke o grešci
+                val indexUrl = exception.message?.let { msg ->
+                    val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
+                    val matchResult = urlPattern.find(msg)
+                    matchResult?.value
+                }
+
+                Log.e(tag, "Potrebno je kreirati indeks u Firebase konzoli. " +
+                        "Koristite sledeći link: $indexUrl")
+
+                return emptyList()
+            } else {
+                // Za ostale greške, vraćamo praznu listu
+                return emptyList()
+            }
+        }
+
+        val budgets = ArrayList<Budget>()
+        querySnapshot?.forEach { documentSnapshot ->
+            documentToBudget(documentSnapshot)?.let { budget ->
+                val budgetWithType = if (type != null) budget.copy(type = type) else budget
+                budgets.add(budgetWithType)
+            }
+        }
+
+        val details = when {
+            type != null -> "tipa $type"
+            accountId != null -> "za račun $accountId"
+            categoryId != null -> "za kategoriju $categoryId"
+            else -> ""
+        }
+
+        Log.d(tag, "Dobavljeno ${budgets.size} budžeta $details")
+
+        return budgets
+    }
+
+    private fun getBudgetsFlow(type: BudgetType? = null, accountId: String? = null, categoryId: String? = null): Flow<List<Budget>> = callbackFlow {
         try {
             val user = auth.currentUser
             if (user === null) {
@@ -271,12 +369,12 @@ class BudgetRepository(
                 close()
                 return@callbackFlow
             }
-            
+
             // Poboljšani mehanizam keširanja - ako imamo prethodno učitane budžete, odmah ih šaljemo
             if (cachedBudgets.isNotEmpty()) {
                 Log.d(tag, "Vraćam ${cachedBudgets.size} keširana budžeta odmah")
                 trySend(cachedBudgets)
-                
+
                 // Ako imamo keširane podatke i već pokušavamo svežije dobaviti, možemo završiti Flow
                 // jer ćemo ionako dobiti obaveštenje od Firestore listenera ako se nešto promeni
                 // (ovo sprečava duplicirane pozive i potencijalne timeout greške)
@@ -284,36 +382,32 @@ class BudgetRepository(
                     Log.d(tag, "Keš ima podatke, nastavićemo osluškivati promene u pozadini")
                 }
             }
-            
+
             val budgetsCollection = getBudgetsCollection()
-            val query = budgetsCollection
-                .whereEqualTo("isActive", true)
-                .orderBy("orderId", Query.Direction.ASCENDING)
-                .limit(100) // Limitiramo broj budžeta koji se učitavaju odjednom
-                
-            // Implementiramo mehanizam za praćenje vremena
+            val query = createQuery(budgetsCollection, type, accountId, categoryId)
+
             val startTime = System.currentTimeMillis()
-            
+
             val listener = query.addSnapshotListener { querySnapshot, exception ->
                 val elapsedTime = System.currentTimeMillis() - startTime
-                
+
                 if (exception != null) {
                     Log.e(tag, "Greška pri dobavljanju budžeta (nakon ${elapsedTime}ms)", exception)
-                    
+
                     // Proveravamo da li je greška vezana za nedostajući indeks
-                    if (exception.message?.contains("FAILED_PRECONDITION") == true && 
+                    if (exception.message?.contains("FAILED_PRECONDITION") == true &&
                         exception.message?.contains("The query requires an index") == true) {
-                        
+
                         // Izvlačimo URL za kreiranje indeksa iz poruke o grešci
                         val indexUrl = exception.message?.let { msg ->
                             val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
                             val matchResult = urlPattern.find(msg)
                             matchResult?.value
                         }
-                        
+
                         Log.e(tag, "Potrebno je kreirati indeks u Firebase konzoli. " +
-                               "Koristite sledeći link: $indexUrl")
-                        
+                                "Koristite sledeći link: $indexUrl")
+
                         // Šaljemo keširane podatke ako postoje, inače praznu listu
                         if (cachedBudgets.isNotEmpty()) {
                             Log.d(tag, "Vraćam keširane podatke zbog greške sa indeksom")
@@ -333,22 +427,22 @@ class BudgetRepository(
                     }
                     return@addSnapshotListener
                 }
-                
+
                 val budgets = ArrayList<Budget>()
                 querySnapshot?.forEach { documentSnapshot ->
                     documentToBudget(documentSnapshot)?.let { budget ->
                         budgets.add(budget)
                     }
                 }
-                
+
                 // Ažuriramo keš samo ako smo dobili stavke
                 if (budgets.isNotEmpty()) {
                     // Uporedi sa prethodnim keširanim podacima da vidimo da li ima promena
-                    val hasChanges = budgets.size != cachedBudgets.size || 
-                                    !budgets.all { newBudget -> 
-                                        cachedBudgets.any { it.id == newBudget.id } 
+                    val hasChanges = budgets.size != cachedBudgets.size ||
+                                    !budgets.all { newBudget ->
+                                        cachedBudgets.any { it.id == newBudget.id }
                                     }
-                    
+
                     if (hasChanges) {
                         Log.d(tag, "Ažuriram keš sa ${budgets.size} budžeta (promene detektovane)")
                         cachedBudgets = budgets
@@ -360,17 +454,17 @@ class BudgetRepository(
                     cachedBudgets = budgets
                     Log.d(tag, "Keš budžeta inicijalizovan sa praznom listom")
                 }
-                
+
                 Log.d(tag, "Uspešno učitano ${budgets.size} budžeta iz Firestore-a (${elapsedTime}ms)")
                 trySend(budgets)
             }
-            
+
             awaitClose {
                 listener.remove()
             }
         } catch (e: Exception) {
             Log.e(tag, "Neočekivana greška u getAllBudgets", e)
-            
+
             // Ako imamo keširane podatke, vraćamo ih umesto prazne liste
             if (cachedBudgets.isNotEmpty()) {
                 Log.d(tag, "Vraćam ${cachedBudgets.size} keširana budžeta zbog greške")
@@ -378,213 +472,8 @@ class BudgetRepository(
             } else {
                 trySend(emptyList())
             }
-            
+
             close(e)
         }
     }
-    
-    /**
-     * Vraća budžete određenog tipa (rashodi/prihodi)
-     */
-    fun getBudgetsByType(type: BudgetType): Flow<List<Budget>> = callbackFlow {
-        try {
-            val user = auth.currentUser
-            if (user === null) {
-                trySend(emptyList())
-                close()
-                return@callbackFlow
-            }
-            
-            val budgetsCollection = getBudgetsCollection()
-            val query = budgetsCollection
-                .whereEqualTo("isActive", true)
-                .whereEqualTo("type", type.name)
-                .orderBy("orderId", Query.Direction.ASCENDING)
-                
-            val listener = query.addSnapshotListener { querySnapshot, exception ->
-                if (exception != null) {
-                    Log.e(tag, "Greška pri dobavljanju budžeta po tipu", exception)
-                    
-                    // Proveravamo da li je greška vezana za nedostajući indeks
-                    if (exception.message?.contains("FAILED_PRECONDITION") == true && 
-                        exception.message?.contains("The query requires an index") == true) {
-                        
-                        // Izvlačimo URL za kreiranje indeksa iz poruke o grešci
-                        val indexUrl = exception.message?.let { msg ->
-                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
-                            val matchResult = urlPattern.find(msg)
-                            matchResult?.value
-                        }
-                        
-                        Log.e(tag, "Potrebno je kreirati indeks u Firebase konzoli. " +
-                               "Koristite sledeći link: $indexUrl")
-                        
-                        // Šaljemo praznu listu umesto da zatvorimo flow sa greškom
-                        trySend(emptyList())
-                    } else {
-                        // Za ostale greške, zatvaramo flow sa greškom
-                        close(exception)
-                    }
-                    return@addSnapshotListener
-                }
-                
-                val budgets = ArrayList<Budget>()
-                querySnapshot?.forEach { documentSnapshot ->
-                    documentToBudget(documentSnapshot)?.let { budget ->
-                        // Osiguravamo da je tip postavljen
-                        budgets.add(budget.copy(type = type))
-                    }
-                }
-                
-                Log.d(tag, "Dobavljeno ${budgets.size} budžeta tipa $type")
-                
-                trySend(budgets)
-            }
-            
-            awaitClose { 
-                Log.d(tag, "Zatvaranje listenera za budžete tipa $type")
-                listener.remove() 
-            }
-        } catch (e: Exception) {
-            Log.e(tag, "Neočekivana greška u getBudgetsByType", e)
-            trySend(emptyList())
-            close(e)
-        }
-    }
-    
-    /**
-     * Vraća budžete za određeni račun
-     */
-    fun getBudgetsForAccount(accountId: String): Flow<List<Budget>> = callbackFlow {
-        try {
-            val user = auth.currentUser
-            if (user === null) {
-                trySend(emptyList())
-                close()
-                return@callbackFlow
-            }
-            
-            val budgetsCollection = getBudgetsCollection()
-            val query = budgetsCollection
-                .whereEqualTo("isActive", true)
-                .whereEqualTo("accountId", accountId)
-                .orderBy("orderId", Query.Direction.ASCENDING)
-                
-            val listener = query.addSnapshotListener { querySnapshot, exception ->
-                if (exception != null) {
-                    Log.e(tag, "Greška pri dobavljanju budžeta za račun", exception)
-                    
-                    // Proveravamo da li je greška vezana za nedostajući indeks
-                    if (exception.message?.contains("FAILED_PRECONDITION") == true && 
-                        exception.message?.contains("The query requires an index") == true) {
-                        
-                        // Izvlačimo URL za kreiranje indeksa iz poruke o grešci
-                        val indexUrl = exception.message?.let { msg ->
-                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
-                            val matchResult = urlPattern.find(msg)
-                            matchResult?.value
-                        }
-                        
-                        Log.e(tag, "Potrebno je kreirati indeks u Firebase konzoli. " +
-                               "Koristite sledeći link: $indexUrl")
-                        
-                        // Šaljemo praznu listu umesto da zatvorimo flow sa greškom
-                        trySend(emptyList())
-                    } else {
-                        // Za ostale greške, zatvaramo flow sa greškom
-                        close(exception)
-                    }
-                    return@addSnapshotListener
-                }
-                
-                val budgets = ArrayList<Budget>()
-                querySnapshot?.forEach { documentSnapshot ->
-                    documentToBudget(documentSnapshot)?.let { budget ->
-                        budgets.add(budget)
-                    }
-                }
-                
-                Log.d(tag, "Dobavljeno ${budgets.size} budžeta za račun $accountId")
-                
-                trySend(budgets)
-            }
-            
-            awaitClose { 
-                Log.d(tag, "Zatvaranje listenera za budžete za račun")
-                listener.remove() 
-            }
-        } catch (e: Exception) {
-            Log.e(tag, "Neočekivana greška u getBudgetsForAccount", e)
-            trySend(emptyList())
-            close(e)
-        }
-    }
-    
-    /**
-     * Vraća budžete za određenu kategoriju
-     */
-    fun getBudgetsForCategory(categoryId: String): Flow<List<Budget>> = callbackFlow {
-        try {
-            val user = auth.currentUser
-            if (user === null) {
-                trySend(emptyList())
-                close()
-                return@callbackFlow
-            }
-            
-            val budgetsCollection = getBudgetsCollection()
-            val query = budgetsCollection
-                .whereEqualTo("isActive", true)
-                .whereArrayContains("categoryIds", categoryId)
-                .orderBy("orderId", Query.Direction.ASCENDING)
-                
-            val listener = query.addSnapshotListener { querySnapshot, exception ->
-                if (exception != null) {
-                    Log.e(tag, "Greška pri dobavljanju budžeta za kategoriju", exception)
-                    
-                    // Proveravamo da li je greška vezana za nedostajući indeks
-                    if (exception.message?.contains("FAILED_PRECONDITION") == true && 
-                        exception.message?.contains("The query requires an index") == true) {
-                        
-                        // Izvlačimo URL za kreiranje indeksa iz poruke o grešci
-                        val indexUrl = exception.message?.let { msg ->
-                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
-                            val matchResult = urlPattern.find(msg)
-                            matchResult?.value
-                        }
-                        
-                        Log.e(tag, "Potrebno je kreirati indeks u Firebase konzoli. " +
-                               "Koristite sledeći link: $indexUrl")
-                        
-                        // Šaljemo praznu listu umesto da zatvorimo flow sa greškom
-                        trySend(emptyList())
-                    } else {
-                        // Za ostale greške, zatvaramo flow sa greškom
-                        close(exception)
-                    }
-                    return@addSnapshotListener
-                }
-                
-                val budgets = ArrayList<Budget>()
-                querySnapshot?.forEach { documentSnapshot ->
-                    documentToBudget(documentSnapshot)?.let { budget ->
-                        budgets.add(budget)
-                    }
-                }
-                
-                Log.d(tag, "Dobavljeno ${budgets.size} budžeta za kategoriju $categoryId")
-                
-                trySend(budgets)
-            }
-            
-            awaitClose {
-                Log.d(tag, "Zatvaranje listenera za budžete za kategoriju")
-                listener.remove() 
-            }
-        } catch (e: Exception) {
-            Log.e(tag, "Neočekivana greška u getBudgetsForCategory", e)
-            trySend(emptyList())
-            close(e)
-        }
-    }
-} 
+}

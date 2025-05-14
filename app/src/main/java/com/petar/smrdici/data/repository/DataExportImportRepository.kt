@@ -35,8 +35,103 @@ import com.petar.smrdici.data.model.CategoryManager
  * Репозиторијум за извоз и увоз података апликације
  */
 class DataExportImportRepository private constructor(private val context: Context) {
-    
+
     private val gson = GsonBuilder().create()
+
+    private fun parseDate(dateElement: JsonElement?): String {
+        var date = ""
+        if (dateElement != null) {
+            try {
+                if (dateElement.isJsonObject) {
+                    // Обрада Timestamp објекта - конвертујемо у стринг формат
+                    val dateObj = dateElement.asJsonObject
+                    if (dateObj.has("seconds") && dateObj.has("nanoseconds")) {
+                        val seconds = dateObj.get("seconds").asLong
+                        val nanoseconds = dateObj.get("nanoseconds").asInt
+                        val timestamp = Timestamp(seconds, nanoseconds)
+                        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        date = dateFormat.format(timestamp.toDate())
+                    }
+                } else if (dateElement.isJsonPrimitive) {
+                    val primitive = dateElement.asJsonPrimitive
+                    if (primitive.isNumber) {
+                        // Unix timestamp u milisekundama - konvertujemo u string
+                        val dateObj = Date(primitive.asLong)
+                        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        date = dateFormat.format(dateObj)
+                    } else if (primitive.isString) {
+                        val dateString = primitive.asString
+
+                        // Ako je već u očekivanom formatu, samo ga koristimo
+                        if (dateString.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                            date = dateString
+                        } else {
+                            // Pokušavamo da parsiramo datum u različitim formatima
+                            try {
+                                // Koristimo SimpleDateFormat za parsiranje
+                                val dateFormat = when {
+                                    // Format sa punim ISO datumom i vremenom
+                                    dateString.contains("T") -> {
+                                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+                                    }
+                                    // Format sa vremenom
+                                    dateString.contains(":") -> {
+                                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+                                    }
+                                    // Neki drugi format datuma
+                                    else -> {
+                                        // Pokušavamo da prepoznamo format
+                                        if (dateString.matches(Regex("\\d{2}\\.\\d{2}\\.\\d{4}"))) {
+                                            SimpleDateFormat("dd.MM.yyyy", Locale.US)
+                                        } else {
+                                            SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                        }
+                                    }
+                                }
+
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                val parsedDate = dateFormat.parse(dateString)
+                                if (parsedDate != null) {
+                                    // Konvertujemo natrag u naš standardni format
+                                    val outputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                    outputFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                    date = outputFormat.format(parsedDate)
+                                    Log.d("DataExportImportRepository", "Uspešno parsiran datum: $dateString -> $date")
+                                } else {
+                                    // Vraćamo današnji datum ako ne može da se parsira
+                                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                    today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                    date = today.format(Date())
+                                    Log.e("DataExportImportRepository", "Nije moguće parsirati string datuma: $dateString, koristim današnji datum: $date")
+                                }
+                            } catch (e: Exception) {
+                                // Vraćamo današnji datum u slučaju greške
+                                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                date = today.format(Date())
+                                Log.e("DataExportImportRepository", "Nije moguće parsirati string datuma: $dateString, koristim današnji datum: $date", e)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Vraćamo današnji datum u slučaju greške
+                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                date = today.format(Date())
+                Log.e("DataExportImportRepository", "Грешка при парсирању датума, koristim današnji datum: $date", e)
+            }
+        } else {
+            // Ako nema datuma, koristimo današnji
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            date = today.format(Date())
+            Log.d("DataExportImportRepository", "Nema datuma u JSON-u, koristim današnji datum: $date")
+        }
+        return date
+    }
     
     /**
      * Извози податке апликације у JSON формату на одређену локацију
@@ -235,6 +330,102 @@ class DataExportImportRepository private constructor(private val context: Contex
  * Deserijalizator za Expense objekte
  */
 class ExpenseDeserializer : JsonDeserializer<Expense> {
+    
+    private fun parseDate(dateElement: JsonElement?): String {
+        var date = ""
+        if (dateElement != null) {
+            try {
+                if (dateElement.isJsonObject) {
+                    // Обрада Timestamp објекта - конвертујемо у стринг формат
+                    val dateObj = dateElement.asJsonObject
+                    if (dateObj.has("seconds") && dateObj.has("nanoseconds")) {
+                        val seconds = dateObj.get("seconds").asLong
+                        val nanoseconds = dateObj.get("nanoseconds").asInt
+                        val timestamp = Timestamp(seconds, nanoseconds)
+                        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        date = dateFormat.format(timestamp.toDate())
+                    }
+                } else if (dateElement.isJsonPrimitive) {
+                    val primitive = dateElement.asJsonPrimitive
+                    if (primitive.isNumber) {
+                        // Unix timestamp u milisekundama - konvertujemo u string
+                        val dateObj = Date(primitive.asLong)
+                        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        date = dateFormat.format(dateObj)
+                    } else if (primitive.isString) {
+                        val dateString = primitive.asString
+                        
+                        // Ako je već u očekivanom formatu, samo ga koristimo
+                        if (dateString.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                            date = dateString
+                        } else {
+                            // Pokušavamo da parsiramo datum u različitim formatima
+                            try {
+                                // Koristimo SimpleDateFormat za parsiranje
+                                val dateFormat = when {
+                                    // Format sa punim ISO datumom i vremenom
+                                    dateString.contains("T") -> {
+                                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+                                    }
+                                    // Format sa vremenom
+                                    dateString.contains(":") -> {
+                                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+                                    }
+                                    // Neki drugi format datuma
+                                    else -> {
+                                        // Pokušavamo da prepoznamo format
+                                        if (dateString.matches(Regex("\\d{2}\\.\\d{2}\\.\\d{4}"))) {
+                                            SimpleDateFormat("dd.MM.yyyy", Locale.US)
+                                        } else {
+                                            SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                        }
+                                    }
+                                }
+                                
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                val parsedDate = dateFormat.parse(dateString)
+                                if (parsedDate != null) {
+                                    // Konvertujemo natrag u naš standardni format
+                                    val outputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                    outputFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                    date = outputFormat.format(parsedDate)
+                                    Log.d("ExpenseDeserializer", "Uspešno parsiran datum: $dateString -> $date")
+                                } else {
+                                    // Vraćamo današnji datum ako ne može da se parsira
+                                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                    today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                    date = today.format(Date())
+                                    Log.e("ExpenseDeserializer", "Nije moguće parsirati string datuma: $dateString, koristim današnji datum: $date")
+                                }
+                            } catch (e: Exception) {
+                                // Vraćamo današnji datum u slučaju greške
+                                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                date = today.format(Date())
+                                Log.e("ExpenseDeserializer", "Nije moguće parsirati string datuma: $dateString, koristim današnji datum: $date", e)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Vraćamo današnji datum u slučaju greške
+                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                date = today.format(Date())
+                Log.e("ExpenseDeserializer", "Грешка при парсирању датума, koristim današnji datum: $date", e)
+            }
+        } else {
+            // Ako nema datuma, koristimo današnji
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            date = today.format(Date())
+            Log.d("ExpenseDeserializer", "Nema datuma u JSON-u, koristim današnji datum: $date")
+        }
+        return date
+    }
+    
     override fun deserialize(json: JsonElement, typeOfT: Type, context: JsonDeserializationContext): Expense {
         // Проверавамо да ли је директно послат LinkedTreeMap уместо JsonObject
         if (json is JsonNull) {
@@ -288,99 +479,7 @@ class ExpenseDeserializer : JsonDeserializer<Expense> {
             }
             
             // Парсирамо датум у формату "YYYY-MM-DD"
-            var date = ""
-            
-            if (jsonObject.has("date")) {
-                try {
-                    val dateElement = jsonObject.get("date")
-                    if (dateElement.isJsonObject) {
-                        // Обрада Timestamp објекта - конвертујемо у стринг формат
-                        val dateObj = dateElement.asJsonObject
-                        if (dateObj.has("seconds") && dateObj.has("nanoseconds")) {
-                            val seconds = dateObj.get("seconds").asLong
-                            val nanoseconds = dateObj.get("nanoseconds").asInt
-                            val timestamp = Timestamp(seconds, nanoseconds)
-                            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            date = dateFormat.format(timestamp.toDate())
-                        }
-                    } else if (dateElement.isJsonPrimitive) {
-                        val primitive = dateElement.asJsonPrimitive
-                        if (primitive.isNumber) {
-                            // Unix timestamp u milisekundama - konvertujemo u string
-                            val dateObj = Date(primitive.asLong)
-                            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            date = dateFormat.format(dateObj)
-                        } else if (primitive.isString) {
-                            val dateString = primitive.asString
-                            
-                            // Ako je već u očekivanom formatu, samo ga koristimo
-                            if (dateString.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
-                                date = dateString
-                            } else {
-                                // Pokušavamo da parsiramo datum u različitim formatima
-                                try {
-                                    // Koristimo SimpleDateFormat za parsiranje
-                                    val dateFormat = when {
-                                        // Format sa punim ISO datumom i vremenom
-                                        dateString.contains("T") -> {
-                                            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-                                        }
-                                        // Format sa vremenom
-                                        dateString.contains(":") -> {
-                                            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-                                        }
-                                        // Neki drugi format datuma
-                                        else -> {
-                                            // Pokušavamo da prepoznamo format
-                                            if (dateString.matches(Regex("\\d{2}\\.\\d{2}\\.\\d{4}"))) {
-                                                SimpleDateFormat("dd.MM.yyyy", Locale.US)
-                                            } else {
-                                                SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                                            }
-                                        }
-                                    }
-                                    
-                                    dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                    val parsedDate = dateFormat.parse(dateString)
-                                    if (parsedDate != null) {
-                                        // Konvertujemo natrag u naš standardni format
-                                        val outputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                                        outputFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                        date = outputFormat.format(parsedDate)
-                                        Log.d("ExpenseDeserializer", "Uspešno parsiran datum: $dateString -> $date")
-                                    } else {
-                                        // Vraćamo današnji datum ako ne može da se parsira
-                                        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                                        today.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                        date = today.format(Date())
-                                        Log.e("ExpenseDeserializer", "Nije moguće parsirati string datuma: $dateString, koristim današnji datum: $date")
-                                    }
-                                } catch (e: Exception) {
-                                    // Vraćamo današnji datum u slučaju greške
-                                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                                    today.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                    date = today.format(Date())
-                                    Log.e("ExpenseDeserializer", "Nije moguće parsirati string datuma: $dateString, koristim današnji datum: $date", e)
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Vraćamo današnji datum u slučaju greške
-                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                    today.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    date = today.format(Date())
-                    Log.e("ExpenseDeserializer", "Грешка при парсирању датума, koristim današnji datum: $date", e)
-                }
-            } else {
-                // Ako nema datuma, koristimo današnji
-                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                today.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                date = today.format(Date())
-                Log.d("ExpenseDeserializer", "Nema datuma u JSON-u, koristim današnji datum: $date")
-            }
+            val date = parseDate(if (jsonObject.has("date")) jsonObject.get("date") else null)
             
             Log.d("ExpenseDeserializer", "Успешно десеријализован трошак ID: $id, износ: $amount, датум: $date")
             return Expense(id, amount, description, category, date, accountId)
@@ -395,6 +494,102 @@ class ExpenseDeserializer : JsonDeserializer<Expense> {
  * Deserijalizator za Income objekte
  */
 class IncomeDeserializer : JsonDeserializer<Income> {
+    
+    private fun parseDate(dateElement: JsonElement?): String {
+        var date = ""
+        if (dateElement != null) {
+            try {
+                if (dateElement.isJsonObject) {
+                    // Обрада Timestamp објекта - конвертујемо у стринг формат
+                    val dateObj = dateElement.asJsonObject
+                    if (dateObj.has("seconds") && dateObj.has("nanoseconds")) {
+                        val seconds = dateObj.get("seconds").asLong
+                        val nanoseconds = dateObj.get("nanoseconds").asInt
+                        val timestamp = Timestamp(seconds, nanoseconds)
+                        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        date = dateFormat.format(timestamp.toDate())
+                    }
+                } else if (dateElement.isJsonPrimitive) {
+                    val primitive = dateElement.asJsonPrimitive
+                    if (primitive.isNumber) {
+                        // Unix timestamp u milisekundama - konvertujemo u string
+                        val dateObj = Date(primitive.asLong)
+                        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        date = dateFormat.format(dateObj)
+                    } else if (primitive.isString) {
+                        val dateString = primitive.asString
+                        
+                        // Ako je već u očekivanom formatu, samo ga koristimo
+                        if (dateString.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                            date = dateString
+                        } else {
+                            // Pokušavamo da parsiramo datum u različitim formatima
+                            try {
+                                // Koristimo SimpleDateFormat za parsiranje
+                                val dateFormat = when {
+                                    // Format sa punim ISO datumom i vremenom
+                                    dateString.contains("T") -> {
+                                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+                                    }
+                                    // Format sa vremenom
+                                    dateString.contains(":") -> {
+                                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+                                    }
+                                    // Neki drugi format datuma
+                                    else -> {
+                                        // Pokušavamo da prepoznamo format
+                                        if (dateString.matches(Regex("\\d{2}\\.\\d{2}\\.\\d{4}"))) {
+                                            SimpleDateFormat("dd.MM.yyyy", Locale.US)
+                                        } else {
+                                            SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                        }
+                                    }
+                                }
+                                
+                                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                val parsedDate = dateFormat.parse(dateString)
+                                if (parsedDate != null) {
+                                    // Konvertujemo natrag u naš standardni format
+                                    val outputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                    outputFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                    date = outputFormat.format(parsedDate)
+                                    Log.d("IncomeDeserializer", "Uspešno parsiran datum: $dateString -> $date")
+                                } else {
+                                    // Vraćamo današnji datum ako ne može da se parsira
+                                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                    today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                    date = today.format(Date())
+                                    Log.e("IncomeDeserializer", "Nije moguće parsirati string datuma: $dateString, koristim današnji datum: $date")
+                                }
+                            } catch (e: Exception) {
+                                // Vraćamo današnji datum u slučaju greške
+                                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                date = today.format(Date())
+                                Log.e("IncomeDeserializer", "Nije moguće parsirati string datuma: $dateString, koristim današnji datum: $date", e)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Vraćamo današnji datum u slučaju greške
+                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                date = today.format(Date())
+                Log.e("IncomeDeserializer", "Грешка при парсирању датума, koristim današnji datum: $date", e)
+            }
+        } else {
+            // Ako nema datuma, koristimo današnji
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            today.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            date = today.format(Date())
+            Log.d("IncomeDeserializer", "Nema datuma u JSON-u, koristim današnji datum: $date")
+        }
+        return date
+    }
+    
     override fun deserialize(json: JsonElement, typeOfT: Type, context: JsonDeserializationContext): Income {
         // Проверавамо да ли је директно послат LinkedTreeMap уместо JsonObject
         if (json is JsonNull) {
@@ -448,99 +643,7 @@ class IncomeDeserializer : JsonDeserializer<Income> {
             }
             
             // Парсирамо датум у формату "YYYY-MM-DD"
-            var date = ""
-            
-            if (jsonObject.has("date")) {
-                try {
-                    val dateElement = jsonObject.get("date")
-                    if (dateElement.isJsonObject) {
-                        // Обрада Timestamp објекта - конвертујемо у стринг формат
-                        val dateObj = dateElement.asJsonObject
-                        if (dateObj.has("seconds") && dateObj.has("nanoseconds")) {
-                            val seconds = dateObj.get("seconds").asLong
-                            val nanoseconds = dateObj.get("nanoseconds").asInt
-                            val timestamp = Timestamp(seconds, nanoseconds)
-                            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            date = dateFormat.format(timestamp.toDate())
-                        }
-                    } else if (dateElement.isJsonPrimitive) {
-                        val primitive = dateElement.asJsonPrimitive
-                        if (primitive.isNumber) {
-                            // Unix timestamp u milisekundama - konvertujemo u string
-                            val dateObj = Date(primitive.asLong)
-                            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            date = dateFormat.format(dateObj)
-                        } else if (primitive.isString) {
-                            val dateString = primitive.asString
-                            
-                            // Ako je već u očekivanom formatu, samo ga koristimo
-                            if (dateString.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
-                                date = dateString
-                            } else {
-                                // Pokušavamo da parsiramo datum u različitim formatima
-                                try {
-                                    // Koristimo SimpleDateFormat za parsiranje
-                                    val dateFormat = when {
-                                        // Format sa punim ISO datumom i vremenom
-                                        dateString.contains("T") -> {
-                                            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-                                        }
-                                        // Format sa vremenom
-                                        dateString.contains(":") -> {
-                                            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-                                        }
-                                        // Neki drugi format datuma
-                                        else -> {
-                                            // Pokušavamo da prepoznamo format
-                                            if (dateString.matches(Regex("\\d{2}\\.\\d{2}\\.\\d{4}"))) {
-                                                SimpleDateFormat("dd.MM.yyyy", Locale.US)
-                                            } else {
-                                                SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                                            }
-                                        }
-                                    }
-                                    
-                                    dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                    val parsedDate = dateFormat.parse(dateString)
-                                    if (parsedDate != null) {
-                                        // Konvertujemo natrag u naš standardni format
-                                        val outputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                                        outputFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                        date = outputFormat.format(parsedDate)
-                                        Log.d("IncomeDeserializer", "Uspešno parsiran datum: $dateString -> $date")
-                                    } else {
-                                        // Vraćamo današnji datum ako ne može da se parsira
-                                        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                                        today.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                        date = today.format(Date())
-                                        Log.e("IncomeDeserializer", "Nije moguće parsirati string datuma: $dateString, koristim današnji datum: $date")
-                                    }
-                                } catch (e: Exception) {
-                                    // Vraćamo današnji datum u slučaju greške
-                                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                                    today.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                                    date = today.format(Date())
-                                    Log.e("IncomeDeserializer", "Nije moguće parsirati string datuma: $dateString, koristim današnji datum: $date", e)
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Vraćamo današnji datum u slučaju greške
-                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                    today.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    date = today.format(Date())
-                    Log.e("IncomeDeserializer", "Грешка при парсирању датума, koristim današnji datum: $date", e)
-                }
-            } else {
-                // Ako nema datuma, koristimo današnji
-                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                today.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                date = today.format(Date())
-                Log.d("IncomeDeserializer", "Nema datuma u JSON-u, koristim današnji datum: $date")
-            }
+            val date = parseDate(if (jsonObject.has("date")) jsonObject.get("date") else null)
             
             Log.d("IncomeDeserializer", "Успешно десеријализован приход ID: $id, износ: $amount, датум: $date")
             return Income(id, amount, description, category, date, accountId)
@@ -592,4 +695,4 @@ data class ExportData(
     val settings: Map<String, Any> = emptyMap(),
     val version: Int = 1,
     val exportDate: String = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-) 
+)
