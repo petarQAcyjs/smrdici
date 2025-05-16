@@ -5,6 +5,7 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Calendar : Screen("calendar")
     object Lists : Screen("lists")
+    object Finance : Screen("finance")
     object ListDetails : Screen("list_details/{listId}") {
         fun createRoute(listId: String) = "list_details/$listId"
     }
@@ -13,11 +14,6 @@ sealed class Screen(val route: String) {
     object EditAccount : Screen("edit_account/{accountId}")
     
     object AddAccount : Screen("add_account")
-    
-    object Budget : Screen("budget")
-    object BudgetList : Screen("budget_list")
-    object BudgetDetail : Screen("budget_detail")
-    object AddBudget : Screen("add_budget")
     
     object Profile : Screen("profile")
     object AddEvent : Screen("add_event")

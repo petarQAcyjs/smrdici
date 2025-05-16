@@ -48,6 +48,7 @@ fun AddAccountDialog(
             Button(
                 onClick = {
                     val account = Account(
+                        id = "",
                         name = name,
                         balance = balance.toDoubleOrNull() ?: 0.0,
                         type = selectedType,

@@ -198,6 +198,7 @@ fun AddAccountScreen(
             Button(
                 onClick = {
                     val account = Account(
+                        id = "",  // Empty string for new accounts, will be set by the repository
                         name = name,
                         balance = balance.toDoubleOrNull() ?: 0.0,
                         type = selectedType,
