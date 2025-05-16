@@ -93,13 +93,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import androidx.compose.material3.ExperimentalMaterial3Api as Material3ExperimentalApi
+import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.auth.AuthState
 
 @OptIn(Material3ExperimentalApi::class, ExperimentalComposeUiApi::class, ExperimentalMaterialApi::class)
 @Composable
 fun ListDetailsScreen(
     navController: NavController,
     listId: String,
-    listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory())
+    listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory()),
+    authViewModel: AuthViewModel = viewModel()
 ) {
     val selectedList by listsViewModel.selectedList.collectAsState()
     var newItemText by remember { mutableStateOf("") }
@@ -259,30 +263,11 @@ fun ListDetailsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text(text = selectedList?.title ?: "Детаљи листе") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.navigateUp() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад"
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            selectedList?.id?.let { id ->
-                                showDeleteConfirmDialog = true
-                            }
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Обриши листу"
-                        )
-                    }
-                }
+            AppHeader(
+                title = selectedList?.title ?: "Детаљи листе",
+                navController = navController,
+                showBackButton = true,
+                user = if (authViewModel.authState.collectAsState().value is AuthState.Authenticated) (authViewModel.authState.collectAsState().value as AuthState.Authenticated).user else null
             )
         },
         floatingActionButton = {
@@ -373,8 +358,6 @@ fun ListDetailsScreen(
             // Приказ листе са подршком за освежавање
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f)
                     .pullRefresh(pullRefreshState)
             ) {
                 // Садржај листе

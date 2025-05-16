@@ -30,16 +30,25 @@ class ExpenseRepository private constructor() {
     }
     
     // Добијање тренутног корисника
-    private val currentUserId: String
-        get() = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
+    private val currentUserId: String?
+        get() = auth.currentUser?.uid
     
     // Добијање колекције расхода за тренутног корисника
     private val userExpensesCollection
-        get() = firestore.collection("users").document(currentUserId).collection("expenses")
+        get() = currentUserId?.let { uid ->
+            firestore.collection("users").document(uid).collection("expenses")
+        }
     
     // Додавање новог расхода
     suspend fun addExpense(expense: Expense, updateAccountBalance: Boolean = true): Result<Expense> {
         return try {
+            if (currentUserId == null) {
+                LogUtils.d("ExpenseRepository", "Корисник није пријављен, не могу додати расход", category = "expense")
+                return Result.failure(IllegalStateException("Корисник није пријављен"))
+            }
+            
+            val collection = userExpensesCollection ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
+            
             LogUtils.i("ExpenseRepository", "Dodajem rashod: $expense", category = "expense")
             
             // Генеришемо ID ако није већ постављен
@@ -72,7 +81,7 @@ class ExpenseRepository private constructor() {
             )
             
             // Чувамо расход у бази података
-            userExpensesCollection.document(expenseId).set(expenseMap).await()
+            collection.document(expenseId).set(expenseMap).await()
             
             // Ажурирамо баланс рачуна (смањујемо га) само ако је затражено
             if (updateAccountBalance) {
@@ -84,7 +93,7 @@ class ExpenseRepository private constructor() {
             
             Result.success(expenseToAdd)
         } catch (e: Exception) {
-            LogUtils.e("ExpenseRepository", "Greška pri dodavanju rashoda", e, category = "expense")
+            LogUtils.e("ExpenseRepository", "Грешка при додавању расхода", e, category = "expense")
             Result.failure(e)
         }
     }
@@ -100,8 +109,8 @@ class ExpenseRepository private constructor() {
             }
             
             // Прво налазимо стари расход да бисмо добили стари износ
-            val oldExpenseDoc = userExpensesCollection.document(expense.id).get().await()
-            val oldExpense = oldExpenseDoc.toObject(Expense::class.java)
+            val oldExpenseDoc = userExpensesCollection?.document(expense.id)?.get()?.await()
+            val oldExpense = oldExpenseDoc?.toObject(Expense::class.java)
             
             // Осигурамо да имамо валидан датум у формату "YYYY-MM-DD"
             val validDate = if (expense.date.isEmpty() || !expense.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
@@ -130,7 +139,7 @@ class ExpenseRepository private constructor() {
             )
             
             // Ажурирамо расход у бази података
-            userExpensesCollection.document(expenseToUpdate.id).set(expenseMap).await()
+            userExpensesCollection?.document(expenseToUpdate.id)?.set(expenseMap)?.await()
             
             // Ажурирамо баланс рачуна
             if (oldExpense != null) {
@@ -161,11 +170,11 @@ class ExpenseRepository private constructor() {
             }
             
             // Прво налазимо расход да бисмо добили износ и ID рачуна
-            val expenseDoc = userExpensesCollection.document(expenseId).get().await()
-            val expense = expenseDoc.toObject(Expense::class.java)
+            val expenseDoc = userExpensesCollection?.document(expenseId)?.get()?.await()
+            val expense = expenseDoc?.toObject(Expense::class.java)
             
             // Бришемо расход из базе података
-            userExpensesCollection.document(expenseId).delete().await()
+            userExpensesCollection?.document(expenseId)?.delete()?.await()
             
             // Ако смо успешно добавили расход, враћамо баланс рачуна (повећавамо га)
             if (expense != null) {
@@ -184,9 +193,23 @@ class ExpenseRepository private constructor() {
     
     // Добијање свих расхода за тренутног корисника
     fun getAllExpenses(): Flow<List<Expense>> = callbackFlow {
-        LogUtils.i("ExpenseRepository", "Učitavam sve rashode", category = "expense")
+        LogUtils.i("ExpenseRepository", "Учитавам све расходе", category = "expense")
         
-        val listener = userExpensesCollection
+        if (currentUserId == null) {
+            LogUtils.d("ExpenseRepository", "Корисник није пријављен, враћам празну листу", category = "expense")
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
+        
+        val collection = userExpensesCollection
+        if (collection == null) {
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
+        
+        val listener = collection
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -206,10 +229,7 @@ class ExpenseRepository private constructor() {
                         // Poboljšana konverzija datuma
                         val date = getDateFromDocument(doc)
                         
-                        val expense = Expense(id, amount, description, category, date, accountId)
-                        
-                        // Više ne logujemo svaki pojedinačni trošak
-                        expense
+                        Expense(id, amount, description, category, date, accountId)
                     } catch (e: Exception) {
                         Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
                         null
@@ -219,7 +239,7 @@ class ExpenseRepository private constructor() {
                 // Log samo ukupan broj i statistike umesto pojedinačnih stavki
                 if (expenses.isNotEmpty()) {
                     val totalAmount = expenses.sumOf { it.amount }
-                    val avgAmount = if (expenses.isNotEmpty()) totalAmount / expenses.size else 0.0
+                    val avgAmount = totalAmount / expenses.size.toDouble()
                     val minAmount = expenses.minOfOrNull { it.amount } ?: 0.0
                     val maxAmount = expenses.maxOfOrNull { it.amount } ?: 0.0
                     
@@ -227,36 +247,19 @@ class ExpenseRepository private constructor() {
                         "Učitano ${expenses.size} rashoda. " +
                         "Ukupno: $totalAmount, Prosek: $avgAmount, Min: $minAmount, Max: $maxAmount", 
                         category = "expense")
-                    
-                    // Samo u VERBOSE modu prikazati distribuciju vrednosti (opciono)
-                    if (LogUtils.Config.DETAIL_LEVEL == LogUtils.DetailLevel.VERBOSE) {
-                        // Grupisati po opsegu vrednosti za bolji pregled
-                        val distribution = expenses.groupBy { expense ->
-                            when {
-                                expense.amount < 1000 -> "< 1,000"
-                                expense.amount < 5000 -> "1,000 - 5,000"
-                                expense.amount < 10000 -> "5,000 - 10,000"
-                                else -> "> 10,000"
-                            }
-                        }.mapValues { it.value.size }
-                        
-                        LogUtils.d("ExpenseRepository", "Distribucija rashoda po iznosima: $distribution", 
-                            category = "expense")
-                    }
-                } else {
-                    LogUtils.i("ExpenseRepository", "Nema učitanih rashoda.", category = "expense")
                 }
                 
-                // Ažuriramo lokalni kеш
+                // Ažuriramo lokalni keš
                 _expenses.value = expenses
                 
                 // Šaljemo novu listu
                 trySend(expenses)
             }
         
-        awaitClose { 
-            Log.d("ExpenseRepository", "Zatvarаm listener za rashode")
-            listener.remove() 
+        // IMPORTANT: This ensures the listener is removed when the flow is cancelled
+        awaitClose {
+            LogUtils.d("ExpenseRepository", "Затварам listener за расходе", category = "expense")
+            listener.remove()
         }
     }
     
@@ -265,12 +268,9 @@ class ExpenseRepository private constructor() {
         try {
             LogUtils.d("ExpenseRepository", "Osvežavam listu rashoda", category = "expense")
             
-            val snapshot = userExpensesCollection
-                .orderBy("date", Query.Direction.DESCENDING)
-                .get()
-                .await()
+            val snapshot = userExpensesCollection?.get()?.await()
             
-            val expenses = snapshot.documents.mapNotNull { doc ->
+            val expenses = snapshot?.documents?.mapNotNull { doc ->
                 try {
                     val id = doc.id
                     val amount = doc.getDouble("amount") ?: 0.0
@@ -281,20 +281,17 @@ class ExpenseRepository private constructor() {
                     // Poboljšana konverzija datuma
                     val date = getDateFromDocument(doc)
                     
-                    val expense = Expense(id, amount, description, category, date, accountId)
-                    
-                    // Više ne logujemo svaki pojedinačni trošak
-                    expense
+                    Expense(id, amount, description, category, date, accountId)
                 } catch (e: Exception) {
                     Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
                     null
                 }
-            }
+            } ?: emptyList()
             
             // Logujemo samo ukupan broj i statistike
             if (expenses.isNotEmpty()) {
                 val totalAmount = expenses.sumOf { it.amount }
-                val avgAmount = if (expenses.isNotEmpty()) totalAmount / expenses.size else 0.0
+                val avgAmount = totalAmount / expenses.size.toDouble()
                 
                 LogUtils.d("ExpenseRepository", 
                     "Osveženo ${expenses.size} rashoda. Ukupno: $totalAmount, Prosek: $avgAmount", 
@@ -319,7 +316,21 @@ class ExpenseRepository private constructor() {
         
         Log.d("ExpenseRepository", "Учитавам трошкове за период од $startDateStr до $endDateStr")
         
-        val listener = userExpensesCollection
+        if (currentUserId == null) {
+            LogUtils.d("ExpenseRepository", "Корисник није пријављен, враћам празну листу", category = "expense")
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
+        
+        val collection = userExpensesCollection
+        if (collection == null) {
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
+        
+        val listener = collection
             .whereGreaterThanOrEqualTo("date", startDateStr)
             .whereLessThanOrEqualTo("date", endDateStr)
             .orderBy("date", Query.Direction.DESCENDING)
@@ -338,8 +349,8 @@ class ExpenseRepository private constructor() {
                             matchResult?.value
                         }
                         
-                        Log.e("ExpenseRepository", "Потребно је креирати индекс у Firebase конзоли. " +
-                               "Користите следећи линк: $indexUrl")
+                        LogUtils.e("ExpenseRepository", "Potrebno je kreirati indeks u Firebase konzoli. " +
+                               "Koristite sledeći link: $indexUrl", category = "expense")
                         
                         // Шаљемо празну листу уместо да затворимо flow са грешком
                         trySend(emptyList())
@@ -360,13 +371,7 @@ class ExpenseRepository private constructor() {
                         // Poboljšana konverzija datuma
                         val date = getDateFromDocument(doc)
                         
-                        val expense = Expense(id, amount, description, category, date, accountId)
-                        
-                        // Optimizovano logovanje
-                        LogUtils.d("ExpenseRepository", "Učitan trošak ID: ${expense.id}, iznos: ${expense.amount}", 
-                            category = "expense")
-                        
-                        expense
+                        Expense(id, amount, description, category, date, accountId)
                     } catch (e: Exception) {
                         Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
                         null
@@ -377,8 +382,9 @@ class ExpenseRepository private constructor() {
                 trySend(expenses)
             }
         
+        // IMPORTANT: This ensures the listener is removed when the flow is cancelled
         awaitClose { 
-            Log.d("ExpenseRepository", "Затварам listener за расходе за период")
+            LogUtils.d("ExpenseRepository", "Затварам listener за расходе за период", category = "expense")
             listener.remove() 
         }
     }
@@ -387,7 +393,15 @@ class ExpenseRepository private constructor() {
     fun getExpensesForAccount(accountId: String): Flow<List<Expense>> = callbackFlow {
         LogUtils.i("ExpenseRepository", "Učitavam troškove za račun: $accountId", category = "expense")
         
-        val listener = userExpensesCollection
+        if (currentUserId == null) {
+            LogUtils.d("ExpenseRepository", "Корисник није пријављен, враћам празну листу", category = "expense")
+            trySend(emptyList())
+            return@callbackFlow
+        }
+        
+        val collection = userExpensesCollection ?: return@callbackFlow
+        
+        val listener = collection
             .whereEqualTo("accountId", accountId)
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
@@ -494,11 +508,11 @@ class ExpenseRepository private constructor() {
         try {
             Log.d("ExpenseRepository", "Бришем све расходе")
             
-            val snapshot = userExpensesCollection.get().await()
+            val snapshot = userExpensesCollection?.get()?.await()
             
             val batch = firestore.batch()
-            for (document in snapshot.documents) {
-                batch.delete(userExpensesCollection.document(document.id))
+            for (document in snapshot?.documents ?: emptyList()) {
+                batch.delete(userExpensesCollection?.document(document.id) ?: continue)
             }
             
             batch.commit().await()
@@ -522,6 +536,11 @@ class ExpenseRepository private constructor() {
         
         LogUtils.d("ExpenseRepository", "Učitavam troškove za račun: $accountId i period od $startDateStr do $endDateStr", 
             category = "expense")
+        
+        if (currentUserId == null) {
+            LogUtils.d("ExpenseRepository", "Корисник није пријављен, враћам празну листу", category = "expense")
+            return emptyList()
+        }
         
         try {
             // Filtriramo rashode za račun u datom vremenskom periodu

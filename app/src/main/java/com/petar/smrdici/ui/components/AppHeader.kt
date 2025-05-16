@@ -19,7 +19,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -27,14 +26,14 @@ import com.google.firebase.auth.FirebaseUser
 import com.petar.smrdici.ui.navigation.Screen
 
 /**
- * Komponenta za zaglavlje aplikacije.
+ * Компонента за заглавље апликације.
  * 
- * @param title Naslov koji će biti prikazan.
- * @param user Prijavljeni korisnik (opciono).
- * @param navController Navigacioni kontroler.
- * @param showBackButton Da li prikazati dugme za nazad.
- * @param onMenuClick Akcija koja se izvršava prilikom klika na meni, ako je meni prikazan.
- * @param showMenu Da li prikazati dugme za meni.
+ * @param title Наслов који ће бити приказан.
+ * @param user Пријављени корисник (опционо).
+ * @param navController Навигациони контролер.
+ * @param showBackButton Да ли приказати дугме за назад.
+ * @param onMenuClick Акција која се извршава приликом клика на мени, ако је мени приказан.
+ * @param showMenu Да ли приказати дугме за мени.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +57,7 @@ fun AppHeader(
                     style = MaterialTheme.typography.titleLarge,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f),
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         },
@@ -68,7 +67,7 @@ fun AppHeader(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Назад",
-                        tint = Color.White
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
             } else if (showMenu) {
@@ -76,7 +75,7 @@ fun AppHeader(
                     Icon(
                         imageVector = Icons.Default.Menu,
                         contentDescription = "Мени",
-                        tint = Color.White
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
             } else {
@@ -84,7 +83,7 @@ fun AppHeader(
             }
         },
         actions = {
-            // Profil ikonica
+            // Иконица профила
             IconButton(
                 onClick = { 
                     if (user != null) {
@@ -95,13 +94,13 @@ fun AppHeader(
                 Icon(
                     imageVector = Icons.Default.Person,
                     contentDescription = "Профил",
-                    tint = Color.White
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = Color.Black,
-            titleContentColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface
         )
     )
 } 

@@ -159,7 +159,7 @@ fun PeriodNavigationControls(
                 onDismissRequest = { showPeriodDropdown = false },
                 modifier = Modifier.background(Color(0xFF2E2E2E))
             ) {
-                listOf("Dan", "Nedelja", "Mesec", "Godina", "Prilagođeno", "Sve").forEachIndexed { index, title ->
+                listOf("Дан", "Недеља", "Месец", "Година", "Прилагођено", "Све").forEachIndexed { index, title ->
                     DropdownMenuItem(
                         text = { Text(title, color = Color.White) },
                         onClick = {
@@ -170,7 +170,7 @@ fun PeriodNavigationControls(
                             if (selectedPeriodIndex == index) {
                                 Icon(
                                     imageVector = Icons.Default.Check,
-                                    contentDescription = "Odabrano",
+                                    contentDescription = "Одабрано",
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             }
@@ -194,7 +194,7 @@ fun PeriodNavigationControls(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Prethodni period"
+                    contentDescription = "Претходни период"
                 )
             }
             
@@ -221,7 +221,7 @@ fun PeriodNavigationControls(
                         textAlign = TextAlign.Center
                     )
                     
-                    // Ako nismo u trenutnom periodu, prikazujemo dugme za povratak
+                    // Ако нисмо у trenutnom периоду, приказујемо дугме за повратак
                     if (periodOffset > 0) {
                         TextButton(
                             onClick = onResetPeriod,
@@ -229,18 +229,18 @@ fun PeriodNavigationControls(
                                 contentColor = MaterialTheme.colorScheme.primary
                             )
                         ) {
-                            Text("Vrati se na trenutni period")
+                            Text("Врати се на тренутни период")
                         }
                     }
                 }
                 
-                // Dropdown za izbor perioda
+                // Падајући мени за избор периода
                 DropdownMenu(
                     expanded = showPeriodDropdown,
                     onDismissRequest = { showPeriodDropdown = false },
                     modifier = Modifier.background(Color(0xFF2E2E2E))
                 ) {
-                    listOf("Dan", "Nedelja", "Mesec", "Godina", "Prilagođeno", "Sve").forEachIndexed { index, title ->
+                    listOf("Дан", "Недеља", "Месец", "Година", "Прилагођено", "Све").forEachIndexed { index, title ->
                         DropdownMenuItem(
                             text = { Text(title, color = Color.White) },
                             onClick = {
@@ -251,7 +251,7 @@ fun PeriodNavigationControls(
                                 if (selectedPeriodIndex == index) {
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = "Odabrano",
+                                        contentDescription = "Одабрано",
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -268,7 +268,7 @@ fun PeriodNavigationControls(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "Sledeći period"
+                    contentDescription = "Следећи период"
                 )
             }
         }
@@ -441,7 +441,8 @@ fun BudgetListScreen(
     // Učitava ime odabranog računa
     var selectedAccount by remember { mutableStateOf("") }
     LaunchedEffect(selectedAccountId) {
-        selectedAccount = budgetsViewModel.getSelectedAccountName()
+        val name = budgetsViewModel.getSelectedAccountName()
+        selectedAccount = if (name == "Main") "Главни" else name
     }
     
     // Sortiranje
@@ -462,7 +463,7 @@ fun BudgetListScreen(
         containerColor = Color(0xFF1A1C1E),
         topBar = {
             AppHeader(
-                title = "Budžet",
+                title = "Буџет",
                 navController = navController,
                 showBackButton = true,
                 user = user

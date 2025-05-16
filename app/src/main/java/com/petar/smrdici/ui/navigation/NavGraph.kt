@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -24,9 +25,9 @@ import com.petar.smrdici.ui.screens.budget.AddExpenseScreen
 import com.petar.smrdici.ui.screens.budget.AddIncomeScreen
 import com.petar.smrdici.ui.screens.budget.BudgetListScreen
 import com.petar.smrdici.ui.screens.budget.BudgetScreen
+import com.petar.smrdici.ui.screens.budget.BudgetViewModel
 import com.petar.smrdici.ui.screens.budget.EditExpenseScreen
 import com.petar.smrdici.ui.screens.budget.EditIncomeScreen
-import com.petar.smrdici.ui.screens.budget.BudgetViewModel
 import com.petar.smrdici.ui.screens.calendar.AddEventScreen
 import com.petar.smrdici.ui.screens.calendar.CalendarScreen
 import com.petar.smrdici.ui.screens.editAccount.EditAccountScreen
@@ -228,18 +229,20 @@ fun NavGraph(
             )
         ) { backStackEntry ->
             val expenseId = backStackEntry.arguments?.getString("expenseId") ?: ""
-            val expenses = budgetViewModel.expenses.value
-            Log.d("NavGraph", "Current expenses list: ${expenses.map { it.id }}")
+            val expensesState = budgetViewModel.expenses.collectAsState()
+            val expenses = expensesState.value
+            Log.d("NavGraph", "Current expenses list: ${expenses.joinToString { it.id }}")
             val expense = expenses.find { it.id == expenseId }
             if (expense != null) {
                 Log.d("NavGraph", "Expense found: $expense")
                 EditExpenseScreen(
+                    navController = navController,
                     expense = expense,
                     onNavigateBack = { navController.popBackStack() },
                     budgetViewModel = budgetViewModel
                 )
             } else {
-                Log.e("NavGraph", "Expense with id $expenseId not found! Current expense IDs: ${expenses.map { it.id }}")
+                Log.e("NavGraph", "Expense with id $expenseId not found! Current expense IDs: ${expenses.joinToString { it.id }}")
             }
         }
         
@@ -252,12 +255,14 @@ fun NavGraph(
             )
         ) { backStackEntry ->
             val incomeId = backStackEntry.arguments?.getString("incomeId") ?: ""
-            val incomes = budgetViewModel.incomes.value
-            Log.d("NavGraph", "Current incomes list: ${incomes.map { it.id }}")
+            val incomesState = budgetViewModel.incomes.collectAsState()
+            val incomes = incomesState.value
+            Log.d("NavGraph", "Current incomes list: ${incomes.joinToString { it.id }}")
             val income = incomes.find { it.id == incomeId }
             if (income != null) {
                 Log.d("NavGraph", "Income found: $income")
                 EditIncomeScreen(
+                    navController = navController,
                     income = income,
                     onNavigateBack = { navController.popBackStack() },
                     budgetViewModel = budgetViewModel

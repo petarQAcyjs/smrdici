@@ -993,11 +993,11 @@ class BudgetViewModel(
         
         return when (_selectedPeriod.value) {
             Period.DAILY -> dateFormat.format(_selectedDate.value)
-            Period.WEEKLY -> "Nedelja ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
-            Period.MONTHLY -> "Mesec ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
-            Period.YEARLY -> "Godina ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
-            Period.CUSTOM -> "Period ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
-            Period.ALL -> "Svi periodi"
+            Period.WEEKLY -> "Недеља ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
+            Period.MONTHLY -> "Месец ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
+            Period.YEARLY -> "Година ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
+            Period.CUSTOM -> "Период ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
+            Period.ALL -> "Сви периоди"
         }
     }
     

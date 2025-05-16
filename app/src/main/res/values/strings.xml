@@ -3,8 +3,8 @@
     <!-- Неискоришћени string ресурси су уклоњени -->
     
     <!-- Stringovi za BudgetBattery -->
-    <string name="left_to_spend">Preostalo za potrošnju</string>
-    <string name="budget_exceeded_by">Budžet prekoračen za</string>
+    <string name="left_to_spend">Преостало за потрошњу</string>
+    <string name="budget_exceeded_by">Буџет прекорачен за</string>
     
     <!-- Stringovi za budžet -->
 </resources>

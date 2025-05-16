@@ -41,15 +41,17 @@ class AuthViewModel : ViewModel() {
                 .setGoogleIdTokenRequestOptions(
                     BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
                         .setSupported(true)
-                        .setServerClientId("683999597671-0l004ln7l16meoo26ogk4mvcojndnsk7.apps.googleusercontent.com") // OAuth Client ID
+                        .setServerClientId("683999597671-0l004ln7l16meoo26ogk4mvcojndnsk7.apps.googleusercontent.com")
                         .setFilterByAuthorizedAccounts(false)
                         .build()
                 )
+                .setAutoSelectEnabled(false)
                 .build()
                 
             Log.d(tag, "Google Sign-In успешно иницијализован")
         } catch (e: Exception) {
-            Log.e(tag, "Грешка при иницијализацији Google Sign-In", e)
+            Log.e(tag, "Грешка при иницијализацији Google Sign-In: ${e.message}", e)
+            _authState.value = AuthState.Error("Грешка при иницијализацији Google Sign-In: ${e.message}")
         }
     }
 
@@ -61,9 +63,14 @@ class AuthViewModel : ViewModel() {
                     val result = oneTapClient.beginSignIn(signInRequest).await()
                     onSuccess(result.pendingIntent.intentSender)
                 } catch (e: Exception) {
-                    Log.e(tag, "Грешка при Google пријављивању", e)
-                    _authState.value = AuthState.Error(e.message ?: "Грешка при Google пријави")
-                    onError(e.message ?: "Грешка при Google пријави")
+                    val errorMessage = when {
+                        e.message?.contains("16:") == true -> "Није пронађен одговарајући Google налог. Проверите да ли сте повезани на Google Play сервисе."
+                        e.message?.contains("10:") == true -> "Проверите вашу интернет конекцију и Google Play сервисе."
+                        else -> "Грешка при Google пријави: ${e.message}"
+                    }
+                    Log.e(tag, "Грешка при Google пријављивању: ${e.message}", e)
+                    _authState.value = AuthState.Error(errorMessage)
+                    onError(errorMessage)
                 }
             }
         } catch (e: Exception) {

@@ -83,14 +83,14 @@ fun BudgetScreen(
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = "Učitavanje unapređenog budžeta...",
+                    text = "Учитавање унапређеног буџета...",
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White
                 )
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Opciono - dugme za manuelnu navigaciju ako automatska ne radi
+                // Опционо - дугме за мануелну навигацију ако аутоматска не ради
                 Button(
                     onClick = {
                         navController.navigate(Screen.BudgetList.route) {
@@ -100,7 +100,7 @@ fun BudgetScreen(
                         }
                     }
                 ) {
-                    Text("Prikaži novi budžet")
+                    Text("Прикажи нови буџет")
                 }
             }
         }

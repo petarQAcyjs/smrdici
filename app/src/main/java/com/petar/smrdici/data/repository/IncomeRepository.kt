@@ -30,16 +30,25 @@ class IncomeRepository private constructor() {
     }
     
     // Добијање тренутног корисника
-    private val currentUserId: String
-        get() = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
+    private val currentUserId: String?
+        get() = auth.currentUser?.uid
     
     // Добијање колекције прихода за тренутног корисника
     private val userIncomesCollection
-        get() = firestore.collection("users").document(currentUserId).collection("incomes")
+        get() = currentUserId?.let { uid ->
+            firestore.collection("users").document(uid).collection("incomes")
+        }
     
     // Додавање новог прихода
     suspend fun addIncome(income: Income, updateAccountBalance: Boolean = true): Result<Income> {
         return try {
+            if (currentUserId == null) {
+                LogUtils.d("IncomeRepository", "Корисник није пријављен, не могу додати приход", category = "income")
+                return Result.failure(IllegalStateException("Корисник није пријављен"))
+            }
+            
+            val collection = userIncomesCollection ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
+            
             Log.d("IncomeRepository", "Додајем приход: $income")
             
             // Генеришемо ID ако није већ постављен
@@ -72,7 +81,7 @@ class IncomeRepository private constructor() {
             )
             
             // Чувамо приход у бази података
-            userIncomesCollection.document(incomeId).set(incomeMap).await()
+            collection.document(incomeId).set(incomeMap).await()
             
             // Ажурирамо баланс рачуна (повећавамо га) само ако је затражено
             if (updateAccountBalance) {
@@ -87,7 +96,7 @@ class IncomeRepository private constructor() {
             
             Result.success(incomeToAdd)
         } catch (e: Exception) {
-            Log.e("IncomeRepository", "Грешка при додавању прихода", e)
+            LogUtils.e("IncomeRepository", "Грешка при додавању прихода", e, category = "income")
             Result.failure(e)
         }
     }
@@ -103,8 +112,8 @@ class IncomeRepository private constructor() {
             }
             
             // Прво налазимо стари приход да бисмо добили стари износ
-            val oldIncomeDoc = userIncomesCollection.document(income.id).get().await()
-            val oldIncome = oldIncomeDoc.toObject(Income::class.java)
+            val oldIncomeDoc = userIncomesCollection?.document(income.id)?.get()?.await()
+            val oldIncome = oldIncomeDoc?.toObject(Income::class.java)
             
             // Осигурамо да имамо валидан датум у формату "YYYY-MM-DD"
             val validDate = if (income.date.isEmpty() || !income.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
@@ -133,7 +142,7 @@ class IncomeRepository private constructor() {
             )
             
             // Ажурирамо приход у бази података
-            userIncomesCollection.document(incomeToUpdate.id).set(incomeMap).await()
+            userIncomesCollection?.document(incomeToUpdate.id)?.set(incomeMap)?.await()
             
             // Ажурирамо баланс рачуна
             if (oldIncome != null) {
@@ -164,11 +173,11 @@ class IncomeRepository private constructor() {
             }
             
             // Прво налазимо приход да бисмо добили износ и ID рачуна
-            val incomeDoc = userIncomesCollection.document(incomeId).get().await()
-            val income = incomeDoc.toObject(Income::class.java)
+            val incomeDoc = userIncomesCollection?.document(incomeId)?.get()?.await()
+            val income = incomeDoc?.toObject(Income::class.java)
             
             // Бришемо приход из базе података
-            userIncomesCollection.document(incomeId).delete().await()
+            userIncomesCollection?.document(incomeId)?.delete()?.await()
             
             // Ако смо успешно добавили приход, враћамо баланс рачуна (смањујемо га)
             if (income != null) {
@@ -187,9 +196,23 @@ class IncomeRepository private constructor() {
     
     // Добијање свих прихода за тренутног корисника
     fun getAllIncomes(): Flow<List<Income>> = callbackFlow {
-        LogUtils.i("IncomeRepository", "Učitavam sve prihode", category = "income")
+        LogUtils.i("IncomeRepository", "Учитавам све приходе", category = "income")
         
-        val listener = userIncomesCollection
+        if (currentUserId == null) {
+            LogUtils.d("IncomeRepository", "Корисник није пријављен, враћам празну листу", category = "income")
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
+        
+        val collection = userIncomesCollection
+        if (collection == null) {
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
+        
+        val listener = collection
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -209,10 +232,7 @@ class IncomeRepository private constructor() {
                         // Poboljšana konverzija datuma
                         val date = getDateFromDocument(doc)
                         
-                        val income = Income(id, amount, description, category, date, accountId)
-                        
-                        // Više ne logujemo svaki pojedinačni prihod
-                        income
+                        Income(id, amount, description, category, date, accountId)
                     } catch (e: Exception) {
                         Log.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e)
                         null
@@ -222,7 +242,7 @@ class IncomeRepository private constructor() {
                 // Log samo ukupan broj i statistike umesto pojedinačnih stavki
                 if (incomes.isNotEmpty()) {
                     val totalAmount = incomes.sumOf { it.amount }
-                    val avgAmount = if (incomes.isNotEmpty()) totalAmount / incomes.size else 0.0
+                    val avgAmount = totalAmount / incomes.size.toDouble()
                     val minAmount = incomes.minOfOrNull { it.amount } ?: 0.0
                     val maxAmount = incomes.maxOfOrNull { it.amount } ?: 0.0
                     
@@ -230,24 +250,6 @@ class IncomeRepository private constructor() {
                         "Učitano ${incomes.size} prihoda. " +
                         "Ukupno: $totalAmount, Prosek: $avgAmount, Min: $minAmount, Max: $maxAmount", 
                         category = "income")
-                    
-                    // Samo u VERBOSE modu prikazati distribuciju vrednosti (opciono)
-                    if (LogUtils.Config.DETAIL_LEVEL == LogUtils.DetailLevel.VERBOSE) {
-                        // Grupisati po opsegu vrednosti za bolji pregled
-                        val distribution = incomes.groupBy { income ->
-                            when {
-                                income.amount < 1000 -> "< 1,000"
-                                income.amount < 5000 -> "1,000 - 5,000"
-                                income.amount < 10000 -> "5,000 - 10,000"
-                                else -> "> 10,000"
-                            }
-                        }.mapValues { it.value.size }
-                        
-                        LogUtils.d("IncomeRepository", "Distribucija prihoda po iznosima: $distribution", 
-                            category = "income")
-                    }
-                } else {
-                    LogUtils.i("IncomeRepository", "Nema učitanih prihoda.", category = "income")
                 }
                 
                 // Ažuriramo lokalni keš
@@ -257,9 +259,10 @@ class IncomeRepository private constructor() {
                 trySend(incomes)
             }
         
-        awaitClose { 
-            Log.d("IncomeRepository", "Zatvaram listener za prihode")
-            listener.remove() 
+        // IMPORTANT: This ensures the listener is removed when the flow is cancelled
+        awaitClose {
+            LogUtils.d("IncomeRepository", "Затварам listener за приходе", category = "income")
+            listener.remove()
         }
     }
     
@@ -268,12 +271,9 @@ class IncomeRepository private constructor() {
         try {
             LogUtils.d("IncomeRepository", "Osvežavam listu prihoda", category = "income")
             
-            val snapshot = userIncomesCollection
-                .orderBy("date", Query.Direction.DESCENDING)
-                .get()
-                .await()
+            val snapshot = userIncomesCollection?.get()?.await()
             
-            val incomes = snapshot.documents.mapNotNull { doc ->
+            val incomes = snapshot?.documents?.mapNotNull { doc ->
                 try {
                     val id = doc.id
                     val amount = doc.getDouble("amount") ?: 0.0
@@ -284,20 +284,17 @@ class IncomeRepository private constructor() {
                     // Poboljšana konverzija datuma
                     val date = getDateFromDocument(doc)
                     
-                    val income = Income(id, amount, description, category, date, accountId)
-                    
-                    // Više ne logujemo svaki pojedinačni prihod
-                    income
+                    Income(id, amount, description, category, date, accountId)
                 } catch (e: Exception) {
                     Log.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e)
                     null
                 }
-            }
+            } ?: emptyList()
             
             // Logujemo samo ukupan broj i statistike
             if (incomes.isNotEmpty()) {
                 val totalAmount = incomes.sumOf { it.amount }
-                val avgAmount = if (incomes.isNotEmpty()) totalAmount / incomes.size else 0.0
+                val avgAmount = totalAmount / incomes.size.toDouble()
                 
                 LogUtils.d("IncomeRepository", 
                     "Osveženo ${incomes.size} prihoda. Ukupno: $totalAmount, Prosek: $avgAmount", 
@@ -320,15 +317,29 @@ class IncomeRepository private constructor() {
         val startDateStr = dateFormat.format(startDate)
         val endDateStr = dateFormat.format(endDate)
         
-        LogUtils.i("IncomeRepository", "Učitavam prihode za period od $startDateStr do $endDateStr", category = "income")
+        Log.d("IncomeRepository", "Учитавам приходе за период од $startDateStr до $endDateStr")
         
-        val listener = userIncomesCollection
+        if (currentUserId == null) {
+            LogUtils.d("IncomeRepository", "Корисник није пријављен, враћам празну листу", category = "income")
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
+        
+        val collection = userIncomesCollection
+        if (collection == null) {
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
+        
+        val listener = collection
             .whereGreaterThanOrEqualTo("date", startDateStr)
             .whereLessThanOrEqualTo("date", endDateStr)
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    LogUtils.e("IncomeRepository", "Greška pri slušanju prihoda za period", error, category = "income")
+                    LogUtils.e("IncomeRepository", "Greška pri slušanju prihoda за период", error, category = "income")
                     
                     // Проверавамо да ли је грешка везана за недостајући индекс
                     if (error.message?.contains("FAILED_PRECONDITION") == true && 
@@ -363,49 +374,20 @@ class IncomeRepository private constructor() {
                         // Poboljšana konverzija datuma
                         val date = getDateFromDocument(doc)
                         
-                        val income = Income(id, amount, description, category, date, accountId)
-                        
-                        // Više ne logujemo svaki pojedinačni prihod
-                        income
+                        Income(id, amount, description, category, date, accountId)
                     } catch (e: Exception) {
                         LogUtils.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e, category = "income")
                         null
                     }
                 } ?: emptyList()
                 
-                // Log samo ukupan broj i statistike
-                if (incomes.isNotEmpty()) {
-                    val totalAmount = incomes.sumOf { it.amount }
-                    val avgAmount = if (incomes.isNotEmpty()) totalAmount / incomes.size else 0.0
-                    val minAmount = incomes.minOfOrNull { it.amount } ?: 0.0
-                    val maxAmount = incomes.maxOfOrNull { it.amount } ?: 0.0
-                    
-                    LogUtils.i("IncomeRepository", 
-                        "Učitano ${incomes.size} prihoda za period $startDateStr - $endDateStr. " +
-                        "Ukupno: $totalAmount, Prosek: $avgAmount, Min: $minAmount, Max: $maxAmount", 
-                        category = "income")
-                    
-                    // Samo u VERBOSE modu prikazati dodatne detalje
-                    if (LogUtils.Config.DETAIL_LEVEL == LogUtils.DetailLevel.VERBOSE) {
-                        // Grupisati po mesecima
-                        val monthDistribution = incomes.groupBy { 
-                            val parts = it.date.split("-") 
-                            if (parts.size >= 2) "${parts[0]}-${parts[1]}" else it.date
-                        }.mapValues { it.value.sumOf { income -> income.amount } }
-                        
-                        LogUtils.d("IncomeRepository", "Mesečna distribucija prihoda za period: $monthDistribution", 
-                            category = "income")
-                    }
-                } else {
-                    LogUtils.i("IncomeRepository", "Nema prihoda za period $startDateStr - $endDateStr", 
-                        category = "income")
-                }
-                
+                Log.d("IncomeRepository", "Учитано ${incomes.size} прихода за период")
                 trySend(incomes)
             }
         
+        // IMPORTANT: This ensures the listener is removed when the flow is cancelled
         awaitClose { 
-            LogUtils.d("IncomeRepository", "Zatvaram listener za prihode za period", category = "income")
+            LogUtils.d("IncomeRepository", "Затварам listener за приходе за период", category = "income")
             listener.remove() 
         }
     }
@@ -414,12 +396,20 @@ class IncomeRepository private constructor() {
     fun getIncomesForAccount(accountId: String): Flow<List<Income>> = callbackFlow {
         LogUtils.i("IncomeRepository", "Učitavam prihode za račun: $accountId", category = "income")
         
-        val listener = userIncomesCollection
+        if (currentUserId == null) {
+            LogUtils.d("IncomeRepository", "Корисник није пријављен, враћам празну листу", category = "income")
+            trySend(emptyList())
+            return@callbackFlow
+        }
+        
+        val collection = userIncomesCollection ?: return@callbackFlow
+        
+        val listener = collection
             .whereEqualTo("accountId", accountId)
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    LogUtils.e("IncomeRepository", "Greška pri slušanju prihoda za račun", error, category = "income")
+                    LogUtils.e("IncomeRepository", "Greška pri slušanju prihoda за račun", error, category = "income")
                     
                     // Проверавамо да ли је грешка везана за недостајући индекс
                     if (error.message?.contains("FAILED_PRECONDITION") == true && 
@@ -506,7 +496,7 @@ class IncomeRepository private constructor() {
             }
         
         awaitClose { 
-            LogUtils.d("IncomeRepository", "Zatvaram listener za prihode za račun", category = "income")
+            Log.d("IncomeRepository", "Затварам listener за приходе за račun")
             listener.remove() 
         }
     }
@@ -521,6 +511,11 @@ class IncomeRepository private constructor() {
         
         LogUtils.d("IncomeRepository", "Učitavam prihode za račun: $accountId i period od $startDateStr do $endDateStr", 
             category = "income")
+        
+        if (currentUserId == null) {
+            LogUtils.d("IncomeRepository", "Корисник није пријављен, враћам празну листу", category = "income")
+            return emptyList()
+        }
         
         try {
             // Filtriramo prihode za račun u datom vremenskom periodu
@@ -573,11 +568,11 @@ class IncomeRepository private constructor() {
         try {
             Log.d("IncomeRepository", "Бришем све приходе")
             
-            val snapshot = userIncomesCollection.get().await()
+            val snapshot = userIncomesCollection?.get()?.await()
             
             val batch = firestore.batch()
-            for (document in snapshot.documents) {
-                batch.delete(userIncomesCollection.document(document.id))
+            for (document in snapshot?.documents ?: emptyList()) {
+                batch.delete(userIncomesCollection?.document(document.id) ?: continue)
             }
             
             batch.commit().await()
