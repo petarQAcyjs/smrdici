@@ -2,11 +2,13 @@ package com.petar.smrdici.ui.screens.lists
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
@@ -34,7 +36,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -59,7 +60,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -73,12 +73,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -89,13 +91,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.ShoppingItem
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import androidx.compose.material3.ExperimentalMaterial3Api as Material3ExperimentalApi
-import com.petar.smrdici.ui.components.AppHeader
-import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.auth.AuthState
 
 @OptIn(Material3ExperimentalApi::class, ExperimentalComposeUiApi::class, ExperimentalMaterialApi::class)
 @Composable
@@ -148,6 +150,11 @@ fun ListDetailsScreen(
     
     // Додајемо стање за праћење да ли је листа празна
     val isListEmpty = selectedList?.items?.isEmpty() == true
+    
+    // Add state for edit dialog
+    var showEditDialog by remember { mutableStateOf(false) }
+    var itemToEdit by remember { mutableStateOf<ShoppingItem?>(null) }
+    var editItemText by remember { mutableStateOf("") }
     
     // Учитавање листе при првом рендеровању
     LaunchedEffect(listId) {
@@ -390,49 +397,52 @@ fun ListDetailsScreen(
                             }
                             
                             // Приказујемо ставке
-                            items(
-                                items = listState.items,
-                                key = { item -> item.id }
-                            ) { item ->
-                                ShoppingItemRow(
-                                    item = item,
-                                    onDelete = { item ->
-                                        // Čuvamo samo poslednju obrisanu stavku
-                                        lastDeletedItem = item
-                                        listsViewModel.deleteItem(item.id)
-                                        
-                                        // Prikazujemo Snackbar sa opcijom za povraćaj
-                                        coroutineScope.launch {
-                                            val result = snackbarHostState.showSnackbar(
-                                                message = "Ставка обрисана",
-                                                actionLabel = "Поништи",
-                                                duration = SnackbarDuration.Short
-                                            )
+                            selectedList?.items?.let { items ->
+                                items(
+                                    items = items,
+                                    key = { item -> item.id }
+                                ) { item ->
+                                    ShoppingItemRow(
+                                        item = item,
+                                        onDelete = { item ->
+                                            lastDeletedItem = item
+                                            listsViewModel.deleteItem(item.id)
                                             
-                                            if (result == SnackbarResult.ActionPerformed) {
-                                                // Vraćamo samo poslednju obrisanu stavku
-                                                lastDeletedItem?.let { deletedItem ->
-                                                    if (deletedItem.id.isNotEmpty()) {
-                                                        listsViewModel.restoreItem(deletedItem.id, deletedItem)
-                                                        // Nakon vraćanja, postavljamo lastDeletedItem na null
-                                                        lastDeletedItem = null
+                                            coroutineScope.launch {
+                                                val result = snackbarHostState.showSnackbar(
+                                                    message = "Ставка обрисана",
+                                                    actionLabel = "Поништи",
+                                                    duration = SnackbarDuration.Short
+                                                )
+                                                
+                                                if (result == SnackbarResult.ActionPerformed) {
+                                                    lastDeletedItem?.let { deletedItem ->
+                                                        if (deletedItem.id.isNotEmpty()) {
+                                                            listsViewModel.restoreItem(deletedItem.id, deletedItem)
+                                                            lastDeletedItem = null
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
-                                    },
-                                    onCheckedChange = { shoppingItem, isChecked ->
-                                        listState.id?.let { id ->
-                                            listsViewModel.updateItemCompletionStatus(id, shoppingItem.id, isChecked)
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                
-                                if (item != listState.items.lastOrNull()) {
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(vertical = 8.dp)
+                                        },
+                                        onCheckedChange = { shoppingItem, isChecked ->
+                                            selectedList?.id?.let { id ->
+                                                listsViewModel.updateItemCompletionStatus(id, shoppingItem.id, isChecked)
+                                            }
+                                        },
+                                        onStartEdit = { item ->
+                                            itemToEdit = item
+                                            editItemText = item.name
+                                            showEditDialog = true
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
                                     )
+                                    
+                                    if (item != items.lastOrNull()) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    }
                                 }
                             }
                             
@@ -472,6 +482,30 @@ fun ListDetailsScreen(
                 }
             )
         }
+        
+        // Add EditItemDialog at the end of the Scaffold
+        if (showEditDialog && itemToEdit != null) {
+            EditItemDialog(
+                initialText = itemToEdit?.name ?: "",
+                onDismiss = {
+                    showEditDialog = false
+                    itemToEdit = null
+                    editItemText = ""
+                },
+                onConfirm = { newText ->
+                    itemToEdit?.let { item ->
+                        if (newText != item.name) {
+                            selectedList?.id?.let { id ->
+                                listsViewModel.updateItemName(id, item.id, newText)
+                            }
+                        }
+                    }
+                    showEditDialog = false
+                    itemToEdit = null
+                    editItemText = ""
+                }
+            )
+        }
     }
 }
 
@@ -480,12 +514,20 @@ fun ShoppingItemRow(
     item: ShoppingItem,
     onDelete: (ShoppingItem) -> Unit,
     onCheckedChange: (ShoppingItem, Boolean) -> Unit,
+    onStartEdit: (ShoppingItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var show by remember { mutableStateOf(true) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var isPressed by remember { mutableStateOf(false) }
     val view = LocalView.current
+    val scope = rememberCoroutineScope()
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        label = "scale animation"
+    )
     
     // Израчунавамо праг за брисање - повећавамо праг на 200dp
     val density = LocalDensity.current
@@ -521,7 +563,9 @@ fun ShoppingItemRow(
         exit = slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }) + fadeOut()
     ) {
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .scale(scale),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
@@ -556,7 +600,6 @@ fun ShoppingItemRow(
                             state = draggableState,
                             orientation = Orientation.Horizontal,
                             onDragStopped = {
-                                // Ако не пређемо праг, враћамо елемент назад
                                 if (offsetX <= deleteThreshold) {
                                     offsetX = 0f
                                     confirmDelete = false
@@ -565,7 +608,20 @@ fun ShoppingItemRow(
                         )
                         .offset { IntOffset(offsetX.roundToInt(), 0) }
                         .background(MaterialTheme.colorScheme.surface)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onLongPress = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                    isPressed = true
+                                    scope.launch {
+                                        delay(100) // Short delay for visual feedback
+                                        isPressed = false
+                                        onStartEdit(item)
+                                    }
+                                }
+                            )
+                        },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val styleText = if (item.isCompleted) {
@@ -625,6 +681,42 @@ fun DeleteConfirmationDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) {
                 Text("Обриши")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Откажи")
+            }
+        }
+    )
+}
+
+@Composable
+fun EditItemDialog(
+    initialText: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var text by remember { mutableStateOf(initialText) }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Измени ставку") },
+        text = {
+            androidx.compose.material3.TextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onConfirm(text) })
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(text) },
+                enabled = text.isNotBlank() && text != initialText
+            ) {
+                Text("Сачувај")
             }
         },
         dismissButton = {
