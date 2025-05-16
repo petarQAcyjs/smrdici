@@ -63,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -217,6 +218,48 @@ fun CalendarScreen(
                     text = "Календар",
                     style = MaterialTheme.typography.headlineMedium
                 )
+            }
+
+            // Add month navigation controls
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { 
+                        val calendar = Calendar.getInstance().apply { time = selectedDate }
+                        calendar.add(Calendar.MONTH, -1)
+                        calendarViewModel.selectDate(calendar.time)
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Претходни месец"
+                    )
+                }
+
+                Text(
+                    text = SimpleDateFormat("MMMM yyyy", Locale.forLanguageTag("sr")).format(selectedDate),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                IconButton(
+                    onClick = { 
+                        val calendar = Calendar.getInstance().apply { time = selectedDate }
+                        calendar.add(Calendar.MONTH, 1)
+                        calendarViewModel.selectDate(calendar.time)
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Следећи месец",
+                        modifier = Modifier.rotate(180f)
+                    )
+                }
             }
             
             // Враћамо CalendarGrid уместо MonthCalendar

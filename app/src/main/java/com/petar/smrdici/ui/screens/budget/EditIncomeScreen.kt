@@ -1,45 +1,80 @@
 package com.petar.smrdici.ui.screens.budget
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.petar.smrdici.data.model.Income
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import com.petar.smrdici.data.model.IncomeCategory
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.CategoryDropdown
 import com.petar.smrdici.ui.components.DatePickerDialog
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.*
-import com.petar.smrdici.ui.components.AppHeader
-import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.auth.AuthState
-import androidx.navigation.NavController
-import androidx.compose.runtime.collectAsState
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditIncomeScreen(
     navController: NavController,
-    income: Income,
+    incomeId: String,
     onNavigateBack: () -> Unit,
-    budgetViewModel: BudgetViewModel,
     authViewModel: AuthViewModel = viewModel()
 ) {
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
-    var amount by remember { mutableStateOf(income.amount.toString()) }
-    var description by remember { mutableStateOf(income.description) }
-    var selectedCategory by remember { mutableStateOf(income.category) }
-    var selectedDate by remember { mutableStateOf(income.getDateObject() ?: Date()) }
+    
+    // State variables
+    var amount by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf<IncomeCategory?>(null) }
+    var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var selectedAccountId by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
-    var showError by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf("") }
+    
+    // Load income data using incomeId
+    val incomeViewModel: IncomeViewModel = viewModel()
+    LaunchedEffect(incomeId) {
+        incomeViewModel.getIncomeById(incomeId)
+    }
+    val income by incomeViewModel.currentIncome.collectAsState()
+    
+    // Update form when income is loaded
+    LaunchedEffect(income) {
+        income?.let {
+            amount = it.amount.toString()
+            description = it.description
+            selectedCategory = IncomeCategory.valueOf(it.category)
+            selectedDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(it.date)?.time ?: System.currentTimeMillis()
+            selectedAccountId = it.accountId
+        }
+    }
     
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -80,14 +115,15 @@ fun EditIncomeScreen(
             CategoryDropdown(
                 selectedCategory = selectedCategory,
                 onCategorySelected = { selectedCategory = it },
-                categories = budgetViewModel.incomeCategories.collectAsState().value
+                categories = IncomeCategory.entries.toList(),
+                getDisplayName = { it.getDisplayName() }
             )
 
             OutlinedButton(
                 onClick = { showDatePicker = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Date: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(selectedDate)}")
+                Text("Date: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedDate))}")
             }
 
             Button(
@@ -100,16 +136,20 @@ fun EditIncomeScreen(
                                 return@launch
                             }
                             
-                            val updatedIncome = income.copy(
+                            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            val updatedIncome = income?.copy(
                                 amount = amountValue,
                                 description = description,
-                                category = selectedCategory,
-                                date = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(selectedDate)
+                                category = selectedCategory?.name ?: "",
+                                date = dateFormat.format(Date(selectedDate)),
+                                accountId = selectedAccountId
                             )
                             
-                            budgetViewModel.updateIncome(updatedIncome)
-                            snackbarHostState.showSnackbar("Income updated successfully")
-                            onNavigateBack()
+                            if (updatedIncome != null) {
+                                incomeViewModel.updateIncome(updatedIncome)
+                                snackbarHostState.showSnackbar("Income updated successfully")
+                                onNavigateBack()
+                            }
                         } catch (e: Exception) {
                             snackbarHostState.showSnackbar("Failed to update income: ${e.message}")
                         }
@@ -124,8 +164,8 @@ fun EditIncomeScreen(
         if (showDatePicker) {
             DatePickerDialog(
                 onDismissRequest = { showDatePicker = false },
-                onDateSelected = { selectedDate = it },
-                initialDate = selectedDate
+                onDateSelected = { selectedDate = it.time },
+                initialDate = Date(selectedDate)
             )
         }
     }

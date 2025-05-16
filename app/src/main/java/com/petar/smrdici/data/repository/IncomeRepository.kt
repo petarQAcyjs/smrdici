@@ -641,6 +641,37 @@ class IncomeRepository private constructor() {
         }
     }
     
+    // Добијање прихода по ID-у
+    suspend fun getIncomeById(incomeId: String): Income? {
+        return try {
+            LogUtils.d("IncomeRepository", "Учитавам приход по ID-у: $incomeId", category = "income")
+            
+            if (currentUserId == null) {
+                LogUtils.d("IncomeRepository", "Корисник није пријављен", category = "income")
+                return null
+            }
+            
+            val doc = userIncomesCollection?.document(incomeId)?.get()?.await()
+            
+            if (doc == null || !doc.exists()) {
+                LogUtils.d("IncomeRepository", "Приход није пронађен: $incomeId", category = "income")
+                return null
+            }
+            
+            val id = doc.id
+            val amount = doc.getDouble("amount") ?: 0.0
+            val description = doc.getString("description") ?: ""
+            val category = doc.getString("category") ?: ""
+            val accountId = doc.getString("accountId") ?: ""
+            val date = getDateFromDocument(doc)
+            
+            Income(id, amount, description, category, date, accountId)
+        } catch (e: Exception) {
+            LogUtils.e("IncomeRepository", "Грешка при учитавању прихода по ID-у: $incomeId", e, category = "income")
+            null
+        }
+    }
+    
     companion object {
         @Volatile
         private var instance: IncomeRepository? = null

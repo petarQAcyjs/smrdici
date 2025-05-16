@@ -11,7 +11,10 @@ data class Account(
     @field:JvmField val color: Int = 0,
     @field:JvmField val isDefault: Boolean = false,
     @field:JvmField val type: AccountType = AccountType.CASH
-)
+) {
+    // No-argument constructor required by Firestore
+    constructor() : this("", "", 0.0)
+}
 
 enum class AccountType {
     CASH,

@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Job
 
 class HomeViewModel() : ViewModel() {
     // Лења иницијализација EventRepository
@@ -30,8 +31,14 @@ class HomeViewModel() : ViewModel() {
     
     private val auth = FirebaseAuth.getInstance()
     
+    // Кеш за учитане догађаје
+    private val loadedEventsCache = mutableMapOf<String, List<Event>>()
+    
     // Застава за спречавање вишеструких истовремених учитавања
     private var isLoadingEvents = false
+    
+    // Job за праћење текућег учитавања
+    private var currentLoadJob: Job? = null
     
     init {
         // Учитавамо догађаје само када је HomeViewModel активан
@@ -50,6 +57,9 @@ class HomeViewModel() : ViewModel() {
         // Спречавамо вишеструка паралелна учитавања
         if (isLoadingEvents) return
         
+        // Отказујемо претходни посао ако постоји
+        currentLoadJob?.cancel()
+        
         viewModelScope.launch {
             isLoadingEvents = true
             try {
@@ -60,7 +70,7 @@ class HomeViewModel() : ViewModel() {
                     return@launch
                 }
                 
-                // Постављамо временски опсег за данас (од поноћи до 23:59:59)
+                // Постављамо временски опсег за данас
                 val calendar = Calendar.getInstance()
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
@@ -78,35 +88,104 @@ class HomeViewModel() : ViewModel() {
                     - Крај дана: ${formatDate(endOfDay)}
                 """.trimIndent())
                 
+                // Проверавамо кеш
+                val cacheKey = "${formatDate(startOfDay)}_${formatDate(endOfDay)}"
+                if (loadedEventsCache.containsKey(cacheKey)) {
+                    Log.d("HomeViewModel", "Користим кеширане догађаје")
+                    val cachedEvents = loadedEventsCache[cacheKey]!!
+                    updateTodayEvents(cachedEvents)
+                    return@launch
+                }
+                
                 // Учитавамо све догађаје за данас
                 eventRepository.getEvents(startOfDay, endOfDay)
                     .collect { events ->
                         Log.d("HomeViewModel", "Учитано ${events.size} догађаја")
                         
-                        // Филтрирамо само будуће догађаје
-                        val currentTime = Calendar.getInstance().time
-                        val activeEvents = events.filter { event: Event ->
-                            val eventEndTime = event.endTime?.toDate() ?: Date(Long.MAX_VALUE)
-                            eventEndTime >= currentTime
-                        }
+                        // Кеширамо учитане догађаје
+                        loadedEventsCache[cacheKey] = events
                         
-                        Log.d("HomeViewModel", """
-                            Филтрирање догађаја:
-                            - Укупно догађаја: ${events.size}
-                            - Активних догађаја: ${activeEvents.size}
-                            - Тренутно време: ${formatDate(currentTime)}
-                        """.trimIndent())
-                        
-                        // Обавезно проверавамо да ли је листа заиста различита пре ажурирања
-                        if (_todayEvents.value != activeEvents) {
-                            _todayEvents.value = activeEvents
-                        }
+                        // Филтрирамо и приказујемо само данашње догађаје
+                        updateTodayEvents(events)
                     }
             } catch (e: Exception) {
-                Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Log.d("HomeViewModel", "Учитавање догађаја отказано")
+                } else {
+                    Log.e("HomeViewModel", "Грешка при учитавању догађаја", e)
+                }
             } finally {
                 isLoadingEvents = false
             }
+        }.also { currentLoadJob = it }
+    }
+    
+    private fun updateTodayEvents(allEvents: List<Event>) {
+        val currentTime = Calendar.getInstance().time
+        
+        // Постављамо почетак и крај дана
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        val startOfDay = calendar.time
+        
+        calendar.set(Calendar.HOUR_OF_DAY, 23)
+        calendar.set(Calendar.MINUTE, 59)
+        calendar.set(Calendar.SECOND, 59)
+        calendar.set(Calendar.MILLISECOND, 999)
+        val endOfDay = calendar.time
+        
+        val todayEvents = allEvents.filter { event ->
+            val eventDate = event.startTime?.toDate() ?: return@filter false
+            val eventEndTime = event.endTime?.toDate() ?: eventDate
+            
+            // Додајемо детаљно логовање за сваки догађај
+            Log.d("HomeViewModel", """
+                Проверавам догађај:
+                - Наслов: ${event.title}
+                - Време почетка: ${formatDate(eventDate)}
+                - Време краја: ${formatDate(eventEndTime)}
+                - Почетак дана: ${formatDate(startOfDay)}
+                - Крај дана: ${formatDate(endOfDay)}
+                - Тренутно време: ${formatDate(currentTime)}
+                - Целодневни догађај: ${event.allDay}
+            """.trimIndent())
+            
+            // Проверавамо да ли је догађај данас
+            val isToday = !eventDate.before(startOfDay) && !eventDate.after(endOfDay)
+            
+            // За целодневне догађаје, проверавамо само да ли су данас
+            // За остале догађаје, проверавамо да ли су данас и још нису завршени
+            val isValid = if (event.allDay) {
+                isToday
+            } else {
+                isToday && eventEndTime >= currentTime
+            }
+            
+            Log.d("HomeViewModel", """
+                Резултат провере за догађај ${event.title}:
+                - Је данас: $isToday
+                - Је активан: ${eventEndTime >= currentTime}
+                - Је валидан: $isValid
+            """.trimIndent())
+            
+            isValid
+        }.sortedBy { it.startTime?.toDate() }
+        
+        Log.d("HomeViewModel", """
+            Филтрирање догађаја:
+            - Укупно догађаја: ${allEvents.size}
+            - Данашњих активних догађаја: ${todayEvents.size}
+            - Тренутно време: ${formatDate(currentTime)}
+            - Детаљи догађаја:
+            ${todayEvents.joinToString("\n") { "- ${it.title} (${formatDate(it.startTime?.toDate())})" }}
+        """.trimIndent())
+        
+        // Обавезно проверавамо да ли је листа заиста различита пре ажурирања
+        if (_todayEvents.value != todayEvents) {
+            _todayEvents.value = todayEvents
         }
     }
     
@@ -128,9 +207,6 @@ class HomeViewModel() : ViewModel() {
                 Log.d("HomeViewModel", "Почињем синхронизацију догађаја...")
                 _syncStatus.value = SyncStatus.Syncing
                 isLoadingEvents = true
-                
-                // Прво освежимо догађаје и поставимо стање синхронизације
-                loadTodayEvents()
                 
                 // Затим покушавамо синхронизацију
                 Log.d("HomeViewModel", "Покрећем синхронизацију са сервером...")
@@ -156,6 +232,11 @@ class HomeViewModel() : ViewModel() {
                 Log.d("HomeViewModel", "Синхронизација завршена!")
             }
         }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        currentLoadJob?.cancel()
     }
     
     // Додајемо Factory класу за креирање HomeViewModel са Context параметром

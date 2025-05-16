@@ -213,7 +213,6 @@ class SmrdiciApplication : Application() {
         val expenseRepository = RepositoryManager.getExpenseRepositoryForBudget()
         val incomeRepository = RepositoryManager.getIncomeRepositoryForBudget()
         val accountRepository = RepositoryManager.getAccountRepositoryForBudget(this)
-        val budgetRepository = RepositoryManager.getBudgetRepositoryForBudget()
         
         // Međusobno povezivanje repozitorijuma (ako je potrebno)
         // Npr. ExpenseRepository zahteva AccountRepository za ažuriranje balansa računa
