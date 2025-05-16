@@ -583,6 +583,37 @@ class ExpenseRepository private constructor() {
         }
     }
     
+    // Добијање расхода по ID-у
+    suspend fun getExpenseById(expenseId: String): Expense? {
+        return try {
+            LogUtils.d("ExpenseRepository", "Учитавам расход по ID-у: $expenseId", category = "expense")
+            
+            if (currentUserId == null) {
+                LogUtils.d("ExpenseRepository", "Корисник није пријављен", category = "expense")
+                return null
+            }
+            
+            val doc = userExpensesCollection?.document(expenseId)?.get()?.await()
+            
+            if (doc == null || !doc.exists()) {
+                LogUtils.d("ExpenseRepository", "Расход није пронађен: $expenseId", category = "expense")
+                return null
+            }
+            
+            val id = doc.id
+            val amount = doc.getDouble("amount") ?: 0.0
+            val description = doc.getString("description") ?: ""
+            val category = doc.getString("category") ?: ""
+            val accountId = doc.getString("accountId") ?: ""
+            val date = getDateFromDocument(doc)
+            
+            Expense(id, amount, description, category, date, accountId)
+        } catch (e: Exception) {
+            LogUtils.e("ExpenseRepository", "Грешка при учитавању расхода по ID-у: $expenseId", e, category = "expense")
+            null
+        }
+    }
+    
     // На kraju klase dodati helper funkciju за конверзију датума
     /**
      * Pomoćna funkcija za dobijanje datuma iz Firestore dokumenta

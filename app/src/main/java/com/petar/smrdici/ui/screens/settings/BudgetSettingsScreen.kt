@@ -187,7 +187,7 @@ fun BudgetSettingsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             AppHeader(
-                title = "Подешавања буџета",
+                title = "Подешавање финансија",
                 user = user,
                 navController = navController,
                 showBackButton = true
@@ -276,7 +276,7 @@ fun BudgetSettingsScreen(
                             .padding(16.dp)
                     ) {
                         Text(
-                            text = "Период буџета",
+                            text = "Период прегледа",
                             style = MaterialTheme.typography.titleMedium
                         )
                         

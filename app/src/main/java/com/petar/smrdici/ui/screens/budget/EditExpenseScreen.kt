@@ -1,43 +1,80 @@
 package com.petar.smrdici.ui.screens.budget
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.petar.smrdici.data.model.Expense
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import com.petar.smrdici.data.model.ExpenseCategory
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.CategoryDropdown
 import com.petar.smrdici.ui.components.DatePickerDialog
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.*
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.petar.smrdici.ui.components.AppHeader
-import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.auth.AuthState
-import androidx.navigation.NavController
-import androidx.compose.runtime.collectAsState
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditExpenseScreen(
     navController: NavController,
-    expense: Expense,
+    expenseId: String,
     onNavigateBack: () -> Unit,
-    budgetViewModel: BudgetViewModel,
     authViewModel: AuthViewModel = viewModel()
 ) {
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
-    var amount by remember { mutableStateOf(expense.amount.toString()) }
-    var description by remember { mutableStateOf(expense.description) }
-    var selectedCategory by remember { mutableStateOf(expense.category) }
-    var selectedDate by remember { mutableStateOf(expense.getDateObject() ?: Date()) }
+    
+    // State variables
+    var amount by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
+    var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var selectedAccountId by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
+    
+    // Load expense data using expenseId
+    val expenseViewModel: ExpenseViewModel = viewModel()
+    LaunchedEffect(expenseId) {
+        expenseViewModel.getExpenseById(expenseId)
+    }
+    val expense by expenseViewModel.currentExpense.collectAsState()
+    
+    // Update form when expense is loaded
+    LaunchedEffect(expense) {
+        expense?.let {
+            amount = it.amount.toString()
+            description = it.description
+            selectedCategory = ExpenseCategory.valueOf(it.category)
+            selectedDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(it.date)?.time ?: System.currentTimeMillis()
+            selectedAccountId = it.accountId
+        }
+    }
     
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -78,14 +115,15 @@ fun EditExpenseScreen(
             CategoryDropdown(
                 selectedCategory = selectedCategory,
                 onCategorySelected = { selectedCategory = it },
-                categories = budgetViewModel.expenseCategories.collectAsState().value
+                categories = ExpenseCategory.entries.toList(),
+                getDisplayName = { it.getDisplayName() }
             )
 
             OutlinedButton(
                 onClick = { showDatePicker = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Date: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(selectedDate)}")
+                Text("Date: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedDate))}")
             }
 
             Button(
@@ -98,16 +136,20 @@ fun EditExpenseScreen(
                                 return@launch
                             }
                             
-                            val updatedExpense = expense.copy(
+                            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            val updatedExpense = expense?.copy(
                                 amount = amountValue,
                                 description = description,
-                                category = selectedCategory,
-                                date = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(selectedDate)
+                                category = selectedCategory?.name ?: "",
+                                date = dateFormat.format(Date(selectedDate)),
+                                accountId = selectedAccountId
                             )
                             
-                            budgetViewModel.updateExpense(updatedExpense)
-                            snackbarHostState.showSnackbar("Expense updated successfully")
-                            onNavigateBack()
+                            if (updatedExpense != null) {
+                                expenseViewModel.updateExpense(updatedExpense)
+                                snackbarHostState.showSnackbar("Expense updated successfully")
+                                onNavigateBack()
+                            }
                         } catch (e: Exception) {
                             snackbarHostState.showSnackbar("Failed to update expense: ${e.message}")
                         }
@@ -122,8 +164,8 @@ fun EditExpenseScreen(
         if (showDatePicker) {
             DatePickerDialog(
                 onDismissRequest = { showDatePicker = false },
-                onDateSelected = { selectedDate = it },
-                initialDate = selectedDate
+                onDateSelected = { selectedDate = it.time },
+                initialDate = Date(selectedDate)
             )
         }
     }

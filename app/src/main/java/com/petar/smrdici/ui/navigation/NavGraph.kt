@@ -1,15 +1,8 @@
 package com.petar.smrdici.ui.navigation
 
-import android.util.Log
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -23,9 +16,6 @@ import com.petar.smrdici.ui.screens.addAccount.AddAccountScreen
 import com.petar.smrdici.ui.screens.auth.LoginScreen
 import com.petar.smrdici.ui.screens.budget.AddExpenseScreen
 import com.petar.smrdici.ui.screens.budget.AddIncomeScreen
-import com.petar.smrdici.ui.screens.budget.BudgetListScreen
-import com.petar.smrdici.ui.screens.budget.BudgetScreen
-import com.petar.smrdici.ui.screens.budget.BudgetViewModel
 import com.petar.smrdici.ui.screens.budget.EditExpenseScreen
 import com.petar.smrdici.ui.screens.budget.EditIncomeScreen
 import com.petar.smrdici.ui.screens.calendar.AddEventScreen
@@ -34,12 +24,14 @@ import com.petar.smrdici.ui.screens.editAccount.EditAccountScreen
 import com.petar.smrdici.ui.screens.home.HomeScreen
 import com.petar.smrdici.ui.screens.lists.ListDetailsScreen
 import com.petar.smrdici.ui.screens.lists.ListsScreen
+import com.petar.smrdici.ui.screens.lists.ListsViewModel
 import com.petar.smrdici.ui.screens.profile.ProfileScreen
 import com.petar.smrdici.ui.screens.settings.BudgetSettingsScreen
 import com.petar.smrdici.ui.screens.settings.BudgetSettingsViewModel
 import com.petar.smrdici.ui.screens.settings.ExpenseCategoriesScreen
 import com.petar.smrdici.ui.screens.settings.IncomeCategoriesScreen
 import com.petar.smrdici.ui.screens.transfer.TransferScreen
+import com.petar.smrdici.ui.screens.finance.FinanceScreen
 
 @Composable
 fun NavGraph(
@@ -55,23 +47,6 @@ fun NavGraph(
         BudgetSettingsViewModel.Factory(context).create(BudgetSettingsViewModel::class.java)
     }
     
-    // Create BudgetViewModel factory
-    val budgetViewModelFactory = remember {
-        object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                return BudgetViewModel(
-                    expenseRepository = expenseRepository,
-                    incomeRepository = incomeRepository,
-                    settingsViewModel = settingsViewModel,
-                    applicationContext = context
-                ) as T
-            }
-        }
-    }
-    // Create BudgetViewModel ONCE here and share it
-    val budgetViewModel: BudgetViewModel = viewModel(factory = budgetViewModelFactory)
-
     NavHost(
         navController = navController,
         startDestination = startDestination
@@ -86,52 +61,6 @@ fun NavGraph(
             }
         }
         
-        composable(route = Screen.Budget.route) {
-            MainLayout {
-                BudgetScreen(navController = navController, budgetViewModel = budgetViewModel)
-            }
-        }
-        
-        // Nova ruta za listu budžeta
-        composable(route = Screen.BudgetList.route) {
-            MainLayout {
-                BudgetListScreen(navController = navController, budgetViewModel = budgetViewModel)
-            }
-        }
-        
-        // Ruta za detalje budžeta sa parametrom ID
-        composable(
-            route = "${Screen.BudgetDetail.route}/{budgetId}",
-            arguments = listOf(
-                navArgument("budgetId") { type = NavType.StringType }
-            )
-        ) { 
-            // Privremena implementacija - ne koristimo budgetId dok ne implementiramo detaljni ekran
-            MainLayout {
-                BudgetListScreen(navController = navController)
-            }
-        }
-        
-        // Ruta za dodavanje budžeta
-        composable(
-            route = "${Screen.AddBudget.route}?type={type}",
-            arguments = listOf(
-                navArgument("type") {
-                    type = NavType.StringType
-                    defaultValue = "expense"
-                    nullable = true
-                }
-            )
-        ) {
-            // Privremeni kod za navigaciju nazad - ne koristimo type parametar
-            LaunchedEffect(key1 = true) {
-                navController.navigateUp()
-            }
-            
-            // Prazan ekran dok se ne izvrši navigacija
-            Box(modifier = Modifier.fillMaxSize())
-        }
-        
         composable(route = Screen.Calendar.route) {
             MainLayout {
                 CalendarScreen(navController = navController)
@@ -141,6 +70,12 @@ fun NavGraph(
         composable(route = Screen.Lists.route) {
             MainLayout {
                 ListsScreen(navController = navController)
+            }
+        }
+        
+        composable(route = Screen.Finance.route) {
+            MainLayout {
+                FinanceScreen(navController = navController)
             }
         }
         
@@ -155,11 +90,17 @@ fun NavGraph(
         }
         
         composable(route = Screen.AddExpense.route) {
-            AddExpenseScreen(navController = navController)
+            AddExpenseScreen(
+                onNavigateBack = { navController.popBackStack() },
+                navController = navController
+            )
         }
         
         composable(route = Screen.AddIncome.route) {
-            AddIncomeScreen(navController = navController)
+            AddIncomeScreen(
+                onNavigateBack = { navController.popBackStack() },
+                navController = navController
+            )
         }
         
         composable(
@@ -171,7 +112,9 @@ fun NavGraph(
             val listId = backStackEntry.arguments?.getString("listId") ?: ""
             ListDetailsScreen(
                 navController = navController,
-                listId = listId
+                listId = listId,
+                listsViewModel = viewModel(factory = ListsViewModel.Factory()),
+                authViewModel = viewModel()
             )
         }
         
@@ -229,21 +172,11 @@ fun NavGraph(
             )
         ) { backStackEntry ->
             val expenseId = backStackEntry.arguments?.getString("expenseId") ?: ""
-            val expensesState = budgetViewModel.expenses.collectAsState()
-            val expenses = expensesState.value
-            Log.d("NavGraph", "Current expenses list: ${expenses.joinToString { it.id }}")
-            val expense = expenses.find { it.id == expenseId }
-            if (expense != null) {
-                Log.d("NavGraph", "Expense found: $expense")
-                EditExpenseScreen(
-                    navController = navController,
-                    expense = expense,
-                    onNavigateBack = { navController.popBackStack() },
-                    budgetViewModel = budgetViewModel
-                )
-            } else {
-                Log.e("NavGraph", "Expense with id $expenseId not found! Current expense IDs: ${expenses.joinToString { it.id }}")
-            }
+            EditExpenseScreen(
+                navController = navController,
+                expenseId = expenseId,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         
         composable(
@@ -255,21 +188,11 @@ fun NavGraph(
             )
         ) { backStackEntry ->
             val incomeId = backStackEntry.arguments?.getString("incomeId") ?: ""
-            val incomesState = budgetViewModel.incomes.collectAsState()
-            val incomes = incomesState.value
-            Log.d("NavGraph", "Current incomes list: ${incomes.joinToString { it.id }}")
-            val income = incomes.find { it.id == incomeId }
-            if (income != null) {
-                Log.d("NavGraph", "Income found: $income")
-                EditIncomeScreen(
-                    navController = navController,
-                    income = income,
-                    onNavigateBack = { navController.popBackStack() },
-                    budgetViewModel = budgetViewModel
-                )
-            } else {
-                Log.e("NavGraph", "Income with id $incomeId not found! Current income IDs: ${incomes.map { it.id }}")
-            }
+            EditIncomeScreen(
+                navController = navController,
+                incomeId = incomeId,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
     }
 } 

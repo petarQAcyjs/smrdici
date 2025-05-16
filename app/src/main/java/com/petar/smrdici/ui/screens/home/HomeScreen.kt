@@ -171,9 +171,9 @@ fun HomeScreen(
                     )
                     
                     NavigationCard(
-                        title = "Буџет",
+                        title = "Финансије",
                         iconResId = R.drawable.ic_budget,
-                        onClick = { navController.navigate(Screen.Budget.route) },
+                        onClick = { navController.navigate(Screen.Finance.route) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)

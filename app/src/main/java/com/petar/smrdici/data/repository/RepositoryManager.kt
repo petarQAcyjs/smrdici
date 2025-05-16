@@ -36,11 +36,4 @@ object RepositoryManager {
     fun getAccountRepositoryForBudget(context: Context): AccountRepository {
         return AccountRepository.getInstance()
     }
-
-    /**
-     * Vraća instancu BudgetRepository za potrebe budžet funkcionalnosti
-     */
-    fun getBudgetRepositoryForBudget(): BudgetRepository {
-        return BudgetRepository.getInstance()
-    }
 }
