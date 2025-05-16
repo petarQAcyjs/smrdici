@@ -113,6 +113,9 @@ fun ListDetailsScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     
+    // Add state for list title editing
+    var showTitleEditDialog by remember { mutableStateOf(false) }
+    
     // Додајемо корутински опсег за Compose компоненту
     val coroutineScope = rememberCoroutineScope()
     
@@ -274,7 +277,12 @@ fun ListDetailsScreen(
                 title = selectedList?.title ?: "Детаљи листе",
                 navController = navController,
                 showBackButton = true,
-                user = if (authViewModel.authState.collectAsState().value is AuthState.Authenticated) (authViewModel.authState.collectAsState().value as AuthState.Authenticated).user else null
+                user = if (authViewModel.authState.collectAsState().value is AuthState.Authenticated) 
+                    (authViewModel.authState.collectAsState().value as AuthState.Authenticated).user 
+                else null,
+                onTitleLongPress = {
+                    showTitleEditDialog = true
+                }
             )
         },
         floatingActionButton = {
@@ -479,6 +487,20 @@ fun ListDetailsScreen(
                 },
                 onDismiss = {
                     showDeleteConfirmDialog = false
+                }
+            )
+        }
+        
+        // Add EditItemDialog for list title
+        if (showTitleEditDialog) {
+            EditItemDialog(
+                initialText = selectedList?.title ?: "",
+                onDismiss = { showTitleEditDialog = false },
+                onConfirm = { newTitle ->
+                    selectedList?.id?.let { id ->
+                        listsViewModel.updateListTitle(id, newTitle)
+                    }
+                    showTitleEditDialog = false
                 }
             )
         }
