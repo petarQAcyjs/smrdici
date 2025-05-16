@@ -29,7 +29,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -42,7 +41,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -77,6 +75,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.ShoppingList
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.delay
@@ -87,26 +88,23 @@ import kotlin.math.roundToInt
 @Composable
 fun ListsScreen(
     navController: NavController,
-    listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory())
+    listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory()),
+    authViewModel: AuthViewModel = viewModel()
 ) {
     val listsUiState by listsViewModel.uiState.collectAsState()
-    // Пратимо тренутне листе које се бришу
     val deletingListIds by listsViewModel.deletingListIds.collectAsState()
     val isDeletionInProgress = deletingListIds.isNotEmpty()
     
-    // Додајемо корутински опсег за Compose компоненту
     val coroutineScope = rememberCoroutineScope()
     
     var showAddListDialog by remember { mutableStateOf(false) }
     
-    // Стање освежавања
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
         onRefresh = {
             coroutineScope.launch {
                 isRefreshing = true
-                // Једноставно позивамо функцију без провере
                 listsViewModel.loadLists()
                 delay(500)
                 isRefreshing = false
@@ -114,11 +112,14 @@ fun ListsScreen(
         }
     )
     
-    // Додајемо стање за Snackbar
     val snackbarHostState = remember { SnackbarHostState() }
     
-    // Чувамо последњу обрисану листу за повраћај
     var lastDeletedList by remember { mutableStateOf<ShoppingList?>(null) }
+    
+    val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is AuthState.Authenticated) {
+        (authState as AuthState.Authenticated).user
+    } else null
     
     LaunchedEffect(isDeletionInProgress) {
         if (isDeletionInProgress) {
@@ -143,6 +144,14 @@ fun ListsScreen(
                         contentDescription = "Додај нову листу"
                     )
                 }
+            },
+            topBar = {
+                AppHeader(
+                    title = "Листе",
+                    navController = navController,
+                    showBackButton = true,
+                    user = user
+                )
             }
         ) { paddingValues ->
             Column(
@@ -150,31 +159,6 @@ fun ListsScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // Заглавље са дугметом за повратак
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = { navController.navigateUp() }
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад"
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    Text(
-                        text = "Листе",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                }
-                
-                // Приказујемо садржај екрана са подршком за освежавање
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -182,26 +166,22 @@ fun ListsScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     userScrollEnabled = !isDeletionInProgress
                 ) {
-                    // Предефинисане листе (2 у реду)
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            // Листа за продавницу
                             PredefinedListCard(
                                 title = "Spisak za prodavnicu",
                                 iconResId = R.drawable.ic_shopping,
                                 backgroundColor = Color(0xFF30C9C9),
                                 onClick = {
-                                    // Креирамо предефинисану листу ако не постоји и навигирамо на њу
                                     listsViewModel.getOrCreatePredefinedList(
                                         title = "Spisak za prodavnicu",
                                         onSuccess = { listId ->
                                             navController.navigate(Screen.ListDetails.createRoute(listId))
                                         },
                                         onError = { errorMsg ->
-                                            // Можемо приказати поруку о грешци или обрадити грешку на други начин
                                             listsViewModel.updateUiState(ListsUiState.Error(errorMsg))
                                         }
                                     )
@@ -209,20 +189,17 @@ fun ListsScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             
-                            // Кућни послови
                             PredefinedListCard(
                                 title = "Kućni poslovi",
                                 iconResId = R.drawable.ic_home,
                                 backgroundColor = Color(0xFF9ED36A),
                                 onClick = {
-                                    // Креирамо предефинисану листу ако не постоји и навигирамо на њу
                                     listsViewModel.getOrCreatePredefinedList(
                                         title = "Kućni poslovi",
                                         onSuccess = { listId ->
                                             navController.navigate(Screen.ListDetails.createRoute(listId))
                                         },
                                         onError = { errorMsg ->
-                                            // Можемо приказати поруку о грешци или обрадити грешку на други начин
                                             listsViewModel.updateUiState(ListsUiState.Error(errorMsg))
                                         }
                                     )
@@ -232,7 +209,6 @@ fun ListsScreen(
                         }
                     }
                     
-                    // Прилагођене листе
                     when (listsUiState) {
                         is ListsUiState.Loading -> {
                             item {
@@ -242,7 +218,6 @@ fun ListsScreen(
                                         .height(200.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    // Индикатор учитавања је већ присутан у SwipeRefresh
                                     if (!isRefreshing) {
                                         CircularProgressIndicator()
                                     }
@@ -254,12 +229,10 @@ fun ListsScreen(
                             items(
                                 items = customLists,
                                 key = { list -> 
-                                    // Додајемо временски печат уз ID да осигурамо јединственост
                                     "${list.id}_${System.currentTimeMillis()}"
                                 }
                             ) { list ->
                                 list.id?.let { listId ->
-                                    // Не приказујемо листе које су у процесу брисања
                                     if (!deletingListIds.contains(listId)) {
                                         SwipeToDeleteListItem(
                                             list = list,
@@ -269,13 +242,8 @@ fun ListsScreen(
                                                 }
                                             },
                                             onDelete = {
-                                                // Чувамо листу за поништавање
                                                 lastDeletedList = list
                                                 
-                                                // Обришимо листу
-                                                listsViewModel.deleteShoppingList(listId)
-                                                
-                                                // Приказујемо Snackbar са опцијом за повраћај и откључавамо брисање након што се снекбар затвори
                                                 coroutineScope.launch {
                                                     val result = snackbarHostState.showSnackbar(
                                                         message = "Листа \"${list.title}\" је обрисана",
@@ -284,7 +252,6 @@ fun ListsScreen(
                                                     )
                                                     
                                                     if (result == SnackbarResult.ActionPerformed) {
-                                                        // Поново додајемо листу ако је корисник тражио поништавање
                                                         lastDeletedList?.let { deletedList ->
                                                             listsViewModel.restoreList(deletedList)
                                                         }
@@ -319,7 +286,6 @@ fun ListsScreen(
         )
     }
     
-    // Дијалог за додавање нове листе
     if (showAddListDialog) {
         AddListDialog(
             onDismiss = { showAddListDialog = false },
@@ -394,7 +360,6 @@ fun AddListDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 
-                // Приказујемо поруку о грешци ако постоји
                 errorMessage?.let {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -446,67 +411,51 @@ fun SwipeToDeleteListItem(
     val isCompleted = list.isCompleted
     val listId = list.id ?: return
 
-    // Проверавамо да ли је ова листа већ у процесу брисања
     val deletingListIds by listsViewModel.deletingListIds.collectAsState()
     val isBeingDeleted = deletingListIds.contains(listId) || isDeletionLocked
     
-    // Постављамо дебаг лог да пратимо прави статус сваке листе
     LaunchedEffect(listId, isBeingDeleted) {
         Log.d("SwipeToDeleteListItem", "Листа $listId, наслов: $title, статус брисања: $isBeingDeleted")
     }
     
-    // Ако је листа у процесу брисања, одмах прекидамо композицију и не приказујемо ништа
     if (isBeingDeleted) {
         Log.d("SwipeToDeleteListItem", "Прескачемо рендеровање листе $listId јер је у процесу брисања")
         return
     }
     
-    // Бележимо да ли је компонента видљива
     var show by remember { mutableStateOf(true) }
     
-    // Бележимо хоризонтално померање при превлачењу
     var offsetX by remember { mutableFloatStateOf(0f) }
     
-    // Бележимо да ли је потврђено брисање (једном када је true, избегавамо дупло брисање)
     var confirmDelete by remember { mutableStateOf(false) }
     
-    // Бележимо да ли је листа већ обрисана (спречава дупло брисање)
     var isDeleted by remember { mutableStateOf(false) }
     
     val view = LocalView.current
     
-    // Додајемо стање за праћење клика на чекбокс
     var isCheckboxClicked by remember { mutableStateOf(false) }
     
-    // Локално стање за праћење статуса комплетности
     var localCompletedState by remember { mutableStateOf(isCompleted) }
     
-    // Ажурирамо локално стање само при првој композицији или када се промени извори параметар
     LaunchedEffect(list.id, isCompleted) {
         localCompletedState = isCompleted
     }
     
-    // Додајемо дебаг лог за праћење брисања
     LaunchedEffect(list.id) {
         Log.d("SwipeToDeleteListItem", "Компонента креирана/рекомпонована за листу: ${list.id}")
     }
     
-    // Израчунавамо праг за брисање - повећавамо праг на 200dp
     val density = LocalDensity.current
     val deleteThreshold = with(density) { 200.dp.toPx() }
     
-    // Стање за превлачење
     val draggableState = rememberDraggableState { delta ->
-        // Само дозвољавамо превлачење ако брисање није већ потврђено и ако елемент није већ избрисан
         if (!confirmDelete && !isDeleted && !isDeletionLocked) {
             offsetX += delta
             
-            // Хаптичка повратна информација када пређемо први праг
             if (offsetX > 100f && offsetX < 110f) {
                 view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             }
             
-            // Друга хаптичка повратна информација када пређемо праг за брисање
             if (offsetX > deleteThreshold && !confirmDelete) {
                 confirmDelete = true
                 view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
@@ -514,41 +463,30 @@ fun SwipeToDeleteListItem(
         }
     }
     
-    // Када је елемент потпуно одбачен, позивамо onDelete само једном
     LaunchedEffect(confirmDelete) {
         if (confirmDelete && !isDeleted && !isDeletionLocked) {
-            // Бележимо дебаг информацију
             Log.d("SwipeToDeleteListItem", "Брисање листе: ${list.id}")
             
-            // Означавамо да је листа обрисана да бисмо избегли дупло брисање
             isDeleted = true
             
-            // Сакривамо елемент
             show = false
             
-            // Мала пауза за анимацију
             delay(300)
             
-            // Позивамо функцију брисања само једном
             onDelete()
         }
     }
     
-    // Када је чекбокс кликнут, приказујемо анимацију и затим позивамо toggleListStatus
     LaunchedEffect(isCheckboxClicked) {
         if (isCheckboxClicked && !isDeletionLocked) {
             try {
-                // Oдмах ажурирамо локално стање за бољи UX
                 localCompletedState = !localCompletedState
                 
                 Log.d("SwipeToDeleteListItem", "Променили смо чекбокс за листу: ${list.id}, ново стање: $localCompletedState")
                 
-                // Мала пауза за анимацију
                 delay(100)
                 
-                // Ажурирамо статус у бази
                 list.id?.let { listId ->
-                    // Користимо нову корутину да не блокирамо UI ефекте
                     try {
                         listsViewModel.toggleListStatus(listId)
                     } catch (e: Exception) {
@@ -556,7 +494,6 @@ fun SwipeToDeleteListItem(
                     }
                 }
             } finally {
-                // Ресетујемо стање клика без обзира на исход операције
                 isCheckboxClicked = false
             }
         }
@@ -572,7 +509,6 @@ fun SwipeToDeleteListItem(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Box {
-                // Позадина која се приказује при превлачењу
                 Box(
                     modifier = Modifier
                         .matchParentSize()
@@ -594,16 +530,14 @@ fun SwipeToDeleteListItem(
                     }
                 }
                 
-                // Садржај који се може превлачити
                 Row(
                     modifier = modifier
                         .fillMaxWidth()
                         .draggable(
                             state = draggableState,
                             orientation = Orientation.Horizontal,
-                            enabled = !isDeletionLocked, // Онемогућавамо превлачење ако је брисање закључано
+                            enabled = !isDeletionLocked,
                             onDragStopped = {
-                                // Ако не пређемо праг, враћамо елемент назад
                                 if (offsetX <= deleteThreshold && !isDeleted) {
                                     offsetX = 0f
                                     confirmDelete = false
@@ -615,7 +549,6 @@ fun SwipeToDeleteListItem(
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Икона за статус (чекирано или не) - сада кликабилна
                     Box(
                         modifier = Modifier
                             .size(32.dp)
@@ -646,7 +579,6 @@ fun SwipeToDeleteListItem(
                     
                     Spacer(modifier = Modifier.width(16.dp))
                     
-                    // Наслов листе - прецртан ако је завршен
                     val textStyle = if (localCompletedState) {
                         MaterialTheme.typography.titleMedium.copy(
                             textDecoration = TextDecoration.LineThrough,

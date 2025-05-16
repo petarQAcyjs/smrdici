@@ -12,21 +12,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +37,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.data.model.AccountType
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.screens.editAccount.AccountTypeChip
 import com.petar.smrdici.ui.screens.editAccount.ColorChip
 import com.petar.smrdici.ui.screens.editAccount.accountColors
@@ -51,7 +50,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun AddAccountScreen(
     navController: NavController,
-    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory())
+    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory()),
+    authViewModel: AuthViewModel = viewModel()
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -62,18 +62,16 @@ fun AddAccountScreen(
     var selectedColor by remember { mutableIntStateOf(0) }
     var isDefault by remember { mutableStateOf(false) }
     
+    val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
+    
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Додај рачун") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.navigateUp() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад"
-                        )
-                    }
-                }
+            AppHeader(
+                title = "Додај рачун",
+                navController = navController,
+                showBackButton = true,
+                user = user
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }

@@ -144,7 +144,7 @@ fun PreviewBudgetBattery() {
             .background(Color(0xFF1A1C1E))
     ) {
         Text(
-            text = "Primeri BudgetBattery komponente",
+            text = "Примери BudgetBattery компоненте",
             style = MaterialTheme.typography.titleMedium,
             color = Color.White,
             modifier = Modifier.padding(bottom = 16.dp)

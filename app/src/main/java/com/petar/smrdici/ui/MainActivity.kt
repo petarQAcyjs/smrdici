@@ -11,6 +11,11 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.petar.smrdici.ui.navigation.NavGraph
 import com.petar.smrdici.ui.theme.SmrdiciTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.petar.smrdici.ui.theme.ThemeViewModel
+import com.petar.smrdici.ui.theme.ThemeViewModelFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,13 +25,13 @@ class MainActivity : ComponentActivity() {
         handleInvalidResourceId()
         
         setContent {
-            SmrdiciTheme {
-                // A surface container using the 'background' color from the theme
+            val themeViewModel: ThemeViewModel = viewModel(factory = ThemeViewModelFactory(this))
+            val themeMode by themeViewModel.themeMode.collectAsState()
+            SmrdiciTheme(themeMode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // Користимо NavGraph уместо MainScreen
                     val navController = rememberNavController()
                     NavGraph(navController = navController)
                 }

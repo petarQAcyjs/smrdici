@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -37,7 +36,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -55,7 +53,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.AccountType
+import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.screens.settings.AccountViewModel
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.auth.AuthState
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,7 +64,8 @@ import kotlinx.coroutines.launch
 fun EditAccountScreen(
     navController: NavController,
     accountId: String,
-    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory())
+    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory()),
+    authViewModel: AuthViewModel = viewModel()
 ) {
     LaunchedEffect(accountId) {
         accountViewModel.getAccountById(accountId)
@@ -96,29 +98,16 @@ fun EditAccountScreen(
     var currencyExpanded by remember { mutableStateOf(false) }
     var selectedCurrency by remember { mutableStateOf(account?.currency ?: "RSD") }
     
+    val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
+    
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Уреди рачун") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.navigateUp() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад"
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = { showDeleteDialog = true }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Обриши рачун",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
+            AppHeader(
+                title = "Уреди рачун",
+                navController = navController,
+                showBackButton = true,
+                user = user
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }

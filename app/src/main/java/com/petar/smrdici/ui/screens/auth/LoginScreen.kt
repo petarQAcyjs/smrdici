@@ -54,6 +54,7 @@ import androidx.navigation.NavController
 import com.petar.smrdici.R
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,6 +65,7 @@ fun LoginScreen(
 ) {
     val context = LocalContext.current
     val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
     
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -98,8 +100,11 @@ fun LoginScreen(
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(if (isSignUp) "Регистрација" else "Пријава") }
+            AppHeader(
+                title = if (isSignUp) "Регистрација" else "Пријава",
+                navController = navController,
+                showBackButton = false,
+                user = user
             )
         }
     ) { paddingValues ->

@@ -16,14 +16,23 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.auth.AuthState
+import androidx.navigation.NavController
+import androidx.compose.runtime.collectAsState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditExpenseScreen(
+    navController: NavController,
     expense: Expense,
     onNavigateBack: () -> Unit,
-    budgetViewModel: BudgetViewModel
+    budgetViewModel: BudgetViewModel,
+    authViewModel: AuthViewModel = viewModel()
 ) {
+    val authState by authViewModel.authState.collectAsState()
+    val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
     var amount by remember { mutableStateOf(expense.amount.toString()) }
     var description by remember { mutableStateOf(expense.description) }
     var selectedCategory by remember { mutableStateOf(expense.category) }
@@ -35,13 +44,11 @@ fun EditExpenseScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Edit Expense") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                }
+            AppHeader(
+                title = "Edit Expense",
+                navController = navController,
+                showBackButton = true,
+                user = user
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }

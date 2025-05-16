@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.AccountBalance
@@ -58,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.Account
+import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.theme.PurpleGrey40
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -70,7 +70,8 @@ import java.util.Locale
 @Composable
 fun TransferScreen(
     navController: NavController,
-    viewModel: TransferViewModel = viewModel(factory = TransferViewModel.Factory())
+    viewModel: TransferViewModel = viewModel(factory = TransferViewModel.Factory()),
+    user: com.google.firebase.auth.FirebaseUser? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
@@ -97,18 +98,11 @@ fun TransferScreen(
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Трансфер новца") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.navigateUp() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+            AppHeader(
+                title = "Трансфер новца",
+                user = user,
+                navController = navController,
+                showBackButton = true
             )
         },
         containerColor = MaterialTheme.colorScheme.background
