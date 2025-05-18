@@ -36,7 +36,7 @@ class AuthViewModel : ViewModel() {
         try {
             oneTapClient = Identity.getSignInClient(context)
             
-            // Конфигурација захтева за пријаву
+            // Конфигурација захтева за пријаву са измењеним подешавањима
             signInRequest = BeginSignInRequest.builder()
                 .setGoogleIdTokenRequestOptions(
                     BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
@@ -45,7 +45,7 @@ class AuthViewModel : ViewModel() {
                         .setFilterByAuthorizedAccounts(false)
                         .build()
                 )
-                .setAutoSelectEnabled(false)
+                .setAutoSelectEnabled(true)  // Enable auto-select
                 .build()
                 
             Log.d(tag, "Google Sign-In успешно иницијализован")
@@ -63,14 +63,38 @@ class AuthViewModel : ViewModel() {
                     val result = oneTapClient.beginSignIn(signInRequest).await()
                     onSuccess(result.pendingIntent.intentSender)
                 } catch (e: Exception) {
-                    val errorMessage = when {
-                        e.message?.contains("16:") == true -> "Није пронађен одговарајући Google налог. Проверите да ли сте повезани на Google Play сервисе."
-                        e.message?.contains("10:") == true -> "Проверите вашу интернет конекцију и Google Play сервисе."
-                        else -> "Грешка при Google пријави: ${e.message}"
-                    }
                     Log.e(tag, "Грешка при Google пријављивању: ${e.message}", e)
-                    _authState.value = AuthState.Error(errorMessage)
-                    onError(errorMessage)
+                    
+                    // Try again with a more permissive request if the first attempt fails
+                    try {
+                        val fallbackRequest = BeginSignInRequest.builder()
+                            .setGoogleIdTokenRequestOptions(
+                                BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
+                                    .setSupported(true)
+                                    .setServerClientId("683999597671-0l004ln7l16meoo26ogk4mvcojndnsk7.apps.googleusercontent.com")
+                                    .setFilterByAuthorizedAccounts(false)
+                                    .build()
+                            )
+                            .setAutoSelectEnabled(false)
+                            .build()
+                            
+                        val fallbackResult = oneTapClient.beginSignIn(fallbackRequest).await()
+                        onSuccess(fallbackResult.pendingIntent.intentSender)
+                    } catch (fallbackError: Exception) {
+                        val errorMessage = when {
+                            fallbackError.message?.contains("16:") == true -> 
+                                "Проверите да ли:\n" +
+                                "1. Имате Google налог на уређају\n" +
+                                "2. Google Play сервиси су ажурирани\n" +
+                                "3. Имате интернет конекцију"
+                            fallbackError.message?.contains("10:") == true -> 
+                                "Проверите вашу интернет конекцију и Google Play сервисе."
+                            else -> "Грешка при Google пријави: ${fallbackError.message}"
+                        }
+                        Log.e(tag, "Грешка при Google пријављивању (fallback): ${fallbackError.message}", fallbackError)
+                        _authState.value = AuthState.Error(errorMessage)
+                        onError(errorMessage)
+                    }
                 }
             }
         } catch (e: Exception) {

@@ -1,5 +1,8 @@
 package com.petar.smrdici.ui.components
 
+import android.view.HapticFeedbackConstants
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,13 +20,23 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseUser
 import com.petar.smrdici.ui.navigation.Screen
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 /**
  * Компонента за заглавље апликације.
@@ -34,6 +47,7 @@ import com.petar.smrdici.ui.navigation.Screen
  * @param showBackButton Да ли приказати дугме за назад.
  * @param onMenuClick Акција која се извршава приликом клика на мени, ако је мени приказан.
  * @param showMenu Да ли приказати дугме за мени.
+ * @param onTitleLongPress Акција која се извршава приликом дугог притиска на наслов.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,8 +57,18 @@ fun AppHeader(
     navController: NavController,
     showBackButton: Boolean = false,
     onMenuClick: () -> Unit = {},
-    showMenu: Boolean = false
+    showMenu: Boolean = false,
+    onTitleLongPress: (() -> Unit)? = null
 ) {
+    var isPressed by remember { mutableStateOf(false) }
+    val view = LocalView.current
+    val scope = rememberCoroutineScope()
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        label = "title scale animation"
+    )
+
     TopAppBar(
         title = {
             Row(
@@ -56,7 +80,28 @@ fun AppHeader(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .scale(scale)
+                        .then(
+                            if (onTitleLongPress != null) {
+                                Modifier.pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onLongPress = {
+                                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                            isPressed = true
+                                            scope.launch {
+                                                delay(100)
+                                                isPressed = false
+                                                onTitleLongPress()
+                                            }
+                                        }
+                                    )
+                                }
+                            } else {
+                                Modifier
+                            }
+                        ),
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }

@@ -622,6 +622,71 @@ class ListsViewModel : ViewModel() {
         }
     }
 
+    // Function to update list title
+    fun updateListTitle(listId: String, newTitle: String) {
+        viewModelScope.launch {
+            try {
+                val currentList = _selectedList.value ?: return@launch
+                
+                // Create updated list with new title
+                val updatedList = currentList.copy(title = newTitle)
+                
+                // Update list in Firestore
+                firestore.collection("shopping_lists").document(listId)
+                    .set(updatedList)
+                    .addOnSuccessListener {
+                        _selectedList.value = updatedList
+                        // Also update the list in the UI state if it exists there
+                        val currentUiState = _uiState.value
+                        if (currentUiState is ListsUiState.Success) {
+                            val updatedLists = currentUiState.lists.map { list ->
+                                if (list.id == listId) list.copy(title = newTitle) else list
+                            }
+                            _uiState.value = ListsUiState.Success(updatedLists)
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању наслова листе")
+                    }
+            } catch (e: Exception) {
+                _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању наслова листе")
+            }
+        }
+    }
+
+    // Function to update item name
+    fun updateItemName(listId: String, itemId: String, newName: String) {
+        viewModelScope.launch {
+            try {
+                val currentList = _selectedList.value ?: return@launch
+                
+                // Update the item name in the list
+                val updatedItems = currentList.items.map { item ->
+                    if (item.id == itemId) {
+                        item.copy(name = newName)
+                    } else {
+                        item
+                    }
+                }
+                
+                // Create updated list with new items
+                val updatedList = currentList.copy(items = updatedItems)
+                
+                // Update list in Firestore
+                firestore.collection("shopping_lists").document(listId)
+                    .set(updatedList)
+                    .addOnSuccessListener {
+                        _selectedList.value = updatedList
+                    }
+                    .addOnFailureListener { e ->
+                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању назива ставке")
+                    }
+            } catch (e: Exception) {
+                _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању назива ставке")
+            }
+        }
+    }
+
 }
 
 // Стање корисничког интерфејса

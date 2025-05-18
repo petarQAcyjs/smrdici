@@ -247,7 +247,7 @@ fun ProfileScreen(
                                 // За подешавања буџета
                                 SettingsItem(
                                     icon = Icons.Default.AccountBalance,
-                                    title = "Подешавања буџета",
+                                    title = "Подешавања финансија",
                                     onClick = {
                                         navController.navigate(Screen.BudgetSettings.route)
                                     }
