@@ -265,7 +265,8 @@ class ListsViewModel : ViewModel() {
                     name = name,
                     quantity = quantity,
                     isCompleted = false,
-                    note = ""
+                    note = "",
+                    createdAt = Timestamp.now()
                 )
                 
                 // Додајемо нову ставку у листу постојећих ставки

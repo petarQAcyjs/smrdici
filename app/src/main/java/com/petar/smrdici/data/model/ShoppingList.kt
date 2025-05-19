@@ -23,5 +23,6 @@ data class ShoppingItem(
     @PropertyName("completed")
     val isCompleted: Boolean = false,
     val quantity: Int = 1,
-    val note: String = ""
+    val note: String = "",
+    val createdAt: Timestamp = Timestamp.now()
 ) 
