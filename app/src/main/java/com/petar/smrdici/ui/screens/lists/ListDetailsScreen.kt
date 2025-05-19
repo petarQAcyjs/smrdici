@@ -332,29 +332,18 @@ fun ListDetailsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    // Ако нема активне ставке за унос, додајемо празну
-                    if (currentEditingItemId == null) {
+            if (currentEditingItemId == null) {
+                FloatingActionButton(
+                    onClick = {
                         addEmptyItem()
-                    } else {
-                        // Фокусирамо тренутну ставку за унос
-                        coroutineScope.launch {
-                            try {
-                                focusRequester.requestFocus()
-                                keyboardController?.show()
-                            } catch (_: Exception) {
-                                // Игноришемо грешку ако компонента још није спремна
-                            }
-                        }
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Додај нову ставку"
-                )
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Додај нову ставку"
+                    )
+                }
             }
         },
         bottomBar = {
