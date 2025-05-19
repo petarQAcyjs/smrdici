@@ -27,6 +27,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -50,6 +52,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -63,11 +66,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -83,6 +89,7 @@ import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.foundation.gestures.detectTapGestures
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -414,6 +421,10 @@ fun SwipeToDeleteListItem(
     val deletingListIds by listsViewModel.deletingListIds.collectAsState()
     val isBeingDeleted = deletingListIds.contains(listId) || isDeletionLocked
     
+    var isEditing by remember { mutableStateOf(false) }
+    var editedTitle by remember { mutableStateOf(title) }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    
     LaunchedEffect(listId, isBeingDeleted) {
         Log.d("SwipeToDeleteListItem", "Листа $listId, наслов: $title, статус брисања: $isBeingDeleted")
     }
@@ -424,17 +435,11 @@ fun SwipeToDeleteListItem(
     }
     
     var show by remember { mutableStateOf(true) }
-    
     var offsetX by remember { mutableFloatStateOf(0f) }
-    
     var confirmDelete by remember { mutableStateOf(false) }
-    
     var isDeleted by remember { mutableStateOf(false) }
-    
     val view = LocalView.current
-    
     var isCheckboxClicked by remember { mutableStateOf(false) }
-    
     var localCompletedState by remember { mutableStateOf(isCompleted) }
     
     LaunchedEffect(list.id, isCompleted) {
@@ -468,11 +473,8 @@ fun SwipeToDeleteListItem(
             Log.d("SwipeToDeleteListItem", "Брисање листе: ${list.id}")
             
             isDeleted = true
-            
             show = false
-            
             delay(300)
-            
             onDelete()
         }
     }
@@ -481,11 +483,8 @@ fun SwipeToDeleteListItem(
         if (isCheckboxClicked && !isDeletionLocked) {
             try {
                 localCompletedState = !localCompletedState
-                
                 Log.d("SwipeToDeleteListItem", "Променили смо чекбокс за листу: ${list.id}, ново стање: $localCompletedState")
-                
                 delay(100)
-                
                 list.id?.let { listId ->
                     try {
                         listsViewModel.toggleListStatus(listId)
@@ -536,7 +535,7 @@ fun SwipeToDeleteListItem(
                         .draggable(
                             state = draggableState,
                             orientation = Orientation.Horizontal,
-                            enabled = !isDeletionLocked,
+                            enabled = !isDeletionLocked && !isEditing,
                             onDragStopped = {
                                 if (offsetX <= deleteThreshold && !isDeleted) {
                                     offsetX = 0f
@@ -558,7 +557,7 @@ fun SwipeToDeleteListItem(
                                 else MaterialTheme.colorScheme.surfaceVariant
                             )
                             .clickable(
-                                enabled = !isDeletionLocked,
+                                enabled = !isDeletionLocked && !isEditing,
                                 onClick = {
                                     if (!isDeleted && !confirmDelete) {
                                         isCheckboxClicked = true
@@ -579,25 +578,49 @@ fun SwipeToDeleteListItem(
                     
                     Spacer(modifier = Modifier.width(16.dp))
                     
-                    val textStyle = if (localCompletedState) {
-                        MaterialTheme.typography.titleMedium.copy(
-                            textDecoration = TextDecoration.LineThrough,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    if (isEditing) {
+                        TextField(
+                            value = editedTitle,
+                            onValueChange = { editedTitle = it },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = {
+                                if (editedTitle.isNotBlank() && editedTitle != title) {
+                                    listsViewModel.updateListTitle(listId, editedTitle)
+                                }
+                                isEditing = false
+                                keyboardController?.hide()
+                            }),
+                            modifier = Modifier.weight(1f)
                         )
                     } else {
-                        MaterialTheme.typography.titleMedium
-                    }
-                    
-                    Text(
-                        text = title,
-                        style = textStyle,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(
-                                enabled = !isDeletionLocked && !isDeleted && !confirmDelete,
-                                onClick = onClick
+                        val textStyle = if (localCompletedState) {
+                            MaterialTheme.typography.titleMedium.copy(
+                                textDecoration = TextDecoration.LineThrough,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
-                    )
+                        } else {
+                            MaterialTheme.typography.titleMedium
+                        }
+                        
+                        Text(
+                            text = title,
+                            style = textStyle,
+                            modifier = Modifier
+                                .weight(1f)
+                                .pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onTap = { if (!isDeletionLocked && !isDeleted && !confirmDelete) onClick() },
+                                        onLongPress = {
+                                            if (!isDeletionLocked && !isDeleted && !confirmDelete) {
+                                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                                isEditing = true
+                                            }
+                                        }
+                                    )
+                                }
+                        )
+                    }
                 }
             }
         }

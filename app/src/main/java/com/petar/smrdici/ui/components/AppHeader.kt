@@ -48,6 +48,7 @@ import kotlinx.coroutines.delay
  * @param onMenuClick Акција која се извршава приликом клика на мени, ако је мени приказан.
  * @param showMenu Да ли приказати дугме за мени.
  * @param onTitleLongPress Акција која се извршава приликом дугог притиска на наслов.
+ * @param actions Custom actions to be displayed in the top app bar
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +59,8 @@ fun AppHeader(
     showBackButton: Boolean = false,
     onMenuClick: () -> Unit = {},
     showMenu: Boolean = false,
-    onTitleLongPress: (() -> Unit)? = null
+    onTitleLongPress: (() -> Unit)? = null,
+    actions: @Composable () -> Unit = {}
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val view = LocalView.current
@@ -128,7 +130,10 @@ fun AppHeader(
             }
         },
         actions = {
-            // Иконица профила
+            // Custom actions
+            actions()
+            
+            // Profile icon
             IconButton(
                 onClick = { 
                     if (user != null) {
