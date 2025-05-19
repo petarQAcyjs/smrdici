@@ -597,29 +597,144 @@ class ListsViewModel : ViewModel() {
     // Ажурирање статуса ставке (завршено/незавршено) користећи нову функцију
     fun updateItemCompletionStatus(listId: String, itemId: String, isCompleted: Boolean) {
         viewModelScope.launch {
-            val currentList = _selectedList.value ?: return@launch
-            
-            // Ажурирамо статус ставке
-            val updatedItems = currentList.items.map { item ->
-                if (item.id == itemId) {
-                    item.copy(isCompleted = isCompleted)
-                } else {
-                    item
+            try {
+                val currentList = _selectedList.value ?: return@launch
+                val updatedItems = currentList.items.map { item ->
+                    if (item.id == itemId) item.copy(isCompleted = isCompleted) else item
                 }
+                
+                val updatedList = currentList.copy(items = updatedItems)
+                _selectedList.value = updatedList
+                
+                firestore.collection("shopping_lists").document(listId)
+                    .update("items", updatedItems)
+            } catch (e: Exception) {
+                _uiState.value = ListsUiState.Error("Грешка при ажурирању ставке: ${e.message}")
             }
-            
-            // Креирамо ажурирану листу
-            val updatedList = currentList.copy(items = updatedItems)
-            
-            // Ажурирамо листу у Firestore-у
-            firestore.collection("shopping_lists").document(listId)
-                .set(updatedList)
-                .addOnSuccessListener {
-                    _selectedList.value = updatedList
+        }
+    }
+
+    fun updateAllItemsCompletionStatus(listId: String, isCompleted: Boolean) {
+        viewModelScope.launch {
+            try {
+                val currentList = _selectedList.value ?: return@launch
+                val updatedItems = currentList.items.map { item ->
+                    item.copy(isCompleted = isCompleted)
                 }
-                .addOnFailureListener { e ->
-                    _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању ставке")
+                
+                val updatedList = currentList.copy(items = updatedItems)
+                _selectedList.value = updatedList
+                
+                firestore.collection("shopping_lists").document(listId)
+                    .update("items", updatedItems)
+            } catch (e: Exception) {
+                _uiState.value = ListsUiState.Error("Грешка при ажурирању ставки: ${e.message}")
+            }
+        }
+    }
+
+    fun updateItemName(listId: String, itemId: String, newName: String) {
+        viewModelScope.launch {
+            try {
+                val currentList = _selectedList.value ?: return@launch
+                
+                // Find and update the item
+                val updatedItems = currentList.items.map { item ->
+                    if (item.id == itemId) {
+                        item.copy(name = newName)
+                    } else {
+                        item
+                    }
                 }
+                
+                // Create updated list
+                val updatedList = currentList.copy(items = updatedItems)
+                
+                // Update in Firestore
+                firestore.collection("shopping_lists").document(listId)
+                    .set(updatedList)
+                    .addOnSuccessListener {
+                        _selectedList.value = updatedList
+                    }
+                    .addOnFailureListener { e ->
+                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању ставке")
+                    }
+            } catch (e: Exception) {
+                _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању ставке")
+            }
+        }
+    }
+
+    fun updateListTitle(listId: String, newTitle: String) {
+        viewModelScope.launch {
+            try {
+                val currentList = _selectedList.value ?: return@launch
+                
+                // Create updated list with new title
+                val updatedList = currentList.copy(title = newTitle)
+                
+                // Update in Firestore
+                firestore.collection("shopping_lists").document(listId)
+                    .set(updatedList)
+                    .addOnSuccessListener {
+                        _selectedList.value = updatedList
+                        loadLists() // Refresh the lists to update UI
+                    }
+                    .addOnFailureListener { e ->
+                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању наслова")
+                    }
+            } catch (e: Exception) {
+                _uiState.value = ListsUiState.Error(e.message ?: "Грешка при ажурирању наслова")
+            }
+        }
+    }
+
+    fun clearCompletedItems(listId: String) {
+        viewModelScope.launch {
+            try {
+                val currentList = _selectedList.value ?: return@launch
+                
+                // Filter out completed items
+                val updatedItems = currentList.items.filter { !it.isCompleted }
+                
+                // Create updated list
+                val updatedList = currentList.copy(items = updatedItems)
+                
+                // Update in Firestore
+                firestore.collection("shopping_lists").document(listId)
+                    .set(updatedList)
+                    .addOnSuccessListener {
+                        _selectedList.value = updatedList
+                    }
+                    .addOnFailureListener { e ->
+                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању завршених ставки")
+                    }
+            } catch (e: Exception) {
+                _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању завршених ставки")
+            }
+        }
+    }
+
+    fun clearAllItems(listId: String) {
+        viewModelScope.launch {
+            try {
+                val currentList = _selectedList.value ?: return@launch
+                
+                // Create updated list with empty items
+                val updatedList = currentList.copy(items = emptyList())
+                
+                // Update in Firestore
+                firestore.collection("shopping_lists").document(listId)
+                    .set(updatedList)
+                    .addOnSuccessListener {
+                        _selectedList.value = updatedList
+                    }
+                    .addOnFailureListener { e ->
+                        _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању свих ставки")
+                    }
+            } catch (e: Exception) {
+                _uiState.value = ListsUiState.Error(e.message ?: "Грешка при брисању свих ставки")
+            }
         }
     }
 

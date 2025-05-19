@@ -1,14 +1,12 @@
 package com.petar.smrdici.ui.screens.lists
 
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,14 +33,17 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -74,6 +76,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -91,9 +94,9 @@ import com.petar.smrdici.ui.components.AppHeader
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
-import androidx.compose.material3.ExperimentalMaterial3Api as Material3ExperimentalApi
+import androidx.compose.foundation.gestures.detectTapGestures
 
-@OptIn(Material3ExperimentalApi::class, ExperimentalComposeUiApi::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterialApi::class)
 @Composable
 fun ListDetailsScreen(
     navController: NavController,
@@ -144,6 +147,12 @@ fun ListDetailsScreen(
     
     // Додајемо стање за праћење да ли је листа празна
     val isListEmpty = selectedList?.items?.isEmpty() == true
+    
+    // Додајемо стање за дијалог за потврду брисања листе
+    var showClearListDialog by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    var clearType by remember { mutableStateOf<ClearType?>(null) }
+    var lastClearedItems by remember { mutableStateOf<List<ShoppingItem>?>(null) }
     
     // Учитавање листе при првом рендеровању
     LaunchedEffect(listId) {
@@ -263,7 +272,63 @@ fun ListDetailsScreen(
                 title = selectedList?.title ?: "Детаљи листе",
                 navController = navController,
                 showBackButton = true,
-                user = if (authViewModel.authState.collectAsState().value is AuthState.Authenticated) (authViewModel.authState.collectAsState().value as AuthState.Authenticated).user else null
+                user = if (authViewModel.authState.collectAsState().value is AuthState.Authenticated) (authViewModel.authState.collectAsState().value as AuthState.Authenticated).user else null,
+                actions = {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Мени"
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Означи све као завршено") },
+                            onClick = {
+                                showMenu = false
+                                selectedList?.let { list ->
+                                    listsViewModel.updateAllItemsCompletionStatus(listId, true)
+                                }
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Означи све као завршено"
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Обриши завршене ставке") },
+                            onClick = {
+                                showMenu = false
+                                clearType = ClearType.COMPLETED
+                                showClearListDialog = true
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Обриши завршене ставке"
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Обриши све ставке") },
+                            onClick = {
+                                showMenu = false
+                                clearType = ClearType.ALL
+                                showClearListDialog = true
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Обриши све ставке"
+                                )
+                            }
+                        )
+                    }
+                }
             )
         },
         floatingActionButton = {
@@ -423,7 +488,9 @@ fun ListDetailsScreen(
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth(),
-                                    isKucniPoslovi = listState.title == "Kućni poslovi"
+                                    isKucniPoslovi = listState.title == "Kućni poslovi",
+                                    listsViewModel = listsViewModel,
+                                    listId = listId
                                 )
                                 
                                 if (item != listState.items.lastOrNull()) {
@@ -469,6 +536,68 @@ fun ListDetailsScreen(
                 }
             )
         }
+        
+        if (showClearListDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearListDialog = false },
+                title = { Text("Обриши ставке") },
+                text = { 
+                    Text(
+                        when (clearType) {
+                            ClearType.COMPLETED -> "Да ли желите да обришете све завршене ставке?"
+                            ClearType.ALL -> "Да ли желите да обришете све ставке из листе?"
+                            null -> ""
+                        }
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            when (clearType) {
+                                ClearType.COMPLETED -> {
+                                    selectedList?.let { list ->
+                                        lastClearedItems = list.items.filter { it.isCompleted }
+                                        listsViewModel.clearCompletedItems(listId)
+                                    }
+                                }
+                                ClearType.ALL -> {
+                                    selectedList?.let { list ->
+                                        lastClearedItems = list.items
+                                        listsViewModel.clearAllItems(listId)
+                                    }
+                                }
+                                null -> {}
+                            }
+                            showClearListDialog = false
+                            
+                            // Show undo snackbar
+                            coroutineScope.launch {
+                                val result = snackbarHostState.showSnackbar(
+                                    message = "Ставке обрисане",
+                                    actionLabel = "Поништи",
+                                    duration = SnackbarDuration.Short
+                                )
+                                
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    // Restore cleared items
+                                    lastClearedItems?.forEach { item ->
+                                        listsViewModel.restoreItem(item.id, item)
+                                    }
+                                    lastClearedItems = null
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Потврди")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearListDialog = false }) {
+                        Text("Откажи")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -478,14 +607,19 @@ fun ShoppingItemRow(
     onDelete: (ShoppingItem) -> Unit,
     onCheckedChange: (ShoppingItem, Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    isKucniPoslovi: Boolean = false
+    isKucniPoslovi: Boolean = false,
+    listsViewModel: ListsViewModel,
+    listId: String
 ) {
     var offsetX by remember { mutableFloatStateOf(0f) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var isEditing by remember { mutableStateOf(false) }
+    var editedName by remember { mutableStateOf(item.name) }
     val view = LocalView.current
     val density = LocalDensity.current
     val deleteThreshold = with(density) { 200.dp.toPx() }
-    
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     Box(
         modifier = modifier
             .offset { IntOffset(offsetX.roundToInt(), 0) }
@@ -553,7 +687,10 @@ fun ShoppingItemRow(
                         if (item.isCompleted) Color(0xFF4CAF50)
                         else MaterialTheme.colorScheme.surfaceVariant
                     )
-                    .clickable {
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
                         onCheckedChange(item, !item.isCompleted)
                         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     },
@@ -570,18 +707,44 @@ fun ShoppingItemRow(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            Text(
-                text = item.name,
-                style = if (item.isCompleted) {
-                    MaterialTheme.typography.bodyLarge.copy(
-                        textDecoration = TextDecoration.LineThrough,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                } else {
-                    MaterialTheme.typography.bodyLarge
-                },
-                modifier = Modifier.weight(1f)
-            )
+            if (isEditing) {
+                TextField(
+                    value = editedName,
+                    onValueChange = { editedName = it },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (editedName.isNotBlank() && editedName != item.name) {
+                            listsViewModel.updateItemName(listId, item.id, editedName)
+                        }
+                        isEditing = false
+                        keyboardController?.hide()
+                    }),
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Text(
+                    text = item.name,
+                    style = if (item.isCompleted) {
+                        MaterialTheme.typography.bodyLarge.copy(
+                            textDecoration = TextDecoration.LineThrough,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    } else {
+                        MaterialTheme.typography.bodyLarge
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onLongPress = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                    isEditing = true
+                                }
+                            )
+                        }
+                )
+            }
 
             if (isKucniPoslovi) {
                 // Show age in days for items older than 7 days in Kucni poslovi list
@@ -626,4 +789,9 @@ fun DeleteConfirmationDialog(
             }
         }
     )
+}
+
+enum class ClearType {
+    COMPLETED,
+    ALL
 }
