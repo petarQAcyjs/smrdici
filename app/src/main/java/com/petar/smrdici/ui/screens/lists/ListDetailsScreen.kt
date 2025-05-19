@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -67,7 +68,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -76,7 +76,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -93,10 +92,14 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.burnoutcrew.reorderable.ReorderableItem
+import org.burnoutcrew.reorderable.ReorderableLazyListState
+import org.burnoutcrew.reorderable.detectReorderAfterLongPress
+import org.burnoutcrew.reorderable.rememberReorderableLazyListState
+import org.burnoutcrew.reorderable.reorderable
 import kotlin.math.roundToInt
-import androidx.compose.foundation.gestures.detectTapGestures
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun ListDetailsScreen(
     navController: NavController,
@@ -109,6 +112,9 @@ fun ListDetailsScreen(
     var currentEditingItemId by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    
+    // Use rememberSaveable to persist scroll state across recompositions
+    val lazyListState = rememberLazyListState()
     
     // Додајемо корутински опсег за Compose компоненту
     val coroutineScope = rememberCoroutineScope()
@@ -136,9 +142,6 @@ fun ListDetailsScreen(
     // Чувамо последњу обрисану ставку за повраћај
     var lastDeletedItem by remember { mutableStateOf<ShoppingItem?>(null) }
     
-    // Додајемо стање за LazyListState
-    val lazyListState = rememberLazyListState()
-    
     // Додајемо стање за праћење видљивости тастатуре
     var keyboardVisible by remember { mutableStateOf(false) }
     
@@ -154,12 +157,38 @@ fun ListDetailsScreen(
     var clearType by remember { mutableStateOf<ClearType?>(null) }
     var lastClearedItems by remember { mutableStateOf<List<ShoppingItem>?>(null) }
     
+    val view = LocalView.current
+    
+    // Add reorderable state
+    val reorderableState = rememberReorderableLazyListState(
+        onMove = { from, to ->
+            selectedList?.let { list ->
+                val items = list.items.toMutableList()
+                val item = items.removeAt(from.index)
+                items.add(to.index, item)
+                
+                // Update positions in the database using the correct function name
+                listsViewModel.updateItemPositions(listId, items)
+            }
+        },
+        canDragOver = { draggedOver, dragging -> true } // Allow dragging over all items
+    )
+
+    // Watch for drag state changes and provide haptic feedback
+    LaunchedEffect(reorderableState.draggingItemKey) {
+        if (reorderableState.draggingItemKey != null) {
+            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
+    }
+    
     // Учитавање листе при првом рендеровању
     LaunchedEffect(listId) {
         isRefreshing = true
         listsViewModel.loadListById(listId)
         delay(500) // Кратко одлагање за иницијално учитавање
         isRefreshing = false
+        // Scroll to top after initial load
+        lazyListState.scrollToItem(0)
     }
     
     // Функција за додавање нове празне ставке у листу
@@ -225,16 +254,14 @@ fun ListDetailsScreen(
             if (list.items.isEmpty()) {
                 // Ako je lista prazna, skrolujemo na vrh
                 lazyListState.scrollToItem(0)
-            } else {
+            } else if (currentEditingItemId != null || isKeyboardVisible) {
                 // Dodajemo odlaganje da bi animacija bila glatka
                 delay(150)
                 
                 try {
-                    // Uvek skrolujemo do poslednje stavke
-                    // Koristimo veći negativni ofset kada je tastatura vidljiva
+                    // Skrolujemo do poslednje stavke samo kada dodajemo novu ili je tastatura vidljiva
                     val offset = if (isKeyboardVisible) -200 else -50
                     
-                    // Skrolujemo do poslednje stavke
                     lazyListState.animateScrollToItem(
                         index = list.items.size - 1,
                         scrollOffset = offset
@@ -243,16 +270,17 @@ fun ListDetailsScreen(
                     // Ignorišemo greške pri skrolovanju
                 }
             }
+            // Ne radimo ništa ako samo brišemo stavke
         }
     }
     
-    // Dodajemo novi LaunchedEffect koji će se izvršiti kada se doda nova stavka
+    // Modify the LaunchedEffect for new items to be more specific
     LaunchedEffect(selectedList?.items?.lastOrNull()?.id) {
         selectedList?.let { list ->
-            if (list.items.isNotEmpty() && isKeyboardVisible) {
+            if (list.items.isNotEmpty() && (isKeyboardVisible || currentEditingItemId != null)) {
                 delay(100)
                 try {
-                    // Skrolujemo do poslednje stavke sa većim ofsetom kada je tastatura vidljiva
+                    // Skrolujemo do poslednje stavke samo kada dodajemo novu
                     lazyListState.animateScrollToItem(
                         index = list.items.size - 1,
                         scrollOffset = -200
@@ -428,9 +456,9 @@ fun ListDetailsScreen(
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 16.dp),
-                            state = lazyListState,
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = if (isKeyboardVisible) 56.dp else 0.dp)
+                                .padding(horizontal = 16.dp)
+                                .reorderable(reorderableState),
+                            state = reorderableState.listState
                         ) {
                             // Додајемо празан простор на врху листе када је празна
                             if (isListEmpty) {
@@ -444,58 +472,58 @@ fun ListDetailsScreen(
                                 items = listState.items,
                                 key = { item -> item.id }
                             ) { item ->
-                                ShoppingItemRow(
-                                    item = item,
-                                    onDelete = { item ->
-                                        // Čuvamo samo poslednju obrisanu stavku
-                                        lastDeletedItem = item
-                                        listsViewModel.deleteItem(item.id)
-                                        
-                                        // Prikazujemo Snackbar sa opcijom za povraćaj
-                                        coroutineScope.launch {
-                                            val result = snackbarHostState.showSnackbar(
-                                                message = "Ставка обрисана",
-                                                actionLabel = "Поништи",
-                                                duration = SnackbarDuration.Short
-                                            )
+                                ReorderableItem(
+                                    reorderableState = reorderableState,
+                                    key = item.id,
+                                    modifier = Modifier.animateItem()
+                                ) { isDragging ->
+                                    ShoppingItemRow(
+                                        item = item,
+                                        onDelete = { deletedItem ->
+                                            // Delete without affecting scroll position
+                                            listsViewModel.deleteItem(deletedItem.id)
                                             
-                                            if (result == SnackbarResult.ActionPerformed) {
-                                                // Vraćamo samo poslednju obrisanu stavku
-                                                lastDeletedItem?.let { deletedItem ->
+                                            // Show snackbar with undo option
+                                            coroutineScope.launch {
+                                                val result = snackbarHostState.showSnackbar(
+                                                    message = "Ставка обрисана",
+                                                    actionLabel = "Поништи",
+                                                    duration = SnackbarDuration.Short
+                                                )
+                                                
+                                                if (result == SnackbarResult.ActionPerformed) {
+                                                    lastDeletedItem = deletedItem
                                                     if (deletedItem.id.isNotEmpty()) {
                                                         listsViewModel.restoreItem(deletedItem.id, deletedItem)
-                                                        // Nakon vraćanja, postavljamo lastDeletedItem na null
-                                                        lastDeletedItem = null
                                                     }
                                                 }
                                             }
-                                        }
-                                    },
-                                    onCheckedChange = { shoppingItem, isChecked ->
-                                        listState.id?.let { id ->
-                                            listsViewModel.updateItemCompletionStatus(id, shoppingItem.id, isChecked)
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    isKucniPoslovi = listState.title == "Kućni poslovi",
-                                    listsViewModel = listsViewModel,
-                                    listId = listId
-                                )
-                                
-                                if (item != listState.items.lastOrNull()) {
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(vertical = 8.dp)
+                                        },
+                                        onCheckedChange = { shoppingItem, isChecked ->
+                                            listState.id?.let { id ->
+                                                listsViewModel.updateItemCompletionStatus(id, shoppingItem.id, isChecked)
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                if (isDragging) MaterialTheme.colorScheme.primaryContainer
+                                                else MaterialTheme.colorScheme.surface
+                                            )
+                                            .padding(bottom = if (isKeyboardVisible) 56.dp else 0.dp),
+                                        isKucniPoslovi = listState.title == "Kućni poslovi",
+                                        listsViewModel = listsViewModel,
+                                        listId = listId,
+                                        isDragging = isDragging,
+                                        reorderableState = reorderableState
                                     )
+                                    
+                                    if (item != listState.items.lastOrNull()) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(vertical = 4.dp)
+                                        )
+                                    }
                                 }
-                            }
-                            
-                            // Додајемо већи простор на дну када је тастатура видљива
-                            item {
-                                Spacer(
-                                    modifier = Modifier.height(
-                                        if (isKeyboardVisible) 300.dp else 100.dp
-                                    )
-                                )
                             }
                         }
                     }
@@ -505,7 +533,8 @@ fun ListDetailsScreen(
                 PullRefreshIndicator(
                     refreshing = isRefreshing,
                     state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter)
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    scale = true
                 )
             }
         }
@@ -598,7 +627,9 @@ fun ShoppingItemRow(
     modifier: Modifier = Modifier,
     isKucniPoslovi: Boolean = false,
     listsViewModel: ListsViewModel,
-    listId: String
+    listId: String,
+    isDragging: Boolean = false,
+    reorderableState: ReorderableLazyListState? = null
 ) {
     var offsetX by remember { mutableFloatStateOf(0f) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -638,23 +669,42 @@ fun ShoppingItemRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(vertical = 8.dp),
+                .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Drag Handle - make it more prominent
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .then(
+                        if (reorderableState != null) {
+                            Modifier.detectReorderAfterLongPress(reorderableState)
+                        } else {
+                            Modifier
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DragIndicator,
+                    contentDescription = "Превуци за промену редоследа",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isDragging) 1f else 0.6f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
             if (isKucniPoslovi) {
-                // Calculate and show age indicator only for Kucni poslovi list
+                // Age indicator dot
                 val ageInDays = remember(item.createdAt) {
                     val now = Timestamp.now()
                     val diffInMillis = now.seconds - item.createdAt.seconds
-                    (diffInMillis / (24 * 60 * 60)).toInt() // Convert seconds to days
+                    (diffInMillis / (24 * 60 * 60)).toInt()
                 }
 
-                // Age indicator dot
                 val indicatorColor = when {
-                    ageInDays >= 14 -> Color(0xFFE57373) // Red for more than 2 weeks
-                    ageInDays >= 7 -> Color(0xFFFFB74D)  // Orange for 1-2 weeks
-                    else -> Color(0xFF81C784) // Green for less than a week
+                    ageInDays >= 14 -> Color(0xFFE57373)
+                    ageInDays >= 7 -> Color(0xFFFFB74D)
+                    else -> Color(0xFF81C784)
                 }
 
                 Box(
@@ -667,7 +717,7 @@ fun ShoppingItemRow(
                 Spacer(modifier = Modifier.width(8.dp))
             }
 
-            // Custom circular checkbox matching ListsScreen style
+            // Custom circular checkbox
             Box(
                 modifier = Modifier
                     .size(32.dp)
@@ -724,19 +774,13 @@ fun ShoppingItemRow(
                     },
                     modifier = Modifier
                         .weight(1f)
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onLongPress = {
-                                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                                    isEditing = true
-                                }
-                            )
+                        .clickable {
+                            isEditing = true
                         }
                 )
             }
 
             if (isKucniPoslovi) {
-                // Show age in days for items older than 7 days in Kucni poslovi list
                 val ageInDays = remember(item.createdAt) {
                     val now = Timestamp.now()
                     val diffInMillis = now.seconds - item.createdAt.seconds

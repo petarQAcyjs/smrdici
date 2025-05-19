@@ -134,4 +134,7 @@ dependencies {
     
     // Coroutines sync - za Mutex implementaciju
     implementation(libs.kotlinx.coroutines.core)
+
+    // Reorderable library for drag-and-drop functionality
+    implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
 }
