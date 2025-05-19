@@ -7,8 +7,10 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -386,7 +388,14 @@ fun ListDetailsScreen(
                 ) {
                     androidx.compose.material3.TextField(
                         value = newItemText,
-                        onValueChange = { newItemText = it },
+                        onValueChange = { text -> 
+                            // Capitalize the first letter if the text is not empty
+                            newItemText = if (text.isNotEmpty()) {
+                                text.replaceFirstChar { it.uppercase() }
+                            } else {
+                                text
+                            }
+                        },
                         placeholder = { Text("Унесите назив ставке") },
                         singleLine = true,
                         modifier = Modifier
@@ -458,7 +467,10 @@ fun ListDetailsScreen(
                                 .fillMaxSize()
                                 .padding(horizontal = 16.dp)
                                 .reorderable(reorderableState),
-                            state = reorderableState.listState
+                            state = reorderableState.listState,
+                            contentPadding = PaddingValues(
+                                bottom = if (isKeyboardVisible) 80.dp else 16.dp // Add padding at bottom when keyboard is visible
+                            )
                         ) {
                             // Додајемо празан простор на врху листе када је празна
                             if (isListEmpty) {
@@ -509,8 +521,7 @@ fun ListDetailsScreen(
                                             .background(
                                                 if (isDragging) MaterialTheme.colorScheme.primaryContainer
                                                 else MaterialTheme.colorScheme.surface
-                                            )
-                                            .padding(bottom = if (isKeyboardVisible) 56.dp else 0.dp),
+                                            ),
                                         isKucniPoslovi = listState.title == "Kućni poslovi",
                                         listsViewModel = listsViewModel,
                                         listId = listId,
@@ -521,6 +532,17 @@ fun ListDetailsScreen(
                                     if (item != listState.items.lastOrNull()) {
                                         HorizontalDivider(
                                             modifier = Modifier.padding(vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                                
+                                // If this item is being edited, scroll to it
+                                if (listsViewModel.editingItemId.collectAsState().value == item.id) {
+                                    LaunchedEffect(Unit) {
+                                        delay(300) // Give time for keyboard to show up
+                                        reorderableState.listState.animateScrollToItem(
+                                            listState.items.indexOf(item),
+                                            -200 // Scroll offset to ensure item is visible above keyboard
                                         )
                                     }
                                 }
@@ -639,6 +661,33 @@ fun ShoppingItemRow(
     val density = LocalDensity.current
     val deleteThreshold = with(density) { 200.dp.toPx() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Effect to update editedName when item.name changes
+    LaunchedEffect(item.name) {
+        editedName = item.name
+    }
+
+    // Effect to handle editing state
+    LaunchedEffect(isEditing) {
+        if (isEditing) {
+            // When this item starts editing, notify the parent to cancel other items' editing
+            listsViewModel.setEditingItemId(item.id)
+            // Request focus and scroll to this item
+            coroutineScope.launch {
+                delay(100) // Short delay to ensure the layout is ready
+                focusRequester.requestFocus()
+            }
+        }
+    }
+
+    // Effect to handle external editing cancellation
+    LaunchedEffect(listsViewModel.editingItemId.collectAsState().value) {
+        if (listsViewModel.editingItemId.value != item.id) {
+            isEditing = false
+        }
+    }
 
     Box(
         modifier = modifier
@@ -669,7 +718,7 @@ fun ShoppingItemRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp),
+                .padding(vertical = if (isEditing) 4.dp else 8.dp), // Reduce padding when editing
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Drag Handle - make it more prominent
@@ -747,20 +796,71 @@ fun ShoppingItemRow(
             Spacer(modifier = Modifier.width(16.dp))
 
             if (isEditing) {
-                TextField(
-                    value = editedName,
-                    onValueChange = { editedName = it },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {
-                        if (editedName.isNotBlank() && editedName != item.name) {
-                            listsViewModel.updateItemName(listId, item.id, editedName)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextField(
+                        value = editedName,
+                        onValueChange = { text -> 
+                            editedName = if (text.isNotEmpty()) {
+                                text.replaceFirstChar { it.uppercase() }
+                            } else {
+                                text
+                            }
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            if (editedName.isNotBlank() && editedName != item.name) {
+                                listsViewModel.updateItemName(listId, item.id, editedName)
+                            }
+                            isEditing = false
+                            keyboardController?.hide()
+                        }),
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(focusRequester)
+                    )
+                    
+                    // Compact the buttons when editing
+                    Row(
+                        horizontalArrangement = Arrangement.End,
+                        modifier = Modifier.padding(start = 4.dp)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                if (editedName.isNotBlank() && editedName != item.name) {
+                                    listsViewModel.updateItemName(listId, item.id, editedName)
+                                }
+                                isEditing = false
+                                keyboardController?.hide()
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Потврди",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
-                        isEditing = false
-                        keyboardController?.hide()
-                    }),
-                    modifier = Modifier.weight(1f)
-                )
+                        
+                        IconButton(
+                            onClick = {
+                                editedName = item.name
+                                isEditing = false
+                                keyboardController?.hide()
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Откажи",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
             } else {
                 Text(
                     text = item.name,
@@ -776,6 +876,7 @@ fun ShoppingItemRow(
                         .weight(1f)
                         .clickable {
                             isEditing = true
+                            listsViewModel.setEditingItemId(item.id)
                         }
                 )
             }
