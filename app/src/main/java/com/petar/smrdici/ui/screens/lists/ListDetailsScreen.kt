@@ -222,23 +222,23 @@ fun ListDetailsScreen(
             
             // Додајемо кратко одлагање пре додавања нове празне ставке
             coroutineScope.launch {
-                // Skrolujemo do poslednje stavke
-                selectedList?.let { list ->
-                    if (list.items.isNotEmpty()) {
-                        try {
-                            delay(150) // Kratko odlaganje za bolji UX
-                            lazyListState.animateScrollToItem(
-                                index = list.items.size,
-                                scrollOffset = -200
-                            )
-                        } catch (_: Exception) {
-                            // Ignorišemo greške pri skrolovanju
-                        }
-                    }
-                }
-                
                 delay(100) // Kratko odlaganje za bolji UX
                 addEmptyItem()
+            }
+        }
+    }
+    
+    // Scroll effect to keep the last item visible
+    LaunchedEffect(selectedList?.items?.size) {
+        selectedList?.let { list ->
+            if (list.items.isNotEmpty() && currentEditingItemId != null) {
+                delay(150) // Short delay for smooth animation
+                val lastIndex = list.items.size - 1
+                val offset = if (isKeyboardVisible) -200 else -50
+                reorderableState.listState.animateScrollToItem(
+                    index = lastIndex,
+                    scrollOffset = offset
+                )
             }
         }
     }
@@ -469,17 +469,10 @@ fun ListDetailsScreen(
                                 .reorderable(reorderableState),
                             state = reorderableState.listState,
                             contentPadding = PaddingValues(
-                                bottom = if (isKeyboardVisible) 80.dp else 16.dp // Add padding at bottom when keyboard is visible
+                                top = 8.dp,
+                                bottom = if (isKeyboardVisible) 120.dp else 80.dp
                             )
                         ) {
-                            // Додајемо празан простор на врху листе када је празна
-                            if (isListEmpty) {
-                                item {
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                }
-                            }
-                            
-                            // Приказујемо ставке
                             items(
                                 items = listState.items,
                                 key = { item -> item.id }
@@ -492,17 +485,13 @@ fun ListDetailsScreen(
                                     ShoppingItemRow(
                                         item = item,
                                         onDelete = { deletedItem ->
-                                            // Delete without affecting scroll position
                                             listsViewModel.deleteItem(deletedItem.id)
-                                            
-                                            // Show snackbar with undo option
                                             coroutineScope.launch {
                                                 val result = snackbarHostState.showSnackbar(
                                                     message = "Ставка обрисана",
                                                     actionLabel = "Поништи",
                                                     duration = SnackbarDuration.Short
                                                 )
-                                                
                                                 if (result == SnackbarResult.ActionPerformed) {
                                                     lastDeletedItem = deletedItem
                                                     if (deletedItem.id.isNotEmpty()) {
@@ -528,21 +517,10 @@ fun ListDetailsScreen(
                                         isDragging = isDragging,
                                         reorderableState = reorderableState
                                     )
-                                    
+
                                     if (item != listState.items.lastOrNull()) {
                                         HorizontalDivider(
                                             modifier = Modifier.padding(vertical = 4.dp)
-                                        )
-                                    }
-                                }
-                                
-                                // If this item is being edited, scroll to it
-                                if (listsViewModel.editingItemId.collectAsState().value == item.id) {
-                                    LaunchedEffect(Unit) {
-                                        delay(300) // Give time for keyboard to show up
-                                        reorderableState.listState.animateScrollToItem(
-                                            listState.items.indexOf(item),
-                                            -200 // Scroll offset to ensure item is visible above keyboard
                                         )
                                     }
                                 }
