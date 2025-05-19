@@ -314,18 +314,20 @@ fun ListDetailsScreen(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        val allCompleted = selectedList?.items?.all { it.isCompleted } == true
+                        
                         DropdownMenuItem(
-                            text = { Text("Означи све као завршено") },
+                            text = { Text(if (allCompleted) "Поништи све" else "Означи све као завршено") },
                             onClick = {
                                 showMenu = false
-                                selectedList?.let { list ->
-                                    listsViewModel.updateAllItemsCompletionStatus(listId, true)
+                                selectedList?.id?.let { id ->
+                                    listsViewModel.updateAllItemsCompletionStatus(id, !allCompleted)
                                 }
                             },
                             leadingIcon = {
                                 Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = "Означи све као завршено"
+                                    imageVector = if (allCompleted) Icons.Default.Clear else Icons.Default.Check,
+                                    contentDescription = if (allCompleted) "Поништи све" else "Означи све као завршено"
                                 )
                             }
                         )
