@@ -106,7 +106,14 @@ fun AddEventScreen(
             // Форма за унос догађаја
             OutlinedTextField(
                 value = formState.title,
-                onValueChange = { newTitle -> calendarViewModel.updateEventField("title", newTitle) },
+                onValueChange = { text -> 
+                    // Capitalize the first letter if the text is not empty
+                    calendarViewModel.updateEventField("title", if (text.isNotEmpty()) {
+                        text.replaceFirstChar { it.uppercase() }
+                    } else {
+                        text
+                    })
+                },
                 label = { Text("Наслов") },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -115,7 +122,14 @@ fun AddEventScreen(
             
             OutlinedTextField(
                 value = formState.description,
-                onValueChange = { newDescription -> calendarViewModel.updateEventField("description", newDescription) },
+                onValueChange = { text -> 
+                    // Capitalize the first letter if the text is not empty
+                    calendarViewModel.updateEventField("description", if (text.isNotEmpty()) {
+                        text.replaceFirstChar { it.uppercase() }
+                    } else {
+                        text
+                    })
+                },
                 label = { Text("Опис") },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -211,7 +225,14 @@ fun AddEventScreen(
             // Локација
             OutlinedTextField(
                 value = formState.location,
-                onValueChange = { newLocation -> calendarViewModel.updateEventField("location", newLocation) },
+                onValueChange = { text -> 
+                    // Capitalize the first letter if the text is not empty
+                    calendarViewModel.updateEventField("location", if (text.isNotEmpty()) {
+                        text.replaceFirstChar { it.uppercase() }
+                    } else {
+                        text
+                    })
+                },
                 label = { Text("Локација") },
                 modifier = Modifier
                     .fillMaxWidth()
