@@ -638,7 +638,14 @@ fun AddEventDialog(
                 // Наслов поље
                 OutlinedTextField(
                     value = eventFormState.title,
-                    onValueChange = { onEventFormChanged("title", it) },
+                    onValueChange = { text -> 
+                        // Capitalize the first letter if the text is not empty
+                        onEventFormChanged("title", if (text.isNotEmpty()) {
+                            text.replaceFirstChar { it.uppercase() }
+                        } else {
+                            text
+                        })
+                    },
                     label = { Text("Наслов") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -647,7 +654,14 @@ fun AddEventDialog(
                 // Опис поље
                 OutlinedTextField(
                     value = eventFormState.description,
-                    onValueChange = { onEventFormChanged("description", it) },
+                    onValueChange = { text -> 
+                        // Capitalize the first letter if the text is not empty
+                        onEventFormChanged("description", if (text.isNotEmpty()) {
+                            text.replaceFirstChar { it.uppercase() }
+                        } else {
+                            text
+                        })
+                    },
                     label = { Text("Опис") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
@@ -657,7 +671,14 @@ fun AddEventDialog(
                 // Локација поље
                 OutlinedTextField(
                     value = eventFormState.location,
-                    onValueChange = { onEventFormChanged("location", it) },
+                    onValueChange = { text -> 
+                        // Capitalize the first letter if the text is not empty
+                        onEventFormChanged("location", if (text.isNotEmpty()) {
+                            text.replaceFirstChar { it.uppercase() }
+                        } else {
+                            text
+                        })
+                    },
                     label = { Text("Локација") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true

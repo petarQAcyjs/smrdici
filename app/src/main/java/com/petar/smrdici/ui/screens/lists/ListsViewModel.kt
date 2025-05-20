@@ -11,6 +11,7 @@ import com.petar.smrdici.data.model.ShoppingList
 import com.petar.smrdici.data.model.ShoppingItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.*
 import kotlinx.coroutines.delay
@@ -28,6 +29,9 @@ class ListsViewModel : ViewModel() {
     // Стање за праћење листа које су тренутно у процесу брисања
     private val _deletingListIds = MutableStateFlow<Set<String>>(emptySet())
     val deletingListIds: StateFlow<Set<String>> = _deletingListIds
+
+    private val _editingItemId = MutableStateFlow<String?>(null)
+    val editingItemId: StateFlow<String?> = _editingItemId.asStateFlow()
 
     init {
         loadLists()
@@ -769,6 +773,10 @@ class ListsViewModel : ViewModel() {
                 Log.e("ListsViewModel", "Грешка при ажурирању позиција", e)
             }
         }
+    }
+
+    fun setEditingItemId(itemId: String?) {
+        _editingItemId.value = itemId
     }
 
 }
