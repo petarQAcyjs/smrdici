@@ -47,6 +47,7 @@ import kotlinx.coroutines.delay
  * @param showBackButton Да ли приказати дугме за назад.
  * @param onMenuClick Акција која се извршава приликом клика на мени, ако је мени приказан.
  * @param showMenu Да ли приказати дугме за мени.
+ * @param showProfileIcon Да ли приказати дугме за профил.
  * @param onTitleLongPress Акција која се извршава приликом дугог притиска на наслов.
  * @param actions Custom actions to be displayed in the top app bar
  */
@@ -59,6 +60,7 @@ fun AppHeader(
     showBackButton: Boolean = false,
     onMenuClick: () -> Unit = {},
     showMenu: Boolean = false,
+    showProfileIcon: Boolean = true,
     onTitleLongPress: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {}
 ) {
@@ -134,18 +136,20 @@ fun AppHeader(
             actions()
             
             // Profile icon
-            IconButton(
-                onClick = { 
-                    if (user != null) {
-                        navController.navigate(Screen.Profile.route)
+            if (showProfileIcon) {
+                IconButton(
+                    onClick = { 
+                        if (user != null) {
+                            navController.navigate(Screen.Profile.route)
+                        }
                     }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Профил",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
                 }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "Профил",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(

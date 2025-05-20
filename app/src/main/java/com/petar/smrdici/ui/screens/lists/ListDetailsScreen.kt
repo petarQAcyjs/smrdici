@@ -302,6 +302,7 @@ fun ListDetailsScreen(
                 title = selectedList?.title ?: "Детаљи листе",
                 navController = navController,
                 showBackButton = true,
+                showProfileIcon = false,
                 user = if (authViewModel.authState.collectAsState().value is AuthState.Authenticated) (authViewModel.authState.collectAsState().value as AuthState.Authenticated).user else null,
                 actions = {
                     IconButton(onClick = { showMenu = true }) {
