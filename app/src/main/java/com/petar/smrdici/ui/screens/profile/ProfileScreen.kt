@@ -121,6 +121,7 @@ fun ProfileScreen(
             AppHeader(
                 title = "Профил",
                 showBackButton = true,
+                showProfileIcon = false,
                 user = user,
                 navController = navController
             )
