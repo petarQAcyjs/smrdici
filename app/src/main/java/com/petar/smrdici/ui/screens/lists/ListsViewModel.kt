@@ -270,14 +270,14 @@ class ListsViewModel : ViewModel() {
                     currentList.items.maxOf { it.position } + 1
                 }
                 
-                // Креирамо нову ставку
+                // Create new item with proper timestamp
                 val newItem = ShoppingItem(
                     id = UUID.randomUUID().toString(),
                     name = name,
                     quantity = quantity,
                     isCompleted = false,
                     note = "",
-                    createdAt = Timestamp.now(),
+                    createdAt = Timestamp(System.currentTimeMillis() / 1000, 0),
                     position = nextPosition
                 )
                 
