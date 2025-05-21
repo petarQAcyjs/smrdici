@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -724,11 +723,12 @@ fun ShoppingItemRow(
             }
 
             if (isKucniPoslovi) {
-                // Age indicator dot
+                // Age indicator with number
                 val ageInDays = remember(item.createdAt) {
                     val now = Timestamp.now()
-                    val diffInMillis = now.seconds - item.createdAt.seconds
-                    (diffInMillis / (24 * 60 * 60)).toInt()
+                    val diffInSeconds = now.seconds - item.createdAt.seconds
+                    val days = diffInSeconds / (24 * 60 * 60)
+                    days.toInt()
                 }
 
                 val indicatorColor = when {
@@ -739,10 +739,16 @@ fun ShoppingItemRow(
 
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
-                        .background(indicatorColor, CircleShape)
-                        .padding(end = 8.dp)
-                )
+                        .size(24.dp)
+                        .background(indicatorColor, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$ageInDays",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
 
                 Spacer(modifier = Modifier.width(8.dp))
             }
@@ -865,8 +871,9 @@ fun ShoppingItemRow(
             if (isKucniPoslovi) {
                 val ageInDays = remember(item.createdAt) {
                     val now = Timestamp.now()
-                    val diffInMillis = now.seconds - item.createdAt.seconds
-                    (diffInMillis / (24 * 60 * 60)).toInt()
+                    val diffInSeconds = now.seconds - item.createdAt.seconds
+                    val days = diffInSeconds / (24 * 60 * 60)
+                    days.toInt()
                 }
                 if (ageInDays >= 7) {
                     Text(
