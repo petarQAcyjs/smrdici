@@ -11,6 +11,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.petar.smrdici.data.repository.ExpenseRepository
 import com.petar.smrdici.data.repository.IncomeRepository
+import com.petar.smrdici.data.repository.SettingsRepository
 import com.petar.smrdici.ui.components.MainLayout
 import com.petar.smrdici.ui.screens.addAccount.AddAccountScreen
 import com.petar.smrdici.ui.screens.auth.LoginScreen
@@ -32,6 +33,7 @@ import com.petar.smrdici.ui.screens.settings.ExpenseCategoriesScreen
 import com.petar.smrdici.ui.screens.settings.IncomeCategoriesScreen
 import com.petar.smrdici.ui.screens.transfer.TransferScreen
 import com.petar.smrdici.ui.screens.finance.FinanceScreen
+import com.petar.smrdici.ui.screens.finance.FinanceViewModel
 
 @Composable
 fun NavGraph(
@@ -43,6 +45,7 @@ fun NavGraph(
     // Create repositories and settings view model
     val expenseRepository = remember { ExpenseRepository.getInstance() }
     val incomeRepository = remember { IncomeRepository.getInstance() }
+    val settingsRepository = remember { SettingsRepository.getInstance(context) }
     val settingsViewModel = remember { 
         BudgetSettingsViewModel.Factory(context).create(BudgetSettingsViewModel::class.java)
     }
@@ -75,7 +78,12 @@ fun NavGraph(
         
         composable(route = Screen.Finance.route) {
             MainLayout {
-                FinanceScreen(navController = navController)
+                FinanceScreen(
+                    navController = navController,
+                    viewModel = viewModel(
+                        factory = FinanceViewModel.Factory(settingsRepository)
+                    )
+                )
             }
         }
         

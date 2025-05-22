@@ -52,6 +52,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.Income
 import com.petar.smrdici.data.model.IncomeCategory
+import com.petar.smrdici.data.repository.IncomeRepository
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -210,9 +211,16 @@ fun AddIncomeScreen(
                     accountId = selectedAccountId
                 )
                 
-                // TODO: Implement income saving logic
-                snackbarHostState.showSnackbar("Приход је успешно сачуван")
-                onNavigateBack()
+                // Save income using repository
+                val incomeRepository = IncomeRepository.getInstance()
+                val result = incomeRepository.addIncome(income)
+                
+                if (result.isSuccess) {
+                    snackbarHostState.showSnackbar("Приход је успешно сачуван")
+                    onNavigateBack()
+                } else {
+                    snackbarHostState.showSnackbar("Грешка при чувању прихода: ${result.exceptionOrNull()?.message}")
+                }
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("Грешка при чувању прихода: ${e.message}")
             } finally {
