@@ -38,7 +38,7 @@ import java.util.*
 @Composable
 fun FinanceScreen(
     modifier: Modifier = Modifier,
-    viewModel: FinanceViewModel = viewModel(),
+    viewModel: FinanceViewModel,
     navController: NavController,
     authViewModel: AuthViewModel = viewModel()
 ) {

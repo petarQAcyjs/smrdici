@@ -1,6 +1,7 @@
 package com.petar.smrdici.ui.screens.finance
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.data.model.Expense
@@ -8,6 +9,8 @@ import com.petar.smrdici.data.model.Income
 import com.petar.smrdici.data.repository.ExpenseRepository
 import com.petar.smrdici.data.repository.IncomeRepository
 import com.petar.smrdici.data.repository.AccountRepository
+import com.petar.smrdici.data.repository.SettingsRepository
+import com.petar.smrdici.ui.screens.settings.Period
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,7 +66,11 @@ sealed class TimePeriod {
             }
             is Month -> yearMonth == YearMonth.from(now)
             is Year -> year == now.year
-            is Custom -> false // Custom periods are never considered current
+            is Custom -> {
+                // For custom periods, we need to check if today falls within the current period
+                (now.isEqual(startDate) || now.isAfter(startDate)) &&
+                (now.isEqual(endDate) || now.isBefore(endDate))
+            }
         }
     }
 
@@ -117,7 +124,7 @@ data class FinanceScreenState(
     val accounts: List<Account> = emptyList()
 )
 
-class FinanceViewModel : ViewModel() {
+class FinanceViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
     private val _state = MutableStateFlow(FinanceScreenState())
     val state: StateFlow<FinanceScreenState> = _state.asStateFlow()
 
@@ -126,8 +133,40 @@ class FinanceViewModel : ViewModel() {
     private val accountRepository: AccountRepository by lazy { AccountRepository.getInstance() }
 
     init {
+        initializeState()
         refreshData()
         loadAccounts()
+    }
+
+    private fun initializeState() {
+        viewModelScope.launch {
+            val configuredPeriod = settingsRepository.period.value
+            val now = LocalDate.now()
+            val currentPeriod = when (configuredPeriod) {
+                Period.DAILY -> TimePeriod.Day(now)
+                Period.WEEKLY -> TimePeriod.Week(now.minusDays(now.dayOfWeek.value.toLong() - 1))
+                Period.MONTHLY -> TimePeriod.Month(YearMonth.from(now))
+                Period.YEARLY -> TimePeriod.Year(now.year)
+                Period.CUSTOM -> {
+                    val startDay = settingsRepository.customPeriodStartDay.value
+                    val currentMonth = YearMonth.from(now)
+                    
+                    // Calculate the current period's start date
+                    val startDate = if (now.dayOfMonth >= startDay) {
+                        currentMonth.atDay(startDay)
+                    } else {
+                        currentMonth.minusMonths(1).atDay(startDay)
+                    }
+                    
+                    // End date is the day before start day in the next month
+                    val endDate = startDate.plusMonths(1).minusDays(1)
+                    
+                    TimePeriod.Custom(startDate, endDate)
+                }
+                Period.ALL -> TimePeriod.Month(YearMonth.from(now)) // Default to current month for "ALL"
+            }
+            _state.value = _state.value.copy(selectedTimePeriod = currentPeriod)
+        }
     }
 
     private fun loadAccounts() {
@@ -151,7 +190,12 @@ class FinanceViewModel : ViewModel() {
                     is TimePeriod.Week -> TimePeriod.Week(period.startDate.plus(7, ChronoUnit.DAYS))
                     is TimePeriod.Month -> TimePeriod.Month(period.yearMonth.plusMonths(1))
                     is TimePeriod.Year -> TimePeriod.Year(period.year + 1)
-                    is TimePeriod.Custom -> period // Custom periods don't support navigation
+                    is TimePeriod.Custom -> {
+                        // Move to the next month's period
+                        val nextStartDate = period.startDate.plusMonths(1)
+                        val nextEndDate = period.endDate.plusMonths(1)
+                        TimePeriod.Custom(nextStartDate, nextEndDate)
+                    }
                 }
             )
         }
@@ -166,7 +210,12 @@ class FinanceViewModel : ViewModel() {
                     is TimePeriod.Week -> TimePeriod.Week(period.startDate.minus(7, ChronoUnit.DAYS))
                     is TimePeriod.Month -> TimePeriod.Month(period.yearMonth.minusMonths(1))
                     is TimePeriod.Year -> TimePeriod.Year(period.year - 1)
-                    is TimePeriod.Custom -> period // Custom periods don't support navigation
+                    is TimePeriod.Custom -> {
+                        // Move to the previous month's period
+                        val previousStartDate = period.startDate.minusMonths(1)
+                        val previousEndDate = period.endDate.minusMonths(1)
+                        TimePeriod.Custom(previousStartDate, previousEndDate)
+                    }
                 }
             )
         }
@@ -186,7 +235,24 @@ class FinanceViewModel : ViewModel() {
                     is TimePeriod.Week -> TimePeriod.Week(LocalDate.now())
                     is TimePeriod.Month -> TimePeriod.Month(YearMonth.now())
                     is TimePeriod.Year -> TimePeriod.Year(LocalDate.now().year)
-                    is TimePeriod.Custom -> currentState.selectedTimePeriod
+                    is TimePeriod.Custom -> {
+                        // For custom period, create a new period starting from the configured start day
+                        val today = LocalDate.now()
+                        val startDay = settingsRepository.customPeriodStartDay.value
+                        val currentMonth = YearMonth.from(today)
+                        
+                        // Calculate the current period's start date
+                        val startDate = if (today.dayOfMonth >= startDay) {
+                            currentMonth.atDay(startDay)
+                        } else {
+                            currentMonth.minusMonths(1).atDay(startDay)
+                        }
+                        
+                        // End date is the day before start day in the next month
+                        val endDate = startDate.plusMonths(1).minusDays(1)
+                        
+                        TimePeriod.Custom(startDate, endDate)
+                    }
                 }
             )
         }
@@ -285,8 +351,35 @@ class FinanceViewModel : ViewModel() {
             PeriodType.MONTH -> TimePeriod.Month(YearMonth.from(now))
             PeriodType.WEEK -> TimePeriod.Week(now.minusDays(now.dayOfWeek.value.toLong() - 1))
             PeriodType.DAY -> TimePeriod.Day(now)
-            PeriodType.CUSTOM -> TimePeriod.Custom(now, now) // This will be handled separately
+            PeriodType.CUSTOM -> {
+                // Get the configured start day from settings
+                val startDay = settingsRepository.customPeriodStartDay.value
+                val today = LocalDate.now()
+                val currentMonth = YearMonth.from(today)
+                
+                // Calculate the current period's start date
+                val startDate = if (today.dayOfMonth >= startDay) {
+                    currentMonth.atDay(startDay)
+                } else {
+                    currentMonth.minusMonths(1).atDay(startDay)
+                }
+                
+                // End date is the day before start day in the next month
+                val endDate = startDate.plusMonths(1).minusDays(1)
+                
+                TimePeriod.Custom(startDate, endDate)
+            }
         }
         setTimePeriod(currentPeriod)
+    }
+
+    class Factory(private val settingsRepository: SettingsRepository) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(FinanceViewModel::class.java)) {
+                return FinanceViewModel(settingsRepository) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class")
+        }
     }
 } 
