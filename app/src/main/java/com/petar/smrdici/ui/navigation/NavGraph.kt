@@ -75,7 +75,9 @@ fun NavGraph(
         
         composable(route = Screen.Finance.route) {
             MainLayout {
-                FinanceScreen(navController = navController)
+                FinanceScreen(
+                    navController = navController
+                )
             }
         }
         
