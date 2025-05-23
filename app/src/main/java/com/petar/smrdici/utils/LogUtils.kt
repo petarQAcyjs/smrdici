@@ -6,54 +6,63 @@ import java.util.*
 /**
  * Utility klasa za optimizovano logovanje
  */
-object LogUtils {
+public object LogUtils {
     
     /**
      * Nivoi detaljnosti logovanja
      */
-    enum class DetailLevel {
-        NONE,       // Bez detaljnog logovanja
-        MINIMAL,    // Samo osnovne informacije
-        NORMAL,     // Standardni nivo detalja
-        VERBOSE     // Maksimalan nivo detalja
+    public enum class DetailLevel {
+        NONE,       // No logging
+        MINIMAL,    // Only errors and important info
+        NORMAL,     // Regular logging level
+        VERBOSE     // Detailed logging for debugging
     }
     
     /**
      * Konfiguracione opcije za logovanje
      */
-    object Config {
-        // Glavni prekidač za detaljno logovanje - lako se menja između build varijanti
-        var ENABLE_DETAILED_LOGS = false
+    public object Config {
+        // Main configuration options
+        public var ENABLE_DETAILED_LOGS = false
+        public var DETAIL_LEVEL = DetailLevel.NORMAL
+        public var MAX_ITEMS_TO_LOG = 5
         
-        // Nivo detaljnosti logova
-        var DETAIL_LEVEL = DetailLevel.NORMAL
-        
-        // Maksimalan broj stavki za logovanje u kolekciji
-        var MAX_ITEMS_TO_LOG = 5
-        
-        // Lista tagova za koje je isključeno logovanje
-        var DISABLED_TAGS = mutableSetOf<String>()
-        
-        // Kategorije logova koje će biti prikazane
-        var ENABLED_CATEGORIES = mutableSetOf(
-            "expense", "income", "budget", "transaction", "app", "ui", "repository"
+        // Lists for filtering
+        public var DISABLED_TAGS = mutableSetOf<String>()
+        public var ENABLED_CATEGORIES = mutableSetOf(
+            "finance", "income", "expense", "account", "auth",
+            "budget", "transaction", "app", "ui", "repository"
         )
         
-        // Brzo uključivanje/isključivanje određenih kategorija logova
-        fun enableCategory(category: String) {
+        // Categories that should show debug logs
+        public val DEBUG_CATEGORIES = setOf(
+            "finance",      // Finance feature logs
+            "income",       // Income-related logs
+            "expense",      // Expense-related logs
+            "account",      // Account-related logs
+            "auth"         // Authentication logs
+        )
+        
+        // Categories that should show verbose logs
+        public val VERBOSE_CATEGORIES = setOf(
+            "finance"      // Show detailed finance logs
+        )
+        
+        // Category management functions
+        public fun enableCategory(category: String) {
             ENABLED_CATEGORIES.add(category.lowercase())
         }
         
-        fun disableCategory(category: String) {
+        public fun disableCategory(category: String) {
             ENABLED_CATEGORIES.remove(category.lowercase())
         }
         
-        // Brzo uključivanje/isključivanje određenih tagova
-        fun disableTag(tag: String) {
+        // Tag management functions
+        public fun disableTag(tag: String) {
             DISABLED_TAGS.add(tag)
         }
         
-        fun enableTag(tag: String) {
+        public fun enableTag(tag: String) {
             DISABLED_TAGS.remove(tag)
         }
     }
@@ -72,49 +81,55 @@ object LogUtils {
 
     /**
      * Log verbose messages - najdetaljnije informacije
-*/
-    fun v(tag: String, message: String, category: String? = null) {
-        if (Config.ENABLE_DETAILED_LOGS && Config.DETAIL_LEVEL == DetailLevel.VERBOSE && shouldLog(tag, category)) {
-            Log.v(tag, message)
+     */
+    public fun v(tag: String, message: String, category: String = "") {
+        if (Config.ENABLE_DETAILED_LOGS && 
+            Config.DETAIL_LEVEL == DetailLevel.VERBOSE && 
+            shouldLog(tag, category) &&
+            (category.isEmpty() || Config.VERBOSE_CATEGORIES.contains(category))) {
+            Log.v(formatTag(tag, category), message)
         }
     }
     
     /**
      * Log informative messages - korisne informacije o stanju aplikacije
      */
-    fun i(tag: String, message: String, category: String? = null) {
-        if (shouldLog(tag, category)) {
-            Log.i(tag, message)
+    public fun i(tag: String, message: String, category: String = "") {
+        if (Config.DETAIL_LEVEL >= DetailLevel.MINIMAL && shouldLog(tag, category)) {
+            Log.i(formatTag(tag, category), message)
         }
     }
     
     /**
      * Log debug messages - informacije korisne za debug, ali ne toliko bitne kao verbose
      */
-    fun d(tag: String, message: String, category: String? = null) {
-        if (Config.ENABLE_DETAILED_LOGS && shouldLog(tag, category)) {
-            Log.d(tag, message)
+    public fun d(tag: String, message: String, category: String = "") {
+        if (Config.ENABLE_DETAILED_LOGS && 
+            Config.DETAIL_LEVEL >= DetailLevel.NORMAL && 
+            shouldLog(tag, category) &&
+            (category.isEmpty() || Config.DEBUG_CATEGORIES.contains(category))) {
+            Log.d(formatTag(tag, category), message)
         }
     }
     
     /**
      * Log warning messages - potencijalni problemi ili neočekivane situacije
      */
-    fun w(tag: String, message: String, category: String? = null) {
+    public fun w(tag: String, message: String, category: String = "") {
         if (shouldLog(tag, category)) {
-            Log.w(tag, message)
+            Log.w(formatTag(tag, category), message)
         }
     }
     
     /**
      * Log error messages - ozbiljni problemi koji mogu uticati na funkcionalnost
      */
-    fun e(tag: String, message: String, throwable: Throwable? = null, category: String? = null) {
+    public fun e(tag: String, message: String, throwable: Throwable? = null, category: String = "") {
         if (shouldLog(tag, category)) {
             if (throwable != null) {
-                Log.e(tag, message, throwable)
+                Log.e(formatTag(tag, category), message, throwable)
             } else {
-                Log.e(tag, message)
+                Log.e(formatTag(tag, category), message)
             }
         }
     }
@@ -122,6 +137,7 @@ object LogUtils {
     /**
      * Log a collection of items with a limit on the number of items logged
      */
+    @JvmName("logCollection")
     public inline fun <T> logCollection(
         tag: String,
         collection: Collection<T>,
@@ -158,6 +174,7 @@ object LogUtils {
     /**
      * Log numeric statistics for a collection of numeric values
      */
+    @JvmName("logNumericStats")
     public fun logNumericStats(
         tag: String,
         values: Collection<Double>,
@@ -214,5 +231,17 @@ object LogUtils {
                 ))
             }
         }
+    }
+
+    private fun formatTag(tag: String, category: String): String {
+        return if (category.isNotEmpty()) {
+            "[$category] $tag"
+        } else {
+            tag
+        }
+    }
+
+    public fun setDetailLevel(level: DetailLevel) {
+        Config.DETAIL_LEVEL = level
     }
 }

@@ -67,11 +67,11 @@ Editing, deleting or adding new transaction updates the current balance accordin
   - [ ] Update balance calculations on actions
 
 ## Data Layer Enhancements
-- [ ] Add time period filtering to repositories
+- [x] Add time period filtering to repositories
 - [ ] Implement account balance tracking
-- [ ] Add currency conversion functionality
-- [ ] Create caching mechanism for offline support
-- [ ] Add transaction sync mechanism
+- [x] Add currency conversion functionality (Implemented in CurrencyConverter.kt)
+- [x] Create caching mechanism for offline support
+- [x] Add transaction sync mechanism
 
 ## State Management
 - [ ] Create FinanceViewModel for main screen
@@ -203,3 +203,9 @@ Editing, deleting or adding new transaction updates the current balance accordin
 - [ ] Add animations
 - [ ] Optimize performance
 - [ ] Add proper documentation
+
+## Summary of Missing Features:
+1. Multi-currency balance calculation integration
+2. Sort/filter functionality for transactions
+3. Undo functionality for transaction deletion
+4. Account balance tracking

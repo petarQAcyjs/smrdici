@@ -10,6 +10,7 @@ import com.petar.smrdici.data.model.Account
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
@@ -20,6 +21,12 @@ class AccountRepository private constructor() {
     
     private val _accounts = MutableStateFlow<List<Account>>(emptyList())
     val accounts: Flow<List<Account>> = _accounts.asStateFlow()
+    
+    private val currentUserId: String
+        get() = auth.currentUser?.uid ?: throw IllegalStateException("No authenticated user")
+
+    private val userAccountsCollection
+        get() = firestore.collection("users").document(currentUserId).collection("accounts")
     
     init {
         loadAccounts()
@@ -64,40 +71,11 @@ class AccountRepository private constructor() {
     }
     
     suspend fun addAccount(account: Account) {
-        try {
-            val userId = auth.currentUser?.uid ?: return
-            
-            val accountData = account.copy(
-                id = account.id.ifEmpty { UUID.randomUUID().toString() }
-            )
-            
-            firestore.collection("users").document(userId)
-                .collection("accounts")
-                .document(accountData.id)
-                .set(accountData)
-                .await()
-            
-            loadAccounts()
-        } catch (e: Exception) {
-            Log.e(TAG, "Грешка при додавању рачуна", e)
-        }
+        userAccountsCollection.document(account.id).set(account).await()
     }
     
-    @Suppress("unused")
     suspend fun updateAccount(account: Account) {
-        try {
-            val userId = auth.currentUser?.uid ?: return
-            
-            firestore.collection("users").document(userId)
-                .collection("accounts")
-                .document(account.id)
-                .set(account)
-                .await()
-            
-            loadAccounts()
-        } catch (e: Exception) {
-            Log.e(TAG, "Грешка при ажурирању рачуна", e)
-        }
+        userAccountsCollection.document(account.id).set(account).await()
     }
     
     /**
@@ -126,11 +104,11 @@ class AccountRepository private constructor() {
             val account = docSnapshot.toObject(Account::class.java)
                 ?: return Result.failure(IllegalStateException("Не могу да конвертујем документ у Account"))
             
-            // Додатно постављамо ID
-            account.id = accountId
-            
-            // Ажурирамо баланс
-            val updatedAccount = account.copy(balance = account.balance + amount)
+            // Create a new account with the updated ID and balance
+            val updatedAccount = account.copy(
+                id = accountId,
+                balance = account.balance + amount
+            )
             
             // Чувамо назад у Firestore
             docRef.set(updatedAccount).await()
@@ -145,21 +123,8 @@ class AccountRepository private constructor() {
         }
     }
     
-    @Suppress("unused")
     suspend fun deleteAccount(accountId: String) {
-        try {
-            val userId = auth.currentUser?.uid ?: return
-            
-            firestore.collection("users").document(userId)
-                .collection("accounts")
-                .document(accountId)
-                .delete()
-                .await()
-            
-            loadAccounts()
-        } catch (e: Exception) {
-            Log.e(TAG, "Грешка при брисању рачуна", e)
-        }
+        userAccountsCollection.document(accountId).delete().await()
     }
     
     // Додајемо нову методу за трансфер новца између рачуна
@@ -177,19 +142,19 @@ class AccountRepository private constructor() {
             )
             
             // Проверавамо да ли су рачуни валидни и има ли довољно средстава
-            val sourceAccountResult = getAccountById(sourceAccountId)
-            val destinationAccountResult = getAccountById(destinationAccountId)
+            val sourceAccount = getAccountByIdSuspend(sourceAccountId)
+            val destinationAccount = getAccountByIdSuspend(destinationAccountId)
             
-            if (sourceAccountResult == null) {
+            if (sourceAccount == null) {
                 return Result.failure(NoSuchElementException("Изворни рачун није пронађен"))
             }
             
-            if (destinationAccountResult == null) {
+            if (destinationAccount == null) {
                 return Result.failure(NoSuchElementException("Циљни рачун није пронађен"))
             }
             
             // Проверавамо да ли има довољно средстава
-            if (sourceAccountResult.balance < amount) {
+            if (sourceAccount.balance < amount) {
                 return Result.failure(IllegalArgumentException("Недовољно средстава на изворном рачуну"))
             }
             
@@ -255,8 +220,8 @@ class AccountRepository private constructor() {
         }
     }
     
-    // Помоћна метода за добављање рачуна по ID-у
-    private suspend fun getAccountById(accountId: String): Account? {
+    // Renamed to avoid conflict and clarify usage
+    private suspend fun getAccountByIdSuspend(accountId: String): Account? {
         try {
             val userId = auth.currentUser?.uid ?: return null
             
@@ -268,12 +233,7 @@ class AccountRepository private constructor() {
                 return null
             }
             
-            val account = docSnapshot.toObject(Account::class.java)
-            if (account != null) {
-                account.id = accountId
-            }
-            
-            return account
+            return docSnapshot.toObject(Account::class.java)?.copy(id = accountId)
         } catch (e: Exception) {
             Log.e(TAG, "Грешка при добављању рачуна по ID-у", e)
             return null
@@ -298,6 +258,17 @@ class AccountRepository private constructor() {
             Log.e(TAG, "Грешка при добављању историје трансфера", e)
             emptyList()
         }
+    }
+    
+    // Flow version for UI updates
+    fun getAccountByIdFlow(accountId: String): Flow<Account?> = flow {
+        val userId = auth.currentUser?.uid ?: run {
+            emit(null)
+            return@flow
+        }
+        
+        val docSnapshot = userAccountsCollection.document(accountId).get().await()
+        emit(docSnapshot.toObject(Account::class.java)?.copy(id = accountId))
     }
     
     companion object {

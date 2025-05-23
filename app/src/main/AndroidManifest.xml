@@ -3,6 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.petar.smrdici">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Уклањамо дозволе за календар -->
     <!-- <uses-permission android:name="android.permission.READ_CALENDAR" /> -->
     <!-- <uses-permission android:name="android.permission.WRITE_CALENDAR" /> -->
@@ -17,6 +20,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Smrdici"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="true"
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="tiramisu">
         <activity

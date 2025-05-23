@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Date
+import java.util.UUID
 
 /**
  * Енумерација која дефинише типове увоза
@@ -229,26 +230,31 @@ class DataExportImportViewModel(
                         }
                     }
                     
+                    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: throw IllegalStateException("User not authenticated")
+                    
                     accounts.forEach { accountData ->
                         try {
                             // Сигурна конверзија Account објекта
                             val account = when (accountData) {
-                                is Account -> accountData
+                                is Account -> accountData.copy(userId = currentUserId)  // Always use current user's ID
                                 is Map<*, *> -> {
-                                    val id = (accountData["id"] as? String) ?: ""
+                                    val id = (accountData["id"] as? String) ?: UUID.randomUUID().toString()
                                     val name = (accountData["name"] as? String) ?: ""
                                     val balance = when (val balanceValue = accountData["balance"]) {
                                         is Number -> balanceValue.toDouble()
                                         is String -> balanceValue.toDoubleOrNull() ?: 0.0
                                         else -> 0.0
                                     }
-                                    val currency = (accountData["currency"] as? String) ?: ""
+                                    val currency = (accountData["currency"] as? String) ?: "RSD"
                                     val color = when (val colorValue = accountData["color"]) {
                                         is Number -> colorValue.toInt()
+                                        is String -> colorValue.toIntOrNull() ?: 0
                                         else -> 0
                                     }
                                     val isDefault = when (val defaultValue = accountData["isDefault"]) {
                                         is Boolean -> defaultValue
+                                        is Number -> defaultValue.toInt() != 0
+                                        is String -> defaultValue.toBoolean()
                                         else -> false
                                     }
                                     val type = try {
@@ -257,7 +263,16 @@ class DataExportImportViewModel(
                                     } catch (e: Exception) {
                                         AccountType.CASH
                                     }
-                                    Account(id, name, balance, currency, color, isDefault, type)
+                                    Account(
+                                        id = id,
+                                        userId = currentUserId,  // Always use current user's ID
+                                        name = name,
+                                        balance = balance,
+                                        currency = currency,
+                                        color = color,
+                                        isDefault = isDefault,
+                                        type = type
+                                    )
                                 }
                                 else -> {
                                     Log.e("ImportData", "Неуспешна конверзија рачуна: $accountData")
@@ -300,15 +315,14 @@ class DataExportImportViewModel(
                     
                     // Dohvatimo Firebase instancu za direktan pristup
                     val firestore = FirebaseFirestore.getInstance()
-                    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
                     
                     expenses.forEach { expenseData ->
                         try {
                             // Сигурна конверзија Expense објекта
                             val expense = when (expenseData) {
-                                is Expense -> expenseData
+                                is Expense -> expenseData.copy(userId = currentUserId)  // Always use current user's ID
                                 is Map<*, *> -> {
-                                    val id = (expenseData["id"] as? String) ?: ""
+                                    val id = (expenseData["id"] as? String) ?: UUID.randomUUID().toString()
                                     val amount = when (val amountValue = expenseData["amount"]) {
                                         is Number -> amountValue.toDouble()
                                         is String -> amountValue.toDoubleOrNull() ?: 0.0
@@ -386,7 +400,15 @@ class DataExportImportViewModel(
                                         }
                                     }
                                     
-                                    Expense(id, amount, description, category, date, accountId)
+                                    Expense(
+                                        id = id,
+                                        userId = currentUserId,  // Always use current user's ID
+                                        amount = amount,
+                                        description = description,
+                                        category = category,
+                                        date = date,
+                                        accountId = accountId
+                                    )
                                 }
                                 else -> {
                                     Log.e("ImportData", "Неуспешна конверзија расхода: $expenseData")
@@ -421,11 +443,14 @@ class DataExportImportViewModel(
                                     
                                     val expenseMap = hashMapOf(
                                         "id" to expenseId,
+                                        "userId" to currentUserId,
                                         "amount" to expense.amount,
                                         "description" to expense.description,
                                         "category" to expense.category,
-                                        "date" to validDate,  // Koristimo samo string format datuma
-                                        "accountId" to expense.accountId
+                                        "date" to validDate,
+                                        "accountId" to expense.accountId,
+                                        "createdAt" to System.currentTimeMillis(),
+                                        "updatedAt" to System.currentTimeMillis()
                                     )
                                     
                                     // Direktno upisujemo u Firebase
@@ -466,9 +491,9 @@ class DataExportImportViewModel(
                         try {
                             // Сигурна конверзија Income објекта
                             val income = when (incomeData) {
-                                is Income -> incomeData
+                                is Income -> incomeData.copy(userId = currentUserId)  // Always use current user's ID
                                 is Map<*, *> -> {
-                                    val id = (incomeData["id"] as? String) ?: ""
+                                    val id = (incomeData["id"] as? String) ?: UUID.randomUUID().toString()
                                     val amount = when (val amountValue = incomeData["amount"]) {
                                         is Number -> amountValue.toDouble()
                                         is String -> amountValue.toDoubleOrNull() ?: 0.0
@@ -546,7 +571,15 @@ class DataExportImportViewModel(
                                         }
                                     }
                                     
-                                    Income(id, amount, description, category, date, accountId)
+                                    Income(
+                                        id = id,
+                                        userId = currentUserId,  // Always use current user's ID
+                                        amount = amount,
+                                        description = description,
+                                        category = category,
+                                        date = date,
+                                        accountId = accountId
+                                    )
                                 }
                                 else -> {
                                     Log.e("ImportData", "Неуспешна конверзија прихода: $incomeData")
@@ -581,11 +614,14 @@ class DataExportImportViewModel(
                                     
                                     val incomeMap = hashMapOf(
                                         "id" to incomeId,
+                                        "userId" to currentUserId,
                                         "amount" to income.amount,
                                         "description" to income.description,
                                         "category" to income.category,
-                                        "date" to validDate,  // Koristimo samo string format datuma
-                                        "accountId" to income.accountId
+                                        "date" to validDate,
+                                        "accountId" to income.accountId,
+                                        "createdAt" to System.currentTimeMillis(),
+                                        "updatedAt" to System.currentTimeMillis()
                                     )
                                     
                                     // Direktno upisujemo u Firebase

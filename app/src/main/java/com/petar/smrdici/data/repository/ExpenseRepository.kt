@@ -73,11 +73,14 @@ class ExpenseRepository private constructor() {
             // Kreiramo mapu podataka koja će biti sačuvana u Firestore
             val expenseMap = mapOf(
                 "id" to expenseId,
-                "amount" to expenseToAdd.amount,
-                "description" to expenseToAdd.description,
-                "category" to expenseToAdd.category,
-                "date" to com.google.firebase.Timestamp(dateObject), // Koristimo Timestamp umesto String
-                "accountId" to expenseToAdd.accountId
+                "userId" to expense.userId,
+                "amount" to expense.amount,
+                "description" to expense.description,
+                "category" to expense.category,
+                "date" to com.google.firebase.Timestamp(dateObject),
+                "accountId" to expense.accountId,
+                "createdAt" to expense.createdAt,
+                "updatedAt" to expense.updatedAt
             )
             
             // Чувамо расход у бази података
@@ -229,7 +232,15 @@ class ExpenseRepository private constructor() {
                         // Poboljšana konverzija datuma
                         val date = getDateFromDocument(doc)
                         
-                        Expense(id, amount, description, category, date, accountId)
+                        Expense(
+                            id = id,
+                            userId = currentUserId ?: "",
+                            amount = amount,
+                            date = date,
+                            accountId = accountId,
+                            description = description,
+                            category = category
+                        )
                     } catch (e: Exception) {
                         Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
                         null
@@ -281,7 +292,15 @@ class ExpenseRepository private constructor() {
                     // Poboljšana konverzija datuma
                     val date = getDateFromDocument(doc)
                     
-                    Expense(id, amount, description, category, date, accountId)
+                    Expense(
+                        id = id,
+                        userId = currentUserId ?: "",
+                        amount = amount,
+                        date = date,
+                        accountId = accountId,
+                        description = description,
+                        category = category
+                    )
                 } catch (e: Exception) {
                     Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
                     null
@@ -371,7 +390,15 @@ class ExpenseRepository private constructor() {
                         // Poboljšana konverzija datuma
                         val date = getDateFromDocument(doc)
                         
-                        Expense(id, amount, description, category, date, accountId)
+                        Expense(
+                            id = id,
+                            userId = currentUserId ?: "",
+                            amount = amount,
+                            date = date,
+                            accountId = accountId,
+                            description = description,
+                            category = category
+                        )
                     } catch (e: Exception) {
                         Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
                         null
@@ -441,10 +468,15 @@ class ExpenseRepository private constructor() {
                         // Poboljšana konverzija datuma
                         val date = getDateFromDocument(doc)
                         
-                        val expense = Expense(id, amount, description, category, date, accountId)
-                        
-                        // Više ne logujemo svaki pojedinačni trošak
-                        expense
+                        Expense(
+                            id = id,
+                            userId = currentUserId ?: "",
+                            amount = amount,
+                            date = date,
+                            accountId = accountId,
+                            description = description,
+                            category = category
+                        )
                     } catch (e: Exception) {
                         LogUtils.e("ExpenseRepository", "Greška pri konverziji dokumenta u Expense", e, category = "expense")
                         null
@@ -607,7 +639,15 @@ class ExpenseRepository private constructor() {
             val accountId = doc.getString("accountId") ?: ""
             val date = getDateFromDocument(doc)
             
-            Expense(id, amount, description, category, date, accountId)
+            Expense(
+                id = id,
+                userId = currentUserId ?: "",
+                amount = amount,
+                date = date,
+                accountId = accountId,
+                description = description,
+                category = category
+            )
         } catch (e: Exception) {
             LogUtils.e("ExpenseRepository", "Грешка при учитавању расхода по ID-у: $expenseId", e, category = "expense")
             null
