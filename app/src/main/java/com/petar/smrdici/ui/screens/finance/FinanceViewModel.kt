@@ -183,7 +183,14 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         viewModelScope.launch {
             try {
                 accountRepository.accounts.collect { accounts ->
-                    _state.value = _state.value.copy(accounts = accounts)
+                    // Find the default account
+                    val defaultAccount = accounts.find { it.isDefault }
+                    
+                    // Update state with accounts and set the default account as selected if no account is currently selected
+                    _state.value = _state.value.copy(
+                        accounts = accounts,
+                        selectedAccountId = if (_state.value.selectedAccountId == null) defaultAccount?.id else _state.value.selectedAccountId
+                    )
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message)
