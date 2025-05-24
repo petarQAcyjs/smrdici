@@ -53,6 +53,7 @@ class AccountViewModel : ViewModel() {
                             if (data != null) {
                                 Account(
                                     id = doc.id,
+                                    userId = userId,
                                     name = data["name"] as? String ?: "",
                                     balance = (data["balance"] as? Number)?.toDouble() ?: 0.0,
                                     currency = data["currency"] as? String ?: "RSD",
@@ -75,7 +76,7 @@ class AccountViewModel : ViewModel() {
                     
                     // Ако нема рачуна, креирамо подразумеване
                     if (accountsList.isEmpty()) {
-                        createDefaultAccounts()
+                        createDefaultAccounts(userId)
                     }
                 }
             } catch (e: Exception) {
@@ -91,13 +92,12 @@ class AccountViewModel : ViewModel() {
         }
     }
     
-    private suspend fun createDefaultAccounts() {
+    private suspend fun createDefaultAccounts(userId: String) {
         try {
-            val userId = auth.currentUser?.uid ?: return
-            
             // Креирамо подразумеване рачуне
             val cashAccount = Account(
                 id = UUID.randomUUID().toString(), // Генеришемо јединствени ID
+                userId = userId,
                 name = "Готовина",
                 balance = 5000.0,
                 currency = "RSD",
@@ -108,6 +108,7 @@ class AccountViewModel : ViewModel() {
             
             val bankAccount = Account(
                 id = UUID.randomUUID().toString(), // Генеришемо јединствени ID
+                userId = userId,
                 name = "Текући рачун",
                 balance = 25000.0,
                 currency = "RSD",
@@ -118,6 +119,7 @@ class AccountViewModel : ViewModel() {
             
             val creditCardAccount = Account(
                 id = UUID.randomUUID().toString(), // Генеришемо јединствени ID
+                userId = userId,
                 name = "Кредитна картица",
                 balance = -3000.0,
                 currency = "RSD",
@@ -172,6 +174,7 @@ class AccountViewModel : ViewModel() {
                         if (data != null) {
                             val account = Account(
                                 id = accountDoc.id,
+                                userId = userId,
                                 name = data["name"] as? String ?: "",
                                 balance = (data["balance"] as? Number)?.toDouble() ?: 0.0,
                                 currency = data["currency"] as? String ?: "RSD",
@@ -205,37 +208,34 @@ class AccountViewModel : ViewModel() {
         }
     }
     
-    fun addAccount(account: Account) {
+    fun addAccount(account: Account, userId: String) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val userId = auth.currentUser?.uid
-                if (userId != null) {
-                    // Генеришемо нови ID за рачун
-                    val newAccountId = UUID.randomUUID().toString()
-                    val newAccount = account.copy(id = newAccountId)
-                    
-                    Log.d("AccountViewModel", "Adding account: ${newAccount.name}, ID: $newAccountId")
-                    
-                    // Ако је ово први рачун или је означен као подразумевани
-                    if (_accounts.value.isEmpty() || newAccount.isDefault) {
-                        // Постављамо све остале рачуне да нису подразумевани
-                        setAllAccountsNonDefault(userId)
-                    }
-                    
-                    // Чувамо нови рачун
-                    firestore.collection("users")
-                        .document(userId)
-                        .collection("accounts")
-                        .document(newAccountId) // Користимо генерисани ID као ID документа
-                        .set(newAccount)
-                        .await()
-                    
-                    Log.d("AccountViewModel", "Account added successfully")
-                    
-                    // Ажурирамо локалну листу рачуна
-                    loadAccounts()
+                // Генеришемо нови ID за рачун
+                val newAccountId = UUID.randomUUID().toString()
+                val newAccount = account.copy(id = newAccountId)
+                
+                Log.d("AccountViewModel", "Adding account: ${newAccount.name}, ID: $newAccountId")
+                
+                // Ако је ово први рачун или је означен као подразумевани
+                if (_accounts.value.isEmpty() || newAccount.isDefault) {
+                    // Постављамо све остале рачуне да нису подразумевани
+                    setAllAccountsNonDefault(userId)
                 }
+                
+                // Чувамо нови рачун
+                firestore.collection("users")
+                    .document(userId)
+                    .collection("accounts")
+                    .document(newAccountId) // Користимо генерисани ID као ID документа
+                    .set(newAccount)
+                    .await()
+                
+                Log.d("AccountViewModel", "Account added successfully")
+                
+                // Ажурирамо локалну листу рачуна
+                loadAccounts()
             } catch (e: Exception) {
                 Log.e("AccountViewModel", "Error adding account", e)
             } finally {

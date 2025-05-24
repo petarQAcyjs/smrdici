@@ -11,6 +11,8 @@ import com.petar.smrdici.data.repository.IncomeRepository
 import com.petar.smrdici.data.repository.AccountRepository
 import com.petar.smrdici.data.repository.SettingsRepository
 import com.petar.smrdici.ui.screens.settings.Period
+import com.petar.smrdici.util.CurrencyConverter
+import com.petar.smrdici.utils.LogUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -119,9 +121,17 @@ data class FinanceScreenState(
     val selectedTransactionType: TransactionType = TransactionType.Expense,
     val transactions: List<Transaction> = emptyList(),
     val totalAmount: Double = 0.0,
+    val totalAmountInEur: Double = 0.0,
+    val accountBalances: Map<String, AccountBalance> = emptyMap(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val accounts: List<Account> = emptyList()
+)
+
+data class AccountBalance(
+    val nativeAmount: Double,
+    val nativeCurrency: String,
+    val eurAmount: Double
 )
 
 class FinanceViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
@@ -173,7 +183,14 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         viewModelScope.launch {
             try {
                 accountRepository.accounts.collect { accounts ->
-                    _state.value = _state.value.copy(accounts = accounts)
+                    // Find the default account
+                    val defaultAccount = accounts.find { it.isDefault }
+                    
+                    // Update state with accounts and set the default account as selected if no account is currently selected
+                    _state.value = _state.value.copy(
+                        accounts = accounts,
+                        selectedAccountId = if (_state.value.selectedAccountId == null) defaultAccount?.id else _state.value.selectedAccountId
+                    )
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message)
@@ -183,6 +200,7 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
 
     // Time period navigation
     fun navigateToNextPeriod() {
+        LogUtils.d("FinanceViewModel", "Navigating to next period from ${_state.value.selectedTimePeriod}", category = "finance")
         _state.value = _state.value.let { currentState ->
             currentState.copy(
                 selectedTimePeriod = when (val period = currentState.selectedTimePeriod) {
@@ -191,7 +209,6 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                     is TimePeriod.Month -> TimePeriod.Month(period.yearMonth.plusMonths(1))
                     is TimePeriod.Year -> TimePeriod.Year(period.year + 1)
                     is TimePeriod.Custom -> {
-                        // Move to the next month's period
                         val nextStartDate = period.startDate.plusMonths(1)
                         val nextEndDate = period.endDate.plusMonths(1)
                         TimePeriod.Custom(nextStartDate, nextEndDate)
@@ -203,6 +220,7 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
     }
 
     fun navigateToPreviousPeriod() {
+        LogUtils.d("FinanceViewModel", "Navigating to previous period from ${_state.value.selectedTimePeriod}", category = "finance")
         _state.value = _state.value.let { currentState ->
             currentState.copy(
                 selectedTimePeriod = when (val period = currentState.selectedTimePeriod) {
@@ -211,7 +229,6 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                     is TimePeriod.Month -> TimePeriod.Month(period.yearMonth.minusMonths(1))
                     is TimePeriod.Year -> TimePeriod.Year(period.year - 1)
                     is TimePeriod.Custom -> {
-                        // Move to the previous month's period
                         val previousStartDate = period.startDate.minusMonths(1)
                         val previousEndDate = period.endDate.minusMonths(1)
                         TimePeriod.Custom(previousStartDate, previousEndDate)
@@ -223,6 +240,7 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
     }
 
     fun setTimePeriod(period: TimePeriod) {
+        LogUtils.i("FinanceViewModel", "Setting time period to: $period", category = "finance")
         _state.value = _state.value.copy(selectedTimePeriod = period)
         refreshData()
     }
@@ -261,12 +279,16 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
 
     // Account selection
     fun setSelectedAccount(accountId: String?) {
+        LogUtils.i("FinanceViewModel", 
+            "Setting selected account: ${accountId ?: "All accounts"}", 
+            category = "finance")
         _state.value = _state.value.copy(selectedAccountId = accountId)
         refreshData()
     }
 
     // Transaction type
     fun setTransactionType(type: TransactionType) {
+        LogUtils.i("FinanceViewModel", "Setting transaction type to: $type", category = "finance")
         _state.value = _state.value.copy(selectedTransactionType = type)
         refreshData()
     }
@@ -281,43 +303,113 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                 val endDate = _state.value.selectedTimePeriod.calculateEndDate()
                 val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
                 
-                val transactions = when (_state.value.selectedTransactionType) {
+                LogUtils.i("FinanceViewModel", 
+                    "Refreshing data with filters:" +
+                    "\nPeriod: ${_state.value.selectedTimePeriod}" +
+                    "\nDate range: $startDate to $endDate" +
+                    "\nTransaction type: ${_state.value.selectedTransactionType}" +
+                    "\nSelected account: ${_state.value.selectedAccountId ?: "All accounts"}",
+                    category = "finance")
+                
+                when (_state.value.selectedTransactionType) {
                     is TransactionType.Income -> {
-                        incomeRepository.getAllIncomes().first().filter { income ->
-                            val incomeDate = LocalDate.parse(income.date, formatter)
-                            (incomeDate.isEqual(startDate) || incomeDate.isAfter(startDate)) &&
-                            (incomeDate.isEqual(endDate) || incomeDate.isBefore(endDate)) &&
-                            (_state.value.selectedAccountId == null || income.accountId == _state.value.selectedAccountId)
-                        }.map { IncomeTransaction(it) }
+                        incomeRepository.getIncomes().collect { incomes ->
+                            LogUtils.d("FinanceViewModel", 
+                                "Received ${incomes.size} incomes before filtering", 
+                                category = "finance")
+                            
+                            val filteredIncomes = incomes.filter { income ->
+                                val incomeDate = LocalDate.parse(income.date, formatter)
+                                (incomeDate.isEqual(startDate) || incomeDate.isAfter(startDate)) &&
+                                (incomeDate.isEqual(endDate) || incomeDate.isBefore(endDate)) &&
+                                (_state.value.selectedAccountId == null || income.accountId == _state.value.selectedAccountId)
+                            }.map { IncomeTransaction(it) }
+                            
+                            LogUtils.i("FinanceViewModel", 
+                                "Filtered to ${filteredIncomes.size} incomes in selected period" +
+                                "\nTotal amount: ${filteredIncomes.sumOf { it.amount }}", 
+                                category = "finance")
+                            
+                            updateTransactionsState(filteredIncomes)
+                        }
                     }
                     is TransactionType.Expense -> {
-                        expenseRepository.getAllExpenses().first().filter { expense ->
-                            val expenseDate = LocalDate.parse(expense.date, formatter)
-                            (expenseDate.isEqual(startDate) || expenseDate.isAfter(startDate)) &&
-                            (expenseDate.isEqual(endDate) || expenseDate.isBefore(endDate)) &&
-                            (_state.value.selectedAccountId == null || expense.accountId == _state.value.selectedAccountId)
-                        }.map { ExpenseTransaction(it) }
+                        expenseRepository.getAllExpenses().collect { expenses ->
+                            LogUtils.d("FinanceViewModel", 
+                                "Received ${expenses.size} expenses before filtering", 
+                                category = "finance")
+                            
+                            val filteredExpenses = expenses.filter { expense ->
+                                val expenseDate = LocalDate.parse(expense.date, formatter)
+                                (expenseDate.isEqual(startDate) || expenseDate.isAfter(startDate)) &&
+                                (expenseDate.isEqual(endDate) || expenseDate.isBefore(endDate)) &&
+                                (_state.value.selectedAccountId == null || expense.accountId == _state.value.selectedAccountId)
+                            }.map { ExpenseTransaction(it) }
+                            
+                            LogUtils.i("FinanceViewModel", 
+                                "Filtered to ${filteredExpenses.size} expenses in selected period" +
+                                "\nTotal amount: ${filteredExpenses.sumOf { it.amount }}", 
+                                category = "finance")
+                            
+                            updateTransactionsState(filteredExpenses)
+                        }
                     }
                 }
-
-                val total = transactions.sumOf { transaction ->
-                    when (_state.value.selectedTransactionType) {
-                        is TransactionType.Income -> transaction.amount
-                        is TransactionType.Expense -> -transaction.amount
-                    }
-                }
-                
-                _state.value = _state.value.copy(
-                    transactions = transactions,
-                    totalAmount = total,
-                    isLoading = false
-                )
             } catch (e: Exception) {
+                LogUtils.e("FinanceViewModel", "Error refreshing data", e, category = "finance")
                 _state.value = _state.value.copy(
                     error = e.message,
                     isLoading = false
                 )
             }
+        }
+    }
+
+    private fun updateTransactionsState(transactions: List<Transaction>) {
+        viewModelScope.launch {
+            // Calculate balances for each account
+            val accountBalances = mutableMapOf<String, AccountBalance>()
+            var totalEurAmount = 0.0
+
+            _state.value.accounts.forEach { account ->
+                val accountTransactions = transactions.filter { 
+                    when (it) {
+                        is IncomeTransaction -> it.income.accountId == account.id
+                        is ExpenseTransaction -> it.expense.accountId == account.id
+                    }
+                }
+
+                val nativeAmount = accountTransactions.sumOf { transaction ->
+                    when (_state.value.selectedTransactionType) {
+                        is TransactionType.Income -> transaction.amount
+                        is TransactionType.Expense -> -transaction.amount
+                    }
+                }
+
+                val eurAmount = CurrencyConverter.convert(nativeAmount, account.currency, "EUR")
+                totalEurAmount += eurAmount
+
+                accountBalances[account.id] = AccountBalance(
+                    nativeAmount = nativeAmount,
+                    nativeCurrency = account.currency,
+                    eurAmount = eurAmount
+                )
+            }
+
+            LogUtils.i("FinanceViewModel", 
+                "Updated state:" +
+                "\nTotal transactions: ${transactions.size}" +
+                "\nTotal amount in EUR: $totalEurAmount" +
+                "\nAccounts with transactions: ${accountBalances.size}", 
+                category = "finance")
+
+            _state.value = _state.value.copy(
+                transactions = transactions,
+                totalAmount = accountBalances.values.sumOf { it.nativeAmount },
+                totalAmountInEur = totalEurAmount,
+                accountBalances = accountBalances,
+                isLoading = false
+            )
         }
     }
 

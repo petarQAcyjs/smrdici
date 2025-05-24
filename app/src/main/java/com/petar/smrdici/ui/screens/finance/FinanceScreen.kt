@@ -29,6 +29,7 @@ import com.petar.smrdici.ui.navigation.Screen
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.utils.LogUtils
 import org.threeten.bp.format.DateTimeFormatter
 import org.threeten.bp.temporal.ChronoUnit
 import java.text.NumberFormat
@@ -46,11 +47,26 @@ fun FinanceScreen(
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
     
+    // Log screen entry
+    LaunchedEffect(Unit) {
+        LogUtils.i("FinanceScreen", "Screen entered", "ui")
+    }
+
     val numberFormat = remember { 
         NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("sr").setRegion("RS").build())
     }
 
     var showAccountSelector by remember { mutableStateOf(false) }
+
+    // Create currency formatters for each currency
+    val currencyFormatters = remember {
+        mapOf(
+            "RSD" to NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("sr").setRegion("RS").build()),
+            "EUR" to NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("de").setRegion("DE").build()),
+            "USD" to NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("en").setRegion("US").build()),
+            "GBP" to NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("en").setRegion("GB").build())
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -121,56 +137,100 @@ fun FinanceScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Account Selection
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                    // Account selection button
+                    Button(
+                        onClick = { showAccountSelector = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
                     ) {
                         Text(
-                            text = state.selectedAccountId?.let { id ->
-                                state.accounts.find { it.id == id }?.name
-                            } ?: "Сви рачуни",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.clickable { showAccountSelector = true }
+                            text = state.accounts.find { it.id == state.selectedAccountId }?.name ?: "Сви рачуни",
+                            style = MaterialTheme.typography.titleMedium
                         )
-                        IconButton(onClick = { showAccountSelector = true }) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Изаберите рачун"
-                            )
-                        }
                     }
 
-                    HorizontalDivider(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                    )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    Text(
-                        text = "Укупно",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = numberFormat.format(state.totalAmount),
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = when (state.selectedTransactionType) {
-                            is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
-                            is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
+                    // If a specific account is selected, show its balance in native currency
+                    if (state.selectedAccountId != null) {
+                        val accountBalance = state.accountBalances[state.selectedAccountId]
+                        if (accountBalance != null) {
+                            val nativeCurrencyFormatter = currencyFormatters[accountBalance.nativeCurrency]
+                            Text(
+                                text = nativeCurrencyFormatter?.format(accountBalance.nativeAmount)
+                                    ?: accountBalance.nativeAmount.toString(),
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = when (state.selectedTransactionType) {
+                                    is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
+                                    is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
+                                }
+                            )
                         }
-                    )
+                    } else {
+                        // Show total in EUR for all accounts
+                        val eurFormatter = currencyFormatters["EUR"]
+                        Text(
+                            text = eurFormatter?.format(state.totalAmountInEur) ?: state.totalAmountInEur.toString(),
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = when (state.selectedTransactionType) {
+                                is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
+                                is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
+                            }
+                        )
+
+                        // Show individual account balances
+                        if (state.accountBalances.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                thickness = 1.dp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                            )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                state.accounts.forEach { account ->
+                                    val balance = state.accountBalances[account.id]
+                                    if (balance != null) {
+                                        val formatter = currencyFormatters[balance.nativeCurrency]
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = account.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = formatter?.format(balance.nativeAmount)
+                                                    ?: balance.nativeAmount.toString(),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
             // Account Selection Dialog
             if (showAccountSelector) {
+                LogUtils.d("FinanceScreen", "Opening account selector dialog", "ui")
                 AlertDialog(
-                    onDismissRequest = { showAccountSelector = false },
+                    onDismissRequest = { 
+                        LogUtils.d("FinanceScreen", "Account selector dialog dismissed", "ui")
+                        showAccountSelector = false 
+                    },
                     title = { Text("Изаберите рачун") },
                     text = {
                         Column(
@@ -183,6 +243,7 @@ fun FinanceScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
+                                        LogUtils.i("FinanceScreen", "Selected: All accounts", "ui")
                                         viewModel.setSelectedAccount(null)
                                         showAccountSelector = false
                                     },
@@ -203,6 +264,7 @@ fun FinanceScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
+                                            LogUtils.i("FinanceScreen", "Selected account: ${account.name}", "ui")
                                             viewModel.setSelectedAccount(account.id)
                                             showAccountSelector = false
                                         },
@@ -229,6 +291,7 @@ fun FinanceScreen(
 
             // Transactions List
             if (state.isLoading) {
+                LogUtils.d("FinanceScreen", "Loading transactions...", "ui")
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -236,6 +299,7 @@ fun FinanceScreen(
                     CircularProgressIndicator()
                 }
             } else if (state.transactions.isEmpty()) {
+                LogUtils.i("FinanceScreen", "No transactions found for selected period", "ui")
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -248,6 +312,7 @@ fun FinanceScreen(
                     )
                 }
             } else {
+                LogUtils.d("FinanceScreen", "Displaying ${state.transactions.size} transactions", "ui")
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
@@ -259,14 +324,26 @@ fun FinanceScreen(
                             numberFormat = numberFormat,
                             onEdit = {
                                 when (transaction) {
-                                    is IncomeTransaction -> navController.navigate("edit_income/${transaction.income.id}")
-                                    is ExpenseTransaction -> navController.navigate("edit_expense/${transaction.expense.id}")
+                                    is IncomeTransaction -> {
+                                        LogUtils.i("FinanceScreen", "Editing income: ${transaction.income.id}", "ui")
+                                        navController.navigate("edit_income/${transaction.income.id}")
+                                    }
+                                    is ExpenseTransaction -> {
+                                        LogUtils.i("FinanceScreen", "Editing expense: ${transaction.expense.id}", "ui")
+                                        navController.navigate("edit_expense/${transaction.expense.id}")
+                                    }
                                 }
                             },
                             onDelete = {
                                 when (transaction) {
-                                    is IncomeTransaction -> viewModel.deleteIncome(transaction.income.id)
-                                    is ExpenseTransaction -> viewModel.deleteExpense(transaction.expense.id)
+                                    is IncomeTransaction -> {
+                                        LogUtils.i("FinanceScreen", "Deleting income: ${transaction.income.id}", "ui")
+                                        viewModel.deleteIncome(transaction.income.id)
+                                    }
+                                    is ExpenseTransaction -> {
+                                        LogUtils.i("FinanceScreen", "Deleting expense: ${transaction.expense.id}", "ui")
+                                        viewModel.deleteExpense(transaction.expense.id)
+                                    }
                                 }
                             }
                         )
@@ -301,7 +378,12 @@ fun TimePeriodSelector(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onNavigatePrevious) {
+            IconButton(
+                onClick = { 
+                    LogUtils.i("FinanceScreen", "Navigating to previous period", "ui")
+                    onNavigatePrevious() 
+                }
+            ) {
                 Icon(
                     Icons.Default.ChevronLeft,
                     contentDescription = "Претходни период",
@@ -328,10 +410,18 @@ fun TimePeriodSelector(
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable { showPeriodTypeDialog = true }
+                modifier = Modifier.clickable { 
+                    LogUtils.d("FinanceScreen", "Opening period type selector", "ui")
+                    showPeriodTypeDialog = true 
+                }
             )
 
-            IconButton(onClick = onNavigateNext) {
+            IconButton(
+                onClick = { 
+                    LogUtils.i("FinanceScreen", "Navigating to next period", "ui")
+                    onNavigateNext() 
+                }
+            ) {
                 Icon(
                     Icons.Default.ChevronRight,
                     contentDescription = "Следећи период",
@@ -352,7 +442,10 @@ fun TimePeriodSelector(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .clickable(onClick = onResetToCurrentPeriod)
+                    .clickable {
+                        LogUtils.i("FinanceScreen", "Resetting to current period", "ui")
+                        onResetToCurrentPeriod()
+                    }
                     .padding(bottom = 8.dp),
                 textDecoration = TextDecoration.Underline
             )
@@ -361,7 +454,10 @@ fun TimePeriodSelector(
 
     if (showPeriodTypeDialog) {
         AlertDialog(
-            onDismissRequest = { showPeriodTypeDialog = false },
+            onDismissRequest = { 
+                LogUtils.d("FinanceScreen", "Period type selector dismissed", "ui")
+                showPeriodTypeDialog = false 
+            },
             title = { Text("Изаберите период") },
             text = {
                 Column(
@@ -373,6 +469,14 @@ fun TimePeriodSelector(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
+                                    val periodName = when (periodType) {
+                                        PeriodType.YEAR -> "Year"
+                                        PeriodType.MONTH -> "Month"
+                                        PeriodType.WEEK -> "Week"
+                                        PeriodType.DAY -> "Day"
+                                        PeriodType.CUSTOM -> "Custom"
+                                    }
+                                    LogUtils.i("FinanceScreen", "Selected period type: $periodName", "ui")
                                     onPeriodTypeSelected(periodType)
                                     showPeriodTypeDialog = false
                                 },
@@ -414,7 +518,10 @@ fun TransactionTypeSelector(
     ) {
         FilterChip(
             selected = selectedType is TransactionType.Income,
-            onClick = { onTypeSelected(TransactionType.Income) },
+            onClick = { 
+                LogUtils.i("FinanceScreen", "Selected transaction type: Income", "ui")
+                onTypeSelected(TransactionType.Income) 
+            },
             label = { Text("Приходи") },
             leadingIcon = {
                 Icon(
@@ -428,7 +535,10 @@ fun TransactionTypeSelector(
         
         FilterChip(
             selected = selectedType is TransactionType.Expense,
-            onClick = { onTypeSelected(TransactionType.Expense) },
+            onClick = { 
+                LogUtils.i("FinanceScreen", "Selected transaction type: Expense", "ui")
+                onTypeSelected(TransactionType.Expense) 
+            },
             label = { Text("Расходи") },
             leadingIcon = {
                 Icon(

@@ -199,6 +199,7 @@ fun AddAccountScreen(
                 onClick = {
                     val account = Account(
                         id = "",  // Empty string for new accounts, will be set by the repository
+                        userId = user?.uid ?: "",
                         name = name,
                         balance = balance.toDoubleOrNull() ?: 0.0,
                         type = selectedType,
@@ -206,10 +207,12 @@ fun AddAccountScreen(
                         isDefault = isDefault
                     )
                     
-                    accountViewModel.addAccount(account)
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar("Рачун успешно додат")
-                        navController.navigateUp()
+                    user?.let { currentUser ->
+                        accountViewModel.addAccount(account, currentUser.uid)
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Рачун успешно додат")
+                            navController.navigateUp()
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

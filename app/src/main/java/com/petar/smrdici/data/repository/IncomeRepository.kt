@@ -73,11 +73,14 @@ class IncomeRepository private constructor() {
             // Kreiramo mapu podataka koja će biti sačuvana u Firestore
             val incomeMap = mapOf(
                 "id" to incomeId,
-                "amount" to incomeToAdd.amount,
-                "description" to incomeToAdd.description,
-                "category" to incomeToAdd.category,
-                "date" to com.google.firebase.Timestamp(dateObject), // Koristimo Timestamp umesto String
-                "accountId" to incomeToAdd.accountId
+                "userId" to income.userId,
+                "amount" to income.amount,
+                "description" to income.description,
+                "category" to income.category,
+                "date" to com.google.firebase.Timestamp(dateObject),
+                "accountId" to income.accountId,
+                "createdAt" to income.createdAt,
+                "updatedAt" to income.updatedAt
             )
             
             // Чувамо приход у бази података
@@ -232,7 +235,15 @@ class IncomeRepository private constructor() {
                         // Poboljšana konverzija datuma
                         val date = getDateFromDocument(doc)
                         
-                        Income(id, amount, description, category, date, accountId)
+                        Income(
+                            id = id,
+                            userId = currentUserId ?: "",
+                            amount = amount,
+                            date = date,
+                            accountId = accountId,
+                            description = description,
+                            category = category
+                        )
                     } catch (e: Exception) {
                         Log.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e)
                         null
@@ -284,7 +295,15 @@ class IncomeRepository private constructor() {
                     // Poboljšana konverzija datuma
                     val date = getDateFromDocument(doc)
                     
-                    Income(id, amount, description, category, date, accountId)
+                    Income(
+                        id = id,
+                        userId = currentUserId ?: "",
+                        amount = amount,
+                        date = date,
+                        accountId = accountId,
+                        description = description,
+                        category = category
+                    )
                 } catch (e: Exception) {
                     Log.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e)
                     null
@@ -374,7 +393,15 @@ class IncomeRepository private constructor() {
                         // Poboljšana konverzija datuma
                         val date = getDateFromDocument(doc)
                         
-                        Income(id, amount, description, category, date, accountId)
+                        Income(
+                            id = id,
+                            userId = currentUserId ?: "",
+                            amount = amount,
+                            date = date,
+                            accountId = accountId,
+                            description = description,
+                            category = category
+                        )
                     } catch (e: Exception) {
                         LogUtils.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e, category = "income")
                         null
@@ -444,10 +471,15 @@ class IncomeRepository private constructor() {
                         // Poboljšana konverzija datuma
                         val date = getDateFromDocument(doc)
                         
-                        val income = Income(id, amount, description, category, date, accountId)
-                        
-                        // Više ne logujemo svaki pojedinačni prihod
-                        income
+                        Income(
+                            id = id,
+                            userId = currentUserId ?: "",
+                            amount = amount,
+                            date = date,
+                            accountId = accountId,
+                            description = description,
+                            category = category
+                        )
                     } catch (e: Exception) {
                         LogUtils.e("IncomeRepository", "Greška pri konverziji dokumenta u Income", e, category = "income")
                         null
@@ -559,8 +591,69 @@ class IncomeRepository private constructor() {
     }
     
     // Добијање свих прихода као Flow за observovanje
-    fun getIncomes(): Flow<List<Income>> {
-        return _incomes.asStateFlow()
+    fun getIncomes(): Flow<List<Income>> = callbackFlow {
+        LogUtils.i("IncomeRepository", "Учитавам све приходе", category = "income")
+        
+        if (currentUserId == null) {
+            LogUtils.d("IncomeRepository", "Корисник није пријављен, враћам празну листу", category = "income")
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
+        
+        val collection = userIncomesCollection
+        if (collection == null) {
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
+        
+        val listener = collection
+            .orderBy("date", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("IncomeRepository", "Грешка при слушању прихода", error)
+                    return@addSnapshotListener
+                }
+                
+                val incomes = snapshot?.documents?.mapNotNull { doc ->
+                    try {
+                        val id = doc.id
+                        val amount = doc.getDouble("amount") ?: 0.0
+                        val description = doc.getString("description") ?: ""
+                        val category = doc.getString("category") ?: ""
+                        val accountId = doc.getString("accountId") ?: ""
+                        
+                        // Poboljšana konverzija datuma
+                        val date = getDateFromDocument(doc)
+                        
+                        Income(
+                            id = id,
+                            userId = currentUserId ?: "",
+                            amount = amount,
+                            date = date,
+                            accountId = accountId,
+                            description = description,
+                            category = category
+                        )
+                    } catch (e: Exception) {
+                        Log.e("IncomeRepository", "Грешка при конверзији документа у Income", e)
+                        null
+                    }
+                } ?: emptyList()
+                
+                // Update the cache
+                _incomes.value = incomes
+                
+                // Emit the new list
+                trySend(incomes)
+            }
+        
+        // Remove the listener when the flow is cancelled
+        awaitClose { 
+            LogUtils.d("IncomeRepository", "Затварам listener за приходе", category = "income")
+            listener.remove() 
+        }
     }
     
     // Брисање свих прихода (за операцију увоза)
@@ -665,7 +758,15 @@ class IncomeRepository private constructor() {
             val accountId = doc.getString("accountId") ?: ""
             val date = getDateFromDocument(doc)
             
-            Income(id, amount, description, category, date, accountId)
+            Income(
+                id = id,
+                userId = currentUserId ?: "",
+                amount = amount,
+                date = date,
+                accountId = accountId,
+                description = description,
+                category = category
+            )
         } catch (e: Exception) {
             LogUtils.e("IncomeRepository", "Грешка при учитавању прихода по ID-у: $incomeId", e, category = "income")
             null

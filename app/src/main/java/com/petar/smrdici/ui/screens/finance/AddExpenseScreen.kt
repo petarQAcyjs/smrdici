@@ -195,6 +195,7 @@ fun AddExpenseScreen(
                 
                 val expense = Expense(
                     id = "",
+                    userId = user?.uid ?: "",
                     amount = amountValue,
                     description = description,
                     category = selectedCategory!!.name,

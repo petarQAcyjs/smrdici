@@ -142,7 +142,8 @@ fun EditExpenseScreen(
                                 description = description,
                                 category = selectedCategory?.name ?: "",
                                 date = dateFormat.format(Date(selectedDate)),
-                                accountId = selectedAccountId
+                                accountId = selectedAccountId,
+                                userId = user?.uid ?: ""
                             )
                             
                             if (updatedExpense != null) {
