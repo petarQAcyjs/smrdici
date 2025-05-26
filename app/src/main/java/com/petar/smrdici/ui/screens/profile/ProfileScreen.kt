@@ -250,7 +250,7 @@ fun ProfileScreen(
                                     icon = Icons.Default.AccountBalance,
                                     title = "Подешавања финансија",
                                     onClick = {
-                                        navController.navigate(Screen.BudgetSettings.route)
+                                        navController.navigate(Screen.FinanceSettings.route)
                                     }
                                 )
 

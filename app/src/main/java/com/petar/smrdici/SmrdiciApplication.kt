@@ -214,9 +214,9 @@ class SmrdiciApplication : Application() {
         Log.d("SmrdiciApplication", "Inicijalizacija repozitorijuma")
         
         // Dobavljamo instance repozitorijuma kroz RepositoryManager
-        val expenseRepository = RepositoryManager.getExpenseRepositoryForBudget()
-        val incomeRepository = RepositoryManager.getIncomeRepositoryForBudget()
-        val accountRepository = RepositoryManager.getAccountRepositoryForBudget(this)
+        val expenseRepository = RepositoryManager.getExpenseRepositoryForFinance()
+        val incomeRepository = RepositoryManager.getIncomeRepositoryForFinance()
+        val accountRepository = RepositoryManager.getAccountRepositoryForFinance(this)
         
         // Međusobno povezivanje repozitorijuma (ako je potrebno)
         // Npr. ExpenseRepository zahteva AccountRepository za ažuriranje balansa računa

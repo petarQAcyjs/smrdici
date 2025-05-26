@@ -1,4 +1,4 @@
-package com.petar.smrdici.ui.screens.budget
+package com.petar.smrdici.ui.screens.finance
 
 import android.util.Log
 import androidx.compose.foundation.clickable
@@ -52,7 +52,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.Income
 import com.petar.smrdici.data.model.IncomeCategory
-import com.petar.smrdici.data.repository.IncomeRepository
+import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -66,6 +66,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Suppress("UNUSED_PARAMETER", "KotlinRedundantDiagnosticSuppress", "NAME_SHADOWING")
@@ -116,6 +117,9 @@ fun AddIncomeScreen(
     
     // Учитавање рачуна
     val accounts by accountViewModel.accounts.collectAsState()
+    
+    // Initialize transaction repository
+    val transactionRepository = remember { TransactionRepository.getInstance() }
     
     // Приказ ако корисник није пријављен
     if (user == null) {
@@ -188,9 +192,6 @@ fun AddIncomeScreen(
         if (!validateForm()) return
         
         isLoading = true
-        
-        // Move LaunchedEffect outside of the function
-        // LaunchedEffect will be called when isLoading changes
     }
     
     // Handle income saving in a LaunchedEffect
@@ -203,7 +204,7 @@ fun AddIncomeScreen(
                 val dateStr = dateFormat.format(Date(selectedDate))
                 
                 val income = Income(
-                    id = "",
+                    id = UUID.randomUUID().toString(),
                     userId = user?.uid ?: "",
                     amount = amountValue,
                     description = description,
@@ -212,16 +213,10 @@ fun AddIncomeScreen(
                     accountId = selectedAccountId
                 )
                 
-                // Save income using repository
-                val incomeRepository = IncomeRepository.getInstance()
-                val result = incomeRepository.addIncome(income)
-                
-                if (result.isSuccess) {
-                    snackbarHostState.showSnackbar("Приход је успешно сачуван")
-                    onNavigateBack()
-                } else {
-                    snackbarHostState.showSnackbar("Грешка при чувању прихода: ${result.exceptionOrNull()?.message}")
-                }
+                // Save income using TransactionRepository
+                transactionRepository.addIncome(income)
+                snackbarHostState.showSnackbar("Приход је успешно сачуван")
+                onNavigateBack()
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("Грешка при чувању прихода: ${e.message}")
             } finally {

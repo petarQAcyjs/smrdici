@@ -15,10 +15,10 @@ import com.petar.smrdici.data.repository.SettingsRepository
 import com.petar.smrdici.ui.components.MainLayout
 import com.petar.smrdici.ui.screens.addAccount.AddAccountScreen
 import com.petar.smrdici.ui.screens.auth.LoginScreen
-import com.petar.smrdici.ui.screens.budget.AddExpenseScreen
-import com.petar.smrdici.ui.screens.budget.AddIncomeScreen
-import com.petar.smrdici.ui.screens.budget.EditExpenseScreen
-import com.petar.smrdici.ui.screens.budget.EditIncomeScreen
+import com.petar.smrdici.ui.screens.finance.AddExpenseScreen
+import com.petar.smrdici.ui.screens.finance.AddIncomeScreen
+import com.petar.smrdici.ui.screens.finance.EditExpenseScreen
+import com.petar.smrdici.ui.screens.finance.EditIncomeScreen
 import com.petar.smrdici.ui.screens.calendar.AddEventScreen
 import com.petar.smrdici.ui.screens.calendar.CalendarScreen
 import com.petar.smrdici.ui.screens.editAccount.EditAccountScreen
@@ -27,8 +27,8 @@ import com.petar.smrdici.ui.screens.lists.ListDetailsScreen
 import com.petar.smrdici.ui.screens.lists.ListsScreen
 import com.petar.smrdici.ui.screens.lists.ListsViewModel
 import com.petar.smrdici.ui.screens.profile.ProfileScreen
-import com.petar.smrdici.ui.screens.settings.BudgetSettingsScreen
-import com.petar.smrdici.ui.screens.settings.BudgetSettingsViewModel
+import com.petar.smrdici.ui.screens.settings.FinanceSettingsScreen
+import com.petar.smrdici.ui.screens.settings.FinanceSettingsViewModel
 import com.petar.smrdici.ui.screens.settings.ExpenseCategoriesScreen
 import com.petar.smrdici.ui.screens.settings.IncomeCategoriesScreen
 import com.petar.smrdici.ui.screens.transfer.TransferScreen
@@ -47,7 +47,7 @@ fun NavGraph(
     val incomeRepository = remember { IncomeRepository.getInstance() }
     val settingsRepository = remember { SettingsRepository.getInstance(context) }
     val settingsViewModel = remember { 
-        BudgetSettingsViewModel.Factory(context).create(BudgetSettingsViewModel::class.java)
+        FinanceSettingsViewModel.Factory(context).create(FinanceSettingsViewModel::class.java)
     }
     
     NavHost(
@@ -126,8 +126,8 @@ fun NavGraph(
             )
         }
         
-        composable(Screen.BudgetSettings.route) {
-            BudgetSettingsScreen(navController = navController)
+        composable(Screen.FinanceSettings.route) {
+            FinanceSettingsScreen(navController = navController)
         }
         
         composable(

@@ -16,7 +16,7 @@ enum class Currency(val code: String, val symbol: String, val value: String) {
     GBP("GBP", "£", "Фунта (GBP)")
 }
 
-class BudgetSettingsViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
+class FinanceSettingsViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
     private val _currency = MutableStateFlow(Currency.RSD)
     val currency: StateFlow<Currency> = _currency
     
@@ -34,13 +34,13 @@ class BudgetSettingsViewModel(private val settingsRepository: SettingsRepository
     
     // Функција за промену периода
     fun setPeriod(period: Period) {
-        Log.d("BudgetSettingsViewModel", "Постављам период: $period")
+        Log.d("FinanceSettingsViewModel", "Постављам период: $period")
         settingsRepository.setPeriod(period)
     }
     
     // Функција за промену прилагођеног датума почетка периода
     fun setCustomPeriodStartDay(day: Int) {
-        Log.d("BudgetSettingsViewModel", "Постављам дан почетка периода: $day")
+        Log.d("FinanceSettingsViewModel", "Постављам дан почетка периода: $day")
         settingsRepository.setCustomPeriodStartDay(day)
     }
     
@@ -48,10 +48,10 @@ class BudgetSettingsViewModel(private val settingsRepository: SettingsRepository
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            if (modelClass.isAssignableFrom(BudgetSettingsViewModel::class.java)) {
+            if (modelClass.isAssignableFrom(FinanceSettingsViewModel::class.java)) {
                 // Kreiramo repository u factory metodi umesto da skladištimo context
                 val settingsRepository = SettingsRepository.getInstance(context)
-                return BudgetSettingsViewModel(settingsRepository) as T
+                return FinanceSettingsViewModel(settingsRepository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

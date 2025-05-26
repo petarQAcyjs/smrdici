@@ -4,11 +4,11 @@
 
 ### Finances screen layout:
 App header (just like other screens, with profile icon enabled).A Time period navigation bar with clickable TextView showing the currently selected date range "Meseec 01.03.2025 – 31.03.2025" or "June" or "2025" (depends on what time period is selected). Left and right arrows for navigation between previous or future time period.When current time period is NOT displayed, a clickable TextView ("Vratite se na trenutni period") styled as a hyperlink, triggering a setOnClickListener to reset the date range (Vratite se na trenutni - has different suffix based on selected time period - month, day, week or in case of a custom period - period).A tabbed navigation bar, with two tabs (Expenses and Income tabs).A CardView which says what Account data is displayed in the list below and not clickable Section which shows current balance on the selected account.A list of expenses (or Incomes) is displayed with the Sort Filter Dropdown at the top right. Each list item is a custom ViewHolder containing:
-A TextView for the category (e.g., "HEALTH", "DM", "MICA").
-A TextView for the description or note
+A TextView for the category (e.g., "HEALTH", "DM", "MICA").
+A TextView for the description or note
 A TextView for the date the transaction was created
 A TextView for the Account (For testing purposes, informational - TO BE REMOVED WHEN DONE)
-A TextView for the amount (e.g., "4060 EUR", "3704 EUR", "3072 EUR") with currency formatting.
+A TextView for the amount (e.g., "4060 EUR", "3704 EUR", "3072 EUR") with currency formatting.
 Two ImageButton icons on the right: a pencil for editing and a red trash bin for deletion.
 Floating button for creation of transaction.
 
@@ -34,6 +34,18 @@ By clicking the edit button, transaction edit dialogue is displayed and user can
 By clicking the Delete button, the transaction is being deleted both localy and from DB but user can click the Undo if the transaction is deleted by mistake.
 Clicking the Floating button, the Create transaction (income or expense) dialogue is displayed with same fields as the Edit dialogue. By confirming creation, the transaction is being saved both locally and in DB.
 Editing, deleting or adding new transaction updates the current balance accordingly.
+
+# Completed Tasks
+- Fixed package declarations in finance screen files from 'budget' to 'finance'
+- Updated imports in NavGraph.kt to use the correct packages
+- Renamed BudgetSettings to FinanceSettings in Screen.kt
+- Updated route from "budget_settings" to "finance_settings"
+- Fixed references in ProfileScreen.kt
+- Renamed BudgetSettingsViewModel to FinanceSettingsViewModel
+- Updated SettingsRepository keys with migration code
+- Enhanced TransactionRepository usage in Add/Edit screens
+- Updated RepositoryManager with finance-specific methods
+- Added backward compatibility for deprecated methods
 
 # Updated Implementation Checklist
 
@@ -102,18 +114,18 @@ Editing, deleting or adding new transaction updates the current balance accordin
 # Implementation Checklist
 
 ## Setup and Infrastructure
-- [ ] Create necessary project structure
-- [ ] Set up dependency management
-- [ ] Configure Firebase/Firestore integration
-- [ ] Set up proper state management solution
-- [ ] Implement currency conversion utility
-- [ ] Set up proper navigation system
+- [x] Create necessary project structure
+- [x] Set up dependency management
+- [x] Configure Firebase/Firestore integration
+- [x] Set up proper state management solution
+- [x] Implement currency conversion utility
+- [x] Set up proper navigation system
 
 ## UI Components
 ### App Header
-- [ ] Implement app header with back arrow
-- [ ] Add profile icon with navigation
-- [ ] Style header according to app theme
+- [x] Implement app header with back arrow
+- [x] Add profile icon with navigation
+- [x] Style header according to app theme
 
 ### Time Period Navigation
 - [ ] Create time period selector dropdown
@@ -153,11 +165,11 @@ Editing, deleting or adding new transaction updates the current balance accordin
   - [ ] Amount with currency
   - [ ] Edit button
   - [ ] Delete button
-- [ ] Implement edit functionality
-  - [ ] Edit dialog
-  - [ ] Form validation
-  - [ ] Update in local state
-  - [ ] Update in Firestore
+- [x] Implement edit functionality
+  - [x] Edit dialog
+  - [x] Form validation
+  - [x] Update in local state
+  - [x] Update in Firestore
 - [ ] Implement delete functionality
   - [ ] Delete confirmation
   - [ ] Undo functionality
@@ -165,30 +177,30 @@ Editing, deleting or adding new transaction updates the current balance accordin
   - [ ] Remove from Firestore
 
 ### Transaction Creation
-- [ ] Create floating action button
-- [ ] Implement transaction creation dialog
-  - [ ] Category selection
-  - [ ] Description input
-  - [ ] Date selection
-  - [ ] Account selection
-  - [ ] Amount input
-  - [ ] Form validation
-- [ ] Add local state update
-- [ ] Add Firestore update
+- [x] Create floating action button
+- [x] Implement transaction creation dialog
+  - [x] Category selection
+  - [x] Description input
+  - [x] Date selection
+  - [x] Account selection
+  - [x] Amount input
+  - [x] Form validation
+- [x] Add local state update
+- [x] Add Firestore update
 
 ## Data Management
-- [ ] Implement local caching
-- [ ] Set up Firestore listeners
-- [ ] Create data models
+- [x] Implement local caching
+- [x] Set up Firestore listeners
+- [x] Create data models
 - [ ] Implement error handling
 - [ ] Add loading states
-- [ ] Set up offline support
+- [x] Set up offline support
 
 ## Settings
-- [ ] Create finance settings screen
-- [ ] Implement account configuration
-- [ ] Add currency settings
-- [ ] Set default time period option
+- [x] Create finance settings screen
+- [x] Implement account configuration
+- [x] Add currency settings
+- [x] Set default time period option
 
 ## Testing
 - [ ] Unit tests for business logic
@@ -209,3 +221,88 @@ Editing, deleting or adding new transaction updates the current balance accordin
 2. Sort/filter functionality for transactions
 3. Undo functionality for transaction deletion
 4. Account balance tracking
+
+# Finances Feature Issues and Solutions
+
+## Current Issues
+
+### Package Naming Inconsistencies
+- [x] Files in `ui/screens/finance` directory have incorrect package declarations (`budget` instead of `finance`)
+- [x] Import conflicts in NavGraph.kt due to incorrect package declarations
+
+### Navigation Route Inconsistencies
+- [x] Screen.kt still has `BudgetSettings` route instead of "FinanceSettings"
+- [x] NavGraph.kt references `BudgetSettingsScreen` and `BudgetSettingsViewModel`
+
+### Repository Layer Issues
+- [x] TransactionRepository exists but is underutilized
+- [ ] ExpenseRepository and IncomeRepository have significant code duplication
+- [x] RepositoryManager has outdated `getExpenseRepositoryForBudget()` methods
+
+### Settings Layer Issues
+- [x] SettingsRepository uses budget-specific keys (e.g., `KEY_PERIOD = "budget_period"`)
+- [x] BudgetSettingsViewModel class should be renamed to FinanceSettingsViewModel
+
+### Database Structure Issues
+- [ ] Firestore indexes still reference "budgets" collection
+- [ ] No clear migration path from old budget collections to new finance collections
+
+### Incomplete Feature Implementation
+- [ ] Sort/filter functionality for transactions is missing
+- [ ] Undo functionality for transaction deletion is not implemented
+- [ ] Time period navigation is partially implemented but lacks custom period dialog
+- [ ] Account balance tracking needs refinement
+
+## Implementation Plan
+
+### Phase 1: Package and Navigation Fixes ✅
+- [x] Fix package declarations in all finance screen files
+  - [x] AddExpenseScreen.kt
+  - [x] AddIncomeScreen.kt
+  - [x] EditExpenseScreen.kt
+  - [x] EditIncomeScreen.kt
+  - [x] ExpenseViewModel.kt
+  - [x] IncomeViewModel.kt
+- [x] Update Screen.kt (rename BudgetSettings to FinanceSettings)
+- [x] Update NavGraph.kt for consistent navigation
+- [x] Update all references to BudgetSettings in ProfileScreen.kt
+
+### Phase 2: Repository Layer Refactoring ✅
+- [x] Update SettingsRepository keys with migration code
+  - [x] Rename KEY_PERIOD from "budget_period" to "finance_period"
+  - [x] Add migration code to preserve existing settings
+- [x] Rename BudgetSettingsViewModel to FinanceSettingsViewModel
+- [x] Update RepositoryManager with finance-specific methods
+  - [x] Replace getExpenseRepositoryForBudget() with getExpenseRepositoryForFinance()
+  - [x] Replace getIncomeRepositoryForBudget() with getIncomeRepositoryForFinance()
+  - [x] Replace getAccountRepositoryForBudget() with getAccountRepositoryForFinance()
+
+### Phase 3: Enhance TransactionRepository
+- [x] Add methods to consolidate common functionality
+- [ ] Implement transaction filtering by time period
+- [ ] Add support for multi-currency calculations
+
+### Phase 4: Feature Implementation
+- [ ] Add sort/filter functionality to FinanceViewModel
+  - [ ] Implement SortOption enum (DATE_ASC, DATE_DESC, AMOUNT_ASC, AMOUNT_DESC)
+  - [ ] Add sorting methods
+- [ ] Implement undo functionality for transaction deletion
+  - [ ] Create DeletedTransaction data class
+  - [ ] Add undoDelete method
+- [ ] Create custom period dialog for time period selection
+  - [ ] Implement DatePicker composable
+  - [ ] Add validation logic
+
+### Phase 5: Testing and Polishing
+- [ ] Test all navigation paths
+- [ ] Verify account balance tracking works correctly
+- [ ] Ensure multi-currency calculations are accurate
+- [ ] Add proper loading indicators and error handling
+- [ ] Update Firestore indexes if needed
+
+## Next Steps
+1. Implement transaction filtering by time period in TransactionRepository
+2. Add support for multi-currency calculations
+3. Implement sort/filter functionality in FinanceViewModel
+4. Add undo functionality for transaction deletion
+5. Create a custom period dialog for time period selection
