@@ -174,20 +174,27 @@ class ExpenseRepository private constructor() {
             
             // Прво налазимо расход да бисмо добили износ и ID рачуна
             val expenseDoc = userExpensesCollection?.document(expenseId)?.get()?.await()
-            val expense = expenseDoc?.toObject(Expense::class.java)
             
-            // Бришемо расход из базе података
-            userExpensesCollection?.document(expenseId)?.delete()?.await()
+            // Instead of using toObject which requires a no-arg constructor, manually extract the fields
+            val accountId = expenseDoc?.getString("accountId") ?: ""
+            val amount = expenseDoc?.getDouble("amount") ?: 0.0
             
-            // Ако смо успешно добавили расход, враћамо баланс рачуна (повећавамо га)
-            if (expense != null) {
-                accountRepository?.updateAccountBalance(expense.accountId, expense.amount)
+            // Only proceed if we have valid data
+            if (accountId.isNotEmpty() && amount > 0) {
+                // Бришемо расход из базе података
+                userExpensesCollection?.document(expenseId)?.delete()?.await()
+                
+                // Враћамо баланс рачуна (повећавамо га)
+                accountRepository?.updateAccountBalance(accountId, amount)
+                
+                // Ажурирамо локални кеш
+                refreshExpenses()
+                
+                Result.success(Unit)
+            } else {
+                LogUtils.e("ExpenseRepository", "Nedostaju podaci o rashodu za brisanje: accountId=$accountId, amount=$amount", category = "expense")
+                Result.failure(IllegalStateException("Nedostaju podaci o rashodu"))
             }
-            
-            // Ажурирамо локални кеш
-            refreshExpenses()
-            
-            Result.success(Unit)
         } catch (e: Exception) {
             LogUtils.e("ExpenseRepository", "Greška pri brisanju rashoda", e, category = "expense")
             Result.failure(e)

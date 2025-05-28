@@ -47,9 +47,10 @@ fun FinanceScreen(
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
     
-    // Log screen entry
+    // Log screen entry and refresh data
     LaunchedEffect(Unit) {
         LogUtils.i("FinanceScreen", "Screen entered", "ui")
+        viewModel.refreshOnResume()
     }
 
     val numberFormat = remember { 
@@ -160,21 +161,81 @@ fun FinanceScreen(
                         val accountBalance = state.accountBalances[state.selectedAccountId]
                         if (accountBalance != null) {
                             val nativeCurrencyFormatter = currencyFormatters[accountBalance.nativeCurrency]
+                            
+                            // Display transaction total for the period
                             Text(
-                                text = nativeCurrencyFormatter?.format(accountBalance.nativeAmount)
-                                    ?: accountBalance.nativeAmount.toString(),
+                                text = when (state.selectedTransactionType) {
+                                    is TransactionType.Income -> "Укупни приходи за период:"
+                                    is TransactionType.Expense -> "Укупни расходи за период:"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = when (state.selectedTransactionType) {
+                                    is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
+                                    is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
+                                }
+                            )
+                            
+                            Text(
+                                text = nativeCurrencyFormatter?.format(accountBalance.transactionTotal)
+                                    ?: "${accountBalance.transactionTotal} ${accountBalance.nativeCurrency}",
                                 style = MaterialTheme.typography.headlineMedium,
                                 color = when (state.selectedTransactionType) {
                                     is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
                                     is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
                                 }
                             )
+                            
+                            // Show account balance
+                            val account = state.accounts.find { it.id == state.selectedAccountId }
+                            if (account != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    thickness = 1.dp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                                )
+                                
+                                Text(
+                                    text = "Тренутно стање рачуна:",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                
+                                // Get the current balance from the accountBalances map which has the latest data
+                                val currentBalance = state.accountBalances[account.id]?.let { 
+                                    // Use the current balance from repository
+                                    val currentAccountBalance = accountBalance.currentBalance
+                                    
+                                    nativeCurrencyFormatter?.format(currentAccountBalance)
+                                        ?: "$currentAccountBalance ${accountBalance.nativeCurrency}"
+                                } ?: (nativeCurrencyFormatter?.format(account.balance)
+                                    ?: "${account.balance} ${accountBalance.nativeCurrency}")
+                                
+                                Text(
+                                    text = currentBalance,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     } else {
                         // Show total in EUR for all accounts
                         val eurFormatter = currencyFormatters["EUR"]
+                        
                         Text(
-                            text = eurFormatter?.format(state.totalAmountInEur) ?: state.totalAmountInEur.toString(),
+                            text = when (state.selectedTransactionType) {
+                                is TransactionType.Income -> "Укупни приходи за период (EUR):"
+                                is TransactionType.Expense -> "Укупни расходи за период (EUR):"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = when (state.selectedTransactionType) {
+                                is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
+                                is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
+                            }
+                        )
+                        
+                        Text(
+                            text = eurFormatter?.format(state.totalAmountInEur) ?: "${state.totalAmountInEur} EUR",
                             style = MaterialTheme.typography.headlineMedium,
                             color = when (state.selectedTransactionType) {
                                 is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
@@ -190,13 +251,23 @@ fun FinanceScreen(
                                 thickness = 1.dp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                             )
+                            
+                            Text(
+                                text = "По рачунима:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.align(Alignment.Start)
+                            )
+                            
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 state.accounts.forEach { account ->
                                     val balance = state.accountBalances[account.id]
-                                    if (balance != null) {
+                                    if (balance != null && balance.transactionTotal != 0.0) {
                                         val formatter = currencyFormatters[balance.nativeCurrency]
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -209,8 +280,8 @@ fun FinanceScreen(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                             Text(
-                                                text = formatter?.format(balance.nativeAmount)
-                                                    ?: balance.nativeAmount.toString(),
+                                                text = formatter?.format(balance.transactionTotal)
+                                                    ?: "${balance.transactionTotal} ${balance.nativeCurrency}",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )

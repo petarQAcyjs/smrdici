@@ -168,7 +168,7 @@ class IncomeRepository private constructor() {
     // Брисање прихода
     suspend fun deleteIncome(incomeId: String): Result<Unit> {
         return try {
-            Log.d("IncomeRepository", "Бришем приход: $incomeId")
+            LogUtils.i("IncomeRepository", "Brišem prihod: $incomeId", category = "income")
             
             // Проверавамо да ли је ID валидан
             if (incomeId.isEmpty()) {
@@ -177,22 +177,29 @@ class IncomeRepository private constructor() {
             
             // Прво налазимо приход да бисмо добили износ и ID рачуна
             val incomeDoc = userIncomesCollection?.document(incomeId)?.get()?.await()
-            val income = incomeDoc?.toObject(Income::class.java)
             
-            // Бришемо приход из базе података
-            userIncomesCollection?.document(incomeId)?.delete()?.await()
+            // Instead of using toObject which requires a no-arg constructor, manually extract the fields
+            val accountId = incomeDoc?.getString("accountId") ?: ""
+            val amount = incomeDoc?.getDouble("amount") ?: 0.0
             
-            // Ако смо успешно добавили приход, враћамо баланс рачуна (смањујемо га)
-            if (income != null) {
-                accountRepository?.updateAccountBalance(income.accountId, -income.amount)
+            // Only proceed if we have valid data
+            if (accountId.isNotEmpty() && amount > 0) {
+                // Бришемо приход из базе података
+                userIncomesCollection?.document(incomeId)?.delete()?.await()
+                
+                // Враћамо баланс рачуна (смањујемо га)
+                accountRepository?.updateAccountBalance(accountId, -amount)
+                
+                // Ажурирамо локални кеш
+                refreshIncomes()
+                
+                Result.success(Unit)
+            } else {
+                LogUtils.e("IncomeRepository", "Nedostaju podaci o prihodu za brisanje: accountId=$accountId, amount=$amount", category = "income")
+                Result.failure(IllegalStateException("Nedostaju podaci o prihodu"))
             }
-            
-            // Ажурирамо локални кеш
-            refreshIncomes()
-            
-            Result.success(Unit)
         } catch (e: Exception) {
-            Log.e("IncomeRepository", "Грешка при брисању прихода", e)
+            LogUtils.e("IncomeRepository", "Greška pri brisanju prihoda", e, category = "income")
             Result.failure(e)
         }
     }

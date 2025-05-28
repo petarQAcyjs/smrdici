@@ -131,7 +131,9 @@ data class FinanceScreenState(
 data class AccountBalance(
     val nativeAmount: Double,
     val nativeCurrency: String,
-    val eurAmount: Double
+    val eurAmount: Double,
+    val transactionTotal: Double,
+    val currentBalance: Double
 )
 
 class FinanceViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
@@ -146,6 +148,13 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         initializeState()
         refreshData()
         loadAccounts()
+    }
+
+    // Add this method to force refresh data when returning to the screen
+    fun refreshOnResume() {
+        LogUtils.i("FinanceViewModel", "Refreshing data on resume", category = "finance")
+        loadAccounts()
+        refreshData()
     }
 
     private fun initializeState() {
@@ -367,49 +376,83 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
 
     private fun updateTransactionsState(transactions: List<Transaction>) {
         viewModelScope.launch {
-            // Calculate balances for each account
-            val accountBalances = mutableMapOf<String, AccountBalance>()
-            var totalEurAmount = 0.0
+            try {
+                // Get current account balances from repository
+                val currentAccountBalances = accountRepository.getAccountBalances()
+                LogUtils.d("FinanceViewModel", "Retrieved ${currentAccountBalances.size} account balances", category = "finance")
 
-            _state.value.accounts.forEach { account ->
-                val accountTransactions = transactions.filter { 
-                    when (it) {
-                        is IncomeTransaction -> it.income.accountId == account.id
-                        is ExpenseTransaction -> it.expense.accountId == account.id
+                // Calculate balances for each account based on filtered transactions
+                val accountBalances = mutableMapOf<String, AccountBalance>()
+                var totalEurAmount = 0.0
+
+                _state.value.accounts.forEach { account ->
+                    val accountTransactions = transactions.filter { 
+                        when (it) {
+                            is IncomeTransaction -> it.income.accountId == account.id
+                            is ExpenseTransaction -> it.expense.accountId == account.id
+                        }
                     }
+
+                    // Calculate transaction total for the filtered period
+                    val transactionTotal = accountTransactions.sumOf { transaction ->
+                        when (_state.value.selectedTransactionType) {
+                            is TransactionType.Income -> transaction.amount
+                            is TransactionType.Expense -> -transaction.amount
+                        }
+                    }
+
+                    // Get current balance or default to 0.0
+                    val currentBalance = currentAccountBalances[account.id] ?: account.balance
+                    
+                    // For display purposes in the current view
+                    val nativeAmount = transactionTotal
+
+                    // Convert to EUR for total calculation
+                    val eurAmount = CurrencyConverter.convert(nativeAmount, account.currency, "EUR")
+                    totalEurAmount += eurAmount
+
+                    LogUtils.d("FinanceViewModel", 
+                        "Account ${account.name} (${account.currency}): " +
+                        "Transaction total: $transactionTotal, " +
+                        "Current balance: $currentBalance, " +
+                        "EUR amount: $eurAmount", 
+                        category = "finance")
+
+                    accountBalances[account.id] = AccountBalance(
+                        nativeAmount = nativeAmount,
+                        nativeCurrency = account.currency,
+                        eurAmount = eurAmount,
+                        transactionTotal = transactionTotal,
+                        currentBalance = currentBalance
+                    )
                 }
 
-                val nativeAmount = accountTransactions.sumOf { transaction ->
-                    when (_state.value.selectedTransactionType) {
-                        is TransactionType.Income -> transaction.amount
-                        is TransactionType.Expense -> -transaction.amount
-                    }
-                }
+                LogUtils.i("FinanceViewModel", 
+                    "Updated state:" +
+                    "\nTotal transactions: ${transactions.size}" +
+                    "\nTotal amount in EUR: $totalEurAmount" +
+                    "\nAccounts with transactions: ${accountBalances.size}", 
+                    category = "finance")
 
-                val eurAmount = CurrencyConverter.convert(nativeAmount, account.currency, "EUR")
-                totalEurAmount += eurAmount
-
-                accountBalances[account.id] = AccountBalance(
-                    nativeAmount = nativeAmount,
-                    nativeCurrency = account.currency,
-                    eurAmount = eurAmount
+                _state.value = _state.value.copy(
+                    transactions = transactions,
+                    totalAmount = transactions.sumOf { 
+                        when (_state.value.selectedTransactionType) {
+                            is TransactionType.Income -> it.amount
+                            is TransactionType.Expense -> -it.amount
+                        }
+                    },
+                    totalAmountInEur = totalEurAmount,
+                    accountBalances = accountBalances,
+                    isLoading = false
+                )
+            } catch (e: Exception) {
+                LogUtils.e("FinanceViewModel", "Error updating transaction state", e, category = "finance")
+                _state.value = _state.value.copy(
+                    error = e.message,
+                    isLoading = false
                 )
             }
-
-            LogUtils.i("FinanceViewModel", 
-                "Updated state:" +
-                "\nTotal transactions: ${transactions.size}" +
-                "\nTotal amount in EUR: $totalEurAmount" +
-                "\nAccounts with transactions: ${accountBalances.size}", 
-                category = "finance")
-
-            _state.value = _state.value.copy(
-                transactions = transactions,
-                totalAmount = accountBalances.values.sumOf { it.nativeAmount },
-                totalAmountInEur = totalEurAmount,
-                accountBalances = accountBalances,
-                isLoading = false
-            )
         }
     }
 
@@ -419,6 +462,8 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
             try {
                 incomeRepository.deleteIncome(incomeId)
                 refreshData()
+                // Force refresh account data to update balances
+                accountRepository.loadAccounts()
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message)
             }
@@ -430,6 +475,8 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
             try {
                 expenseRepository.deleteExpense(expenseId)
                 refreshData()
+                // Force refresh account data to update balances
+                accountRepository.loadAccounts()
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message)
             }
