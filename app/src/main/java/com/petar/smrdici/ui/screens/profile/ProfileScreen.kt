@@ -120,10 +120,10 @@ fun ProfileScreen(
         topBar = {
             AppHeader(
                 title = "Профил",
-                showBackButton = true,
-                showProfileIcon = false,
                 user = user,
-                navController = navController
+                navController = navController,
+                showBackButton = true,
+                showProfileIcon = false
             )
         }
     ) { paddingValues ->
