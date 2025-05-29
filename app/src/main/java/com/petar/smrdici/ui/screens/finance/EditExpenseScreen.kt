@@ -1,4 +1,4 @@
-package com.petar.smrdici.ui.screens.budget
+package com.petar.smrdici.ui.screens.finance
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,12 +28,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.ExpenseCategory
+import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.CategoryDropdown
 import com.petar.smrdici.ui.components.DatePickerDialog
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -58,15 +61,16 @@ fun EditExpenseScreen(
     var selectedAccountId by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
     
-    // Load expense data using expenseId
-    val expenseViewModel: ExpenseViewModel = viewModel()
-    LaunchedEffect(expenseId) {
-        expenseViewModel.getExpenseById(expenseId)
-    }
-    val expense by expenseViewModel.currentExpense.collectAsState()
+    // Initialize transaction repository
+    val transactionRepository = remember { TransactionRepository.getInstance() }
     
-    // Update form when expense is loaded
-    LaunchedEffect(expense) {
+    // Current expense state
+    var expense by remember { mutableStateOf<Expense?>(null) }
+    
+    // Load expense data using expenseId
+    LaunchedEffect(expenseId) {
+        expense = transactionRepository.getExpenseById(expenseId).first()
+        
         expense?.let {
             amount = it.amount.toString()
             description = it.description
@@ -147,7 +151,7 @@ fun EditExpenseScreen(
                             )
                             
                             if (updatedExpense != null) {
-                                expenseViewModel.updateExpense(updatedExpense)
+                                transactionRepository.updateExpense(updatedExpense)
                                 snackbarHostState.showSnackbar("Expense updated successfully")
                                 onNavigateBack()
                             }

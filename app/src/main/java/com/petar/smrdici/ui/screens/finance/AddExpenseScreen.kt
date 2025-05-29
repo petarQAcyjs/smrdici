@@ -1,4 +1,4 @@
-package com.petar.smrdici.ui.screens.budget
+package com.petar.smrdici.ui.screens.finance
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +50,7 @@ import androidx.navigation.NavController
 import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.ExpenseCategory
+import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -59,6 +60,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,6 +109,9 @@ fun AddExpenseScreen(
     
     // Учитавање рачуна
     val accounts by accountViewModel.accounts.collectAsState()
+    
+    // Initialize transaction repository
+    val transactionRepository = remember { TransactionRepository.getInstance() }
     
     // Приказ ако корисник није пријављен
     if (user == null) {
@@ -179,9 +184,6 @@ fun AddExpenseScreen(
         if (!validateForm()) return
         
         isLoading = true
-        
-        // Move LaunchedEffect outside of the function
-        // LaunchedEffect will be called when isLoading changes
     }
     
     // Handle expense saving in a LaunchedEffect
@@ -194,7 +196,7 @@ fun AddExpenseScreen(
                 val dateStr = dateFormat.format(Date(selectedDate))
                 
                 val expense = Expense(
-                    id = "",
+                    id = UUID.randomUUID().toString(),
                     userId = user?.uid ?: "",
                     amount = amountValue,
                     description = description,
@@ -203,7 +205,8 @@ fun AddExpenseScreen(
                     accountId = selectedAccountId
                 )
                 
-                // TODO: Implement expense saving logic
+                // Save expense using TransactionRepository
+                transactionRepository.addExpense(expense)
                 snackbarHostState.showSnackbar("Расход је успешно сачуван")
                 onNavigateBack()
             } catch (e: Exception) {

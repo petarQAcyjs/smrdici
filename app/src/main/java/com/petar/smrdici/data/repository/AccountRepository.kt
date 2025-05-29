@@ -271,6 +271,31 @@ class AccountRepository private constructor() {
         emit(docSnapshot.toObject(Account::class.java)?.copy(id = accountId))
     }
     
+    /**
+     * Retrieves current balances for all accounts
+     * @return Map of account IDs to their current balances
+     */
+    suspend fun getAccountBalances(): Map<String, Double> {
+        return try {
+            val userId = auth.currentUser?.uid ?: return emptyMap()
+            
+            val snapshot = firestore.collection("users").document(userId)
+                .collection("accounts")
+                .get()
+                .await()
+            
+            snapshot.documents.mapNotNull { doc ->
+                val account = doc.toObject(Account::class.java)
+                if (account != null) {
+                    Pair(doc.id, account.balance)
+                } else null
+            }.toMap()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error retrieving account balances", e)
+            emptyMap()
+        }
+    }
+    
     companion object {
         private const val TAG = "AccountRepository"
         

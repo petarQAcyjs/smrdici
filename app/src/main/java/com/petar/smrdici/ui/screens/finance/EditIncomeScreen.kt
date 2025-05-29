@@ -1,4 +1,4 @@
-package com.petar.smrdici.ui.screens.budget
+package com.petar.smrdici.ui.screens.finance
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,12 +28,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.petar.smrdici.data.model.Income
 import com.petar.smrdici.data.model.IncomeCategory
+import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.CategoryDropdown
 import com.petar.smrdici.ui.components.DatePickerDialog
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -58,15 +61,16 @@ fun EditIncomeScreen(
     var selectedAccountId by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
     
-    // Load income data using incomeId
-    val incomeViewModel: IncomeViewModel = viewModel()
-    LaunchedEffect(incomeId) {
-        incomeViewModel.getIncomeById(incomeId)
-    }
-    val income by incomeViewModel.currentIncome.collectAsState()
+    // Initialize transaction repository
+    val transactionRepository = remember { TransactionRepository.getInstance() }
     
-    // Update form when income is loaded
-    LaunchedEffect(income) {
+    // Current income state
+    var income by remember { mutableStateOf<Income?>(null) }
+    
+    // Load income data using incomeId
+    LaunchedEffect(incomeId) {
+        income = transactionRepository.getIncomeById(incomeId).first()
+        
         income?.let {
             amount = it.amount.toString()
             description = it.description
@@ -142,11 +146,12 @@ fun EditIncomeScreen(
                                 description = description,
                                 category = selectedCategory?.name ?: "",
                                 date = dateFormat.format(Date(selectedDate)),
-                                accountId = selectedAccountId
+                                accountId = selectedAccountId,
+                                userId = user?.uid ?: ""
                             )
                             
                             if (updatedIncome != null) {
-                                incomeViewModel.updateIncome(updatedIncome)
+                                transactionRepository.updateIncome(updatedIncome)
                                 snackbarHostState.showSnackbar("Income updated successfully")
                                 onNavigateBack()
                             }

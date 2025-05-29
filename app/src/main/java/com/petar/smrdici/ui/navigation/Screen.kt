@@ -9,7 +9,7 @@ sealed class Screen(val route: String) {
     object ListDetails : Screen("list_details/{listId}") {
         fun createRoute(listId: String) = "list_details/$listId"
     }
-    object BudgetSettings : Screen("budget_settings")
+    object FinanceSettings : Screen("finance_settings")
     
     object EditAccount : Screen("edit_account/{accountId}")
     

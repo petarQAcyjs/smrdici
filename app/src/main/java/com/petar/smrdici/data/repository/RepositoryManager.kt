@@ -14,26 +14,44 @@ object RepositoryManager {
     private var incomeRepositoryInstance: IncomeRepository? = null
 
     /**
-     * Vraća instancu ExpenseRepository za potrebe budžet funkcionalnosti
+     * Vraća instancu ExpenseRepository za potrebe finance funkcionalnosti
      * Koristi postojeću instancu koja ima sve konekcije pravilno uspostavljene
      */
-    fun getExpenseRepositoryForBudget(): ExpenseRepository {
+    fun getExpenseRepositoryForFinance(): ExpenseRepository {
         return ExpenseRepository.getInstance()
     }
 
     /**
-     * Vraća instancu IncomeRepository za potrebe budžet funkcionalnosti
+     * Vraća instancu IncomeRepository za potrebe finance funkcionalnosti
      * Koristi postojeću instancu koja ima sve konekcije pravilno uspostavljene
      */
-    fun getIncomeRepositoryForBudget(): IncomeRepository {
+    fun getIncomeRepositoryForFinance(): IncomeRepository {
         return IncomeRepository.getInstance()
     }
 
     /**
-     * Vraća instancu AccountRepository za potrebe budžet funkcionalnosti
+     * Vraća instancu AccountRepository za potrebe finance funkcionalnosti
      * Radi samo za čitanje podataka
      */
-    fun getAccountRepositoryForBudget(context: Context): AccountRepository {
+    fun getAccountRepositoryForFinance(context: Context): AccountRepository {
         return AccountRepository.getInstance()
+    }
+    
+    /**
+     * Legacy methods for backward compatibility
+     */
+    @Deprecated("Use getExpenseRepositoryForFinance() instead", ReplaceWith("getExpenseRepositoryForFinance()"))
+    fun getExpenseRepositoryForBudget(): ExpenseRepository {
+        return getExpenseRepositoryForFinance()
+    }
+    
+    @Deprecated("Use getIncomeRepositoryForFinance() instead", ReplaceWith("getIncomeRepositoryForFinance()"))
+    fun getIncomeRepositoryForBudget(): IncomeRepository {
+        return getIncomeRepositoryForFinance()
+    }
+    
+    @Deprecated("Use getAccountRepositoryForFinance() instead", ReplaceWith("getAccountRepositoryForFinance(context)"))
+    fun getAccountRepositoryForBudget(context: Context): AccountRepository {
+        return getAccountRepositoryForFinance(context)
     }
 }

@@ -20,6 +20,18 @@ class SettingsRepository private constructor(context: Context) {
     private val _customPeriodStartDay = MutableStateFlow(getStoredCustomPeriodStartDay())
     val customPeriodStartDay: StateFlow<Int> = _customPeriodStartDay.asStateFlow()
     
+    init {
+        // Migration from budget_period to finance_period
+        if (sharedPreferences.contains(KEY_PERIOD_OLD) && !sharedPreferences.contains(KEY_PERIOD)) {
+            val oldPeriodValue = sharedPreferences.getString(KEY_PERIOD_OLD, Period.MONTHLY.name)
+            sharedPreferences.edit {
+                putString(KEY_PERIOD, oldPeriodValue)
+                remove(KEY_PERIOD_OLD)
+            }
+            Log.d("SettingsRepository", "Migrated from budget_period to finance_period")
+        }
+    }
+    
     fun setPeriod(period: Period) {
         Log.d("SettingsRepository", "Чувам период: $period")
         sharedPreferences.edit { putString(KEY_PERIOD, period.name) }
@@ -33,7 +45,10 @@ class SettingsRepository private constructor(context: Context) {
     }
     
     private fun getStoredPeriod(): Period {
-        val periodName = sharedPreferences.getString(KEY_PERIOD, Period.MONTHLY.name)
+        // Try to get from new key first, then fall back to old key
+        val periodName = sharedPreferences.getString(KEY_PERIOD, null)
+            ?: sharedPreferences.getString(KEY_PERIOD_OLD, Period.MONTHLY.name)
+            
         return try {
             Period.valueOf(periodName ?: Period.MONTHLY.name)
         } catch (e: Exception) {
@@ -47,7 +62,8 @@ class SettingsRepository private constructor(context: Context) {
     }
     
     companion object {
-        private const val KEY_PERIOD = "budget_period"
+        private const val KEY_PERIOD_OLD = "budget_period"
+        private const val KEY_PERIOD = "finance_period"
         private const val KEY_CUSTOM_PERIOD_START_DAY = "custom_period_start_day"
         
         @Volatile

@@ -70,10 +70,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BudgetSettingsScreen(
+fun FinanceSettingsScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
-    budgetSettingsViewModel: BudgetSettingsViewModel = viewModel(factory = BudgetSettingsViewModel.Factory(LocalContext.current)),
+    financeSettingsViewModel: FinanceSettingsViewModel = viewModel(factory = FinanceSettingsViewModel.Factory(LocalContext.current)),
     accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory()),
     dataExportImportViewModel: DataExportImportViewModel = viewModel(factory = DataExportImportViewModel.Factory(LocalContext.current))
 ) {
@@ -170,9 +170,9 @@ fun BudgetSettingsScreen(
     var showCustomPeriodDialog by remember { mutableStateOf(false) }
     
     // Добијамо вредности из ViewModel-а
-    val currency by budgetSettingsViewModel.currency.collectAsState()
-    val period by budgetSettingsViewModel.period.collectAsState()
-    val customPeriodStartDay by budgetSettingsViewModel.customPeriodStartDay.collectAsState()
+    val currency by financeSettingsViewModel.currency.collectAsState()
+    val period by financeSettingsViewModel.period.collectAsState()
+    val customPeriodStartDay by financeSettingsViewModel.customPeriodStartDay.collectAsState()
     val accounts by accountViewModel.accounts.collectAsState()
     
     // Стање за падајуће меније
@@ -251,7 +251,7 @@ fun BudgetSettingsScreen(
                                 DropdownMenuItem(
                                     text = { Text(currencyOption.value) },
                                     onClick = {
-                                        budgetSettingsViewModel.setCurrency(currencyOption)
+                                        financeSettingsViewModel.setCurrency(currencyOption)
                                         currencyExpanded = false
                                         showSnackbar("Валута промењена на ${currencyOption.value}")
                                     }
@@ -309,7 +309,7 @@ fun BudgetSettingsScreen(
                                 DropdownMenuItem(
                                     text = { Text(periodOption.value) },
                                     onClick = {
-                                        budgetSettingsViewModel.setPeriod(periodOption)
+                                        financeSettingsViewModel.setPeriod(periodOption)
                                         periodExpanded = false
                                         showSnackbar("Период промењен на ${periodOption.value}")
                                     }
@@ -362,7 +362,7 @@ fun BudgetSettingsScreen(
                                 IconButton(
                                     onClick = {
                                         if (customPeriodStartDay > 1) {
-                                            budgetSettingsViewModel.setCustomPeriodStartDay(customPeriodStartDay - 1)
+                                            financeSettingsViewModel.setCustomPeriodStartDay(customPeriodStartDay - 1)
                                         }
                                     }
                                 ) {
@@ -391,7 +391,7 @@ fun BudgetSettingsScreen(
                                 IconButton(
                                     onClick = {
                                         if (customPeriodStartDay < 28) {
-                                            budgetSettingsViewModel.setCustomPeriodStartDay(customPeriodStartDay + 1)
+                                            financeSettingsViewModel.setCustomPeriodStartDay(customPeriodStartDay + 1)
                                         }
                                     }
                                 ) {
@@ -421,7 +421,7 @@ fun BudgetSettingsScreen(
                                         day = day,
                                         selectedDay = customPeriodStartDay,
                                         onClick = {
-                                            budgetSettingsViewModel.setCustomPeriodStartDay(day)
+                                            financeSettingsViewModel.setCustomPeriodStartDay(day)
                                         }
                                     )
                                 }
@@ -580,7 +580,7 @@ fun BudgetSettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    budgetSettingsViewModel.setCurrency(currencyOption)
+                                    financeSettingsViewModel.setCurrency(currencyOption)
                                     showCurrencyDialog = false
                                     showSnackbar("Валута промењена на ${currencyOption.code}")
                                 }
@@ -624,7 +624,7 @@ fun BudgetSettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    budgetSettingsViewModel.setPeriod(periodOption)
+                                    financeSettingsViewModel.setPeriod(periodOption)
                                     showPeriodDialog = false
                                     showSnackbar("Период промењен на ${periodOption.value}")
                                 }
@@ -681,22 +681,22 @@ fun BudgetSettingsScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         QuickDateButton(1, customPeriodStartDay) { 
-                            budgetSettingsViewModel.setCustomPeriodStartDay(1) 
+                            financeSettingsViewModel.setCustomPeriodStartDay(1) 
                         }
                         QuickDateButton(5, customPeriodStartDay) { 
-                            budgetSettingsViewModel.setCustomPeriodStartDay(5) 
+                            financeSettingsViewModel.setCustomPeriodStartDay(5) 
                         }
                         QuickDateButton(10, customPeriodStartDay) { 
-                            budgetSettingsViewModel.setCustomPeriodStartDay(10) 
+                            financeSettingsViewModel.setCustomPeriodStartDay(10) 
                         }
                         QuickDateButton(15, customPeriodStartDay) { 
-                            budgetSettingsViewModel.setCustomPeriodStartDay(15) 
+                            financeSettingsViewModel.setCustomPeriodStartDay(15) 
                         }
                         QuickDateButton(20, customPeriodStartDay) { 
-                            budgetSettingsViewModel.setCustomPeriodStartDay(20) 
+                            financeSettingsViewModel.setCustomPeriodStartDay(20) 
                         }
                         QuickDateButton(25, customPeriodStartDay) { 
-                            budgetSettingsViewModel.setCustomPeriodStartDay(25) 
+                            financeSettingsViewModel.setCustomPeriodStartDay(25) 
                         }
                     }
                     
@@ -713,7 +713,7 @@ fun BudgetSettingsScreen(
                         IconButton(
                             onClick = {
                                 if (customPeriodStartDay > 1) {
-                                    budgetSettingsViewModel.setCustomPeriodStartDay(customPeriodStartDay - 1)
+                                    financeSettingsViewModel.setCustomPeriodStartDay(customPeriodStartDay - 1)
                                 }
                             },
                             modifier = Modifier.size(48.dp)
@@ -734,7 +734,7 @@ fun BudgetSettingsScreen(
                         IconButton(
                             onClick = {
                                 if (customPeriodStartDay < 28) {
-                                    budgetSettingsViewModel.setCustomPeriodStartDay(customPeriodStartDay + 1)
+                                    financeSettingsViewModel.setCustomPeriodStartDay(customPeriodStartDay + 1)
                                 }
                             },
                             modifier = Modifier.size(48.dp)
