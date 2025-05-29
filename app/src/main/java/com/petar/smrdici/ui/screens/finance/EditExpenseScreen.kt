@@ -39,8 +39,10 @@ import com.petar.smrdici.ui.components.DatePickerDialog
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,7 +77,12 @@ fun EditExpenseScreen(
             amount = it.amount.toString()
             description = it.description
             selectedCategory = ExpenseCategory.valueOf(it.category)
-            selectedDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(it.date)?.time ?: System.currentTimeMillis()
+            
+            // Parse date using UTC timezone
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+            selectedDate = dateFormat.parse(it.date)?.time ?: System.currentTimeMillis()
+            
             selectedAccountId = it.accountId
         }
     }
@@ -127,7 +134,9 @@ fun EditExpenseScreen(
                 onClick = { showDatePicker = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Date: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedDate))}")
+                // Format date for display using local timezone
+                val displayFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                Text("Date: ${displayFormat.format(Date(selectedDate))}")
             }
 
             Button(
@@ -140,12 +149,20 @@ fun EditExpenseScreen(
                                 return@launch
                             }
                             
+                            // Use UTC consistently for date formatting
                             val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+                            
+                            // Create a Calendar in UTC to avoid time zone shifts
+                            val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                            calendar.timeInMillis = selectedDate
+                            val dateStr = dateFormat.format(calendar.time)
+                            
                             val updatedExpense = expense?.copy(
                                 amount = amountValue,
                                 description = description,
                                 category = selectedCategory?.name ?: "",
-                                date = dateFormat.format(Date(selectedDate)),
+                                date = dateStr,
                                 accountId = selectedAccountId,
                                 userId = user?.uid ?: ""
                             )

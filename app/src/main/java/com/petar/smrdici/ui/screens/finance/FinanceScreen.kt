@@ -50,7 +50,7 @@ fun FinanceScreen(
     
     // Log screen entry and refresh data
     LaunchedEffect(Unit) {
-        LogUtils.i("FinanceScreen", "Screen entered", "ui")
+        LogUtils.i("FinanceScreen", "Screen entered - using unified transactions collection", "ui")
         viewModel.refreshOnResume()
     }
 
@@ -392,7 +392,7 @@ fun FinanceScreen(
                     )
                 }
             } else {
-                LogUtils.d("FinanceScreen", "Displaying ${state.transactions.size} transactions", "ui")
+                LogUtils.d("FinanceScreen", "Displaying ${state.transactions.size} transactions from unified collection", "ui")
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
@@ -430,6 +430,13 @@ fun FinanceScreen(
                     }
                 }
             }
+        }
+    }
+    
+    // Display error if any
+    if (state.error != null) {
+        LaunchedEffect(state.error) {
+            LogUtils.e("FinanceScreen", "Error: ${state.error}", category = "ui")
         }
     }
 }
@@ -635,7 +642,7 @@ fun TransactionTypeSelector(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionItem(
-    transaction: Transaction,
+    transaction: UITransaction,
     numberFormat: NumberFormat,
     onEdit: () -> Unit,
     onDelete: () -> Unit

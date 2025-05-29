@@ -7,10 +7,14 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.Account
+import com.petar.smrdici.data.model.AccountType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
@@ -18,6 +22,7 @@ class AccountRepository private constructor() {
     
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val coroutineScope = CoroutineScope(Dispatchers.IO)
     
     private val _accounts = MutableStateFlow<List<Account>>(emptyList())
     val accounts: Flow<List<Account>> = _accounts.asStateFlow()
@@ -25,8 +30,13 @@ class AccountRepository private constructor() {
     private val currentUserId: String
         get() = auth.currentUser?.uid ?: throw IllegalStateException("No authenticated user")
 
-    private val userAccountsCollection
-        get() = firestore.collection("users").document(currentUserId).collection("accounts")
+    // Shared accounts collection
+    private val sharedAccountsCollection
+        get() = firestore.collection("shared_accounts")
+    
+    // Shared transfers collection
+    private val sharedTransfersCollection
+        get() = firestore.collection("shared_transfers")
     
     init {
         loadAccounts()
@@ -34,13 +44,16 @@ class AccountRepository private constructor() {
     }
     
     fun loadAccounts() {
-        val userId = auth.currentUser?.uid ?: return
-        
-        firestore.collection("users").document(userId)
-            .collection("accounts")
+        sharedAccountsCollection
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e(TAG, "Грешка при учитавању рачуна", error)
+                    
+                    // If there's an error, try to create a default account
+                    coroutineScope.launch {
+                        createDefaultAccountIfNeeded()
+                    }
+                    
                     return@addSnapshotListener
                 }
                 
@@ -48,16 +61,56 @@ class AccountRepository private constructor() {
                     doc.toObject(Account::class.java)?.copy(id = doc.id)
                 } ?: emptyList()
                 
-                _accounts.value = accountsList
+                if (accountsList.isEmpty()) {
+                    // If no accounts were found, try to create a default account
+                    coroutineScope.launch {
+                        createDefaultAccountIfNeeded()
+                    }
+                } else {
+                    _accounts.value = accountsList
+                }
             }
+    }
+    
+    // Create a default account if none exist
+    private suspend fun createDefaultAccountIfNeeded() {
+        try {
+            val snapshot = sharedAccountsCollection.get().await()
+            
+            if (snapshot.isEmpty) {
+                Log.d(TAG, "No accounts found, creating default account")
+                
+                // Create a default account
+                val defaultAccountId = UUID.randomUUID().toString()
+                val defaultAccount = Account(
+                    id = defaultAccountId,
+                    userId = currentUserId,
+                    name = "Glavni račun",
+                    balance = 0.0,
+                    currency = Account.DEFAULT_CURRENCY,
+                    color = 0xFF2196F3.toInt(), // Material Blue
+                    isDefault = true,
+                    type = AccountType.CASH,
+                    isActive = true,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis()
+                )
+                
+                addAccount(defaultAccount)
+                
+                // Update the accounts list with the new account
+                _accounts.value = listOf(defaultAccount)
+                
+                Log.d(TAG, "Created default account: $defaultAccountId")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking/creating default account", e)
+        }
     }
     
     suspend fun getAllAccounts(): List<Account> {
         return try {
-            val userId = auth.currentUser?.uid ?: return emptyList()
-            
-            val snapshot = firestore.collection("users").document(userId)
-                .collection("accounts")
+            val snapshot = sharedAccountsCollection
                 .get()
                 .await()
             
@@ -71,11 +124,11 @@ class AccountRepository private constructor() {
     }
     
     suspend fun addAccount(account: Account) {
-        userAccountsCollection.document(account.id).set(account).await()
+        sharedAccountsCollection.document(account.id).set(account).await()
     }
     
     suspend fun updateAccount(account: Account) {
-        userAccountsCollection.document(account.id).set(account).await()
+        sharedAccountsCollection.document(account.id).set(account).await()
     }
     
     /**
@@ -87,12 +140,9 @@ class AccountRepository private constructor() {
     suspend fun updateAccountBalance(accountId: String, amount: Double): Result<Account> {
         return try {
             Log.d(TAG, "Ажурирам баланс рачуна: $accountId за износ: $amount")
-            val userId = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
             
             // Прво добављамо тренутно стање рачуна
-            val docRef = firestore.collection("users").document(userId)
-                .collection("accounts")
-                .document(accountId)
+            val docRef = sharedAccountsCollection.document(accountId)
             
             val docSnapshot = docRef.get().await()
             
@@ -124,7 +174,7 @@ class AccountRepository private constructor() {
     }
     
     suspend fun deleteAccount(accountId: String) {
-        userAccountsCollection.document(accountId).delete().await()
+        sharedAccountsCollection.document(accountId).delete().await()
     }
     
     // Додајемо нову методу за трансфер новца између рачуна
@@ -174,8 +224,7 @@ class AccountRepository private constructor() {
             val db = firestore
             db.runTransaction { transaction ->
                 // 1. Скидамо средства са изворног рачуна
-                val sourceAccountRef = db.collection("users").document(userId)
-                    .collection("accounts").document(sourceAccountId)
+                val sourceAccountRef = sharedAccountsCollection.document(sourceAccountId)
                 
                 val sourceAccount = transaction.get(sourceAccountRef).toObject(Account::class.java)
                     ?: throw IllegalStateException("Не могу да добавим изворни рачун")
@@ -189,8 +238,7 @@ class AccountRepository private constructor() {
                 transaction.set(sourceAccountRef, updatedSourceAccount)
                 
                 // 2. Додајемо средства на циљни рачун
-                val destAccountRef = db.collection("users").document(userId)
-                    .collection("accounts").document(destinationAccountId)
+                val destAccountRef = sharedAccountsCollection.document(destinationAccountId)
                 
                 val destAccount = transaction.get(destAccountRef).toObject(Account::class.java)
                     ?: throw IllegalStateException("Не могу да добавим циљни рачун")
@@ -199,8 +247,7 @@ class AccountRepository private constructor() {
                 transaction.set(destAccountRef, updatedDestAccount)
                 
                 // 3. Додајемо запис о трансферу
-                val transferRef = db.collection("users").document(userId)
-                    .collection("transfers").document(transferId)
+                val transferRef = sharedTransfersCollection.document(transferId)
                 
                 transaction.set(transferRef, transfer)
                 
@@ -223,10 +270,7 @@ class AccountRepository private constructor() {
     // Renamed to avoid conflict and clarify usage
     private suspend fun getAccountByIdSuspend(accountId: String): Account? {
         try {
-            val userId = auth.currentUser?.uid ?: return null
-            
-            val docSnapshot = firestore.collection("users").document(userId)
-                .collection("accounts").document(accountId)
+            val docSnapshot = sharedAccountsCollection.document(accountId)
                 .get().await()
             
             if (!docSnapshot.exists()) {
@@ -243,10 +287,7 @@ class AccountRepository private constructor() {
     // Добављање историје трансфера
     suspend fun getTransferHistory(): List<Map<String, Any>> {
         return try {
-            val userId = auth.currentUser?.uid ?: return emptyList()
-            
-            val snapshot = firestore.collection("users").document(userId)
-                .collection("transfers")
+            val snapshot = sharedTransfersCollection
                 .orderBy("timestamp", Query.Direction.DESCENDING)
                 .get()
                 .await()
@@ -262,12 +303,7 @@ class AccountRepository private constructor() {
     
     // Flow version for UI updates
     fun getAccountByIdFlow(accountId: String): Flow<Account?> = flow {
-        val userId = auth.currentUser?.uid ?: run {
-            emit(null)
-            return@flow
-        }
-        
-        val docSnapshot = userAccountsCollection.document(accountId).get().await()
+        val docSnapshot = sharedAccountsCollection.document(accountId).get().await()
         emit(docSnapshot.toObject(Account::class.java)?.copy(id = accountId))
     }
     
@@ -277,10 +313,7 @@ class AccountRepository private constructor() {
      */
     suspend fun getAccountBalances(): Map<String, Double> {
         return try {
-            val userId = auth.currentUser?.uid ?: return emptyMap()
-            
-            val snapshot = firestore.collection("users").document(userId)
-                .collection("accounts")
+            val snapshot = sharedAccountsCollection
                 .get()
                 .await()
             

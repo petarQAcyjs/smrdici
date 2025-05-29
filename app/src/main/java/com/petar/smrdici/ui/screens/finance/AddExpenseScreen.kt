@@ -59,6 +59,7 @@ import com.petar.smrdici.ui.screens.settings.AccountViewModel
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -91,7 +92,13 @@ fun AddExpenseScreen(
         mutableLongStateOf(
             if (selectedDate != null) {
                 try {
-                    LocalDate.parse(selectedDate).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    // Use UTC time zone consistently to avoid date shifts
+                    val localDate = LocalDate.parse(selectedDate)
+                    // Set to noon UTC to avoid any potential date boundary issues
+                    val instant = localDate.atTime(12, 0)
+                        .atZone(ZoneId.of("UTC"))
+                        .toInstant()
+                    instant.toEpochMilli()
                 } catch (e: Exception) {
                     System.currentTimeMillis()
                 }
@@ -209,9 +216,15 @@ fun AddExpenseScreen(
         if (isLoading) {
             try {
                 val amountValue = amount.toDouble()
+                
+                // Use UTC consistently for date formatting
                 val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
                 dateFormat.timeZone = TimeZone.getTimeZone("UTC")
-                val dateStr = dateFormat.format(Date(selectedDateMillis))
+                
+                // Create a Calendar in UTC to avoid time zone shifts
+                val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                calendar.timeInMillis = selectedDateMillis
+                val dateStr = dateFormat.format(calendar.time)
                 
                 val expense = Expense(
                     id = UUID.randomUUID().toString(),

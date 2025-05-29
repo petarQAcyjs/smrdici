@@ -28,6 +28,10 @@ class AccountViewModel : ViewModel() {
     private val _currentAccount = MutableStateFlow<Account?>(null)
     val currentAccount: StateFlow<Account?> = _currentAccount.asStateFlow()
     
+    // Shared accounts collection
+    private val sharedAccountsCollection
+        get() = firestore.collection("shared_accounts")
+    
     init {
         loadAccounts()
     }
@@ -40,9 +44,8 @@ class AccountViewModel : ViewModel() {
             try {
                 val userId = auth.currentUser?.uid
                 if (userId != null) {
-                    val accountsSnapshot = firestore.collection("users")
-                        .document(userId)
-                        .collection("accounts")
+                    // Use shared_accounts collection instead of user-specific collection
+                    val accountsSnapshot = sharedAccountsCollection
                         .get()
                         .await()
                     
@@ -53,7 +56,7 @@ class AccountViewModel : ViewModel() {
                             if (data != null) {
                                 Account(
                                     id = doc.id,
-                                    userId = userId,
+                                    userId = data["userId"] as? String ?: "",
                                     name = data["name"] as? String ?: "",
                                     balance = (data["balance"] as? Number)?.toDouble() ?: 0.0,
                                     currency = data["currency"] as? String ?: "RSD",
@@ -128,14 +131,11 @@ class AccountViewModel : ViewModel() {
                 type = AccountType.CREDIT_CARD
             )
             
-            // Чувамо рачуне у бази података
-            val userRef = firestore.collection("users").document(userId)
-            val accountsRef = userRef.collection("accounts")
-            
+            // Save accounts to shared collection
             // Чувамо сваки рачун и користимо његов ID као ID документа
-            accountsRef.document(cashAccount.id).set(cashAccount).await()
-            accountsRef.document(bankAccount.id).set(bankAccount).await()
-            accountsRef.document(creditCardAccount.id).set(creditCardAccount).await()
+            sharedAccountsCollection.document(cashAccount.id).set(cashAccount).await()
+            sharedAccountsCollection.document(bankAccount.id).set(bankAccount).await()
+            sharedAccountsCollection.document(creditCardAccount.id).set(creditCardAccount).await()
             
             // Ажурирамо локалну листу рачуна
             _accounts.value = listOf(cashAccount, bankAccount, creditCardAccount)
@@ -149,8 +149,6 @@ class AccountViewModel : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val userId = auth.currentUser?.uid ?: return@launch
-                
                 // Прво проверамо да ли је рачун већ у локалној листи
                 val localAccount = _accounts.value.find { it.id == accountId }
                 if (localAccount != null) {
@@ -160,9 +158,7 @@ class AccountViewModel : ViewModel() {
                 }
                 
                 // Ако није у локалној листи, учитавамо га из Firestore-а
-                val accountDoc = firestore.collection("users")
-                    .document(userId)
-                    .collection("accounts")
+                val accountDoc = sharedAccountsCollection
                     .document(accountId)
                     .get()
                     .await()
@@ -174,7 +170,7 @@ class AccountViewModel : ViewModel() {
                         if (data != null) {
                             val account = Account(
                                 id = accountDoc.id,
-                                userId = userId,
+                                userId = data["userId"] as? String ?: "",
                                 name = data["name"] as? String ?: "",
                                 balance = (data["balance"] as? Number)?.toDouble() ?: 0.0,
                                 currency = data["currency"] as? String ?: "RSD",
@@ -221,13 +217,11 @@ class AccountViewModel : ViewModel() {
                 // Ако је ово први рачун или је означен као подразумевани
                 if (_accounts.value.isEmpty() || newAccount.isDefault) {
                     // Постављамо све остале рачуне да нису подразумевани
-                    setAllAccountsNonDefault(userId)
+                    setAllAccountsNonDefault()
                 }
                 
-                // Чувамо нови рачун
-                firestore.collection("users")
-                    .document(userId)
-                    .collection("accounts")
+                // Чувамо нови рачун у shared collection
+                sharedAccountsCollection
                     .document(newAccountId) // Користимо генерисани ID као ID документа
                     .set(newAccount)
                     .await()
@@ -248,17 +242,13 @@ class AccountViewModel : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val userId = auth.currentUser?.uid ?: return@launch
-                
                 // Ако је ажурирани рачун подразумевани, ажурирамо све остале рачуне
                 if (account.isDefault) {
-                    updateDefaultAccount(userId, account.id)
+                    setAllAccountsNonDefault()
                 }
                 
-                // Ажурирамо рачун
-                firestore.collection("users")
-                    .document(userId)
-                    .collection("accounts")
+                // Ажурирамо рачун у shared collection
+                sharedAccountsCollection
                     .document(account.id)
                     .set(account)
                     .await()
@@ -280,33 +270,15 @@ class AccountViewModel : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val userId = auth.currentUser?.uid ?: return@launch
-                
-                // Проверавамо да ли је рачун подразумевани
-                val accountDoc = firestore.collection("users")
-                    .document(userId)
-                    .collection("accounts")
-                    .document(accountId)
-                    .get()
-                    .await()
-                
-                val isDefault = accountDoc.getBoolean("isDefault") == true
-                
-                // Ако је подразумевани, не дозвољавамо брисање
-                if (isDefault && _accounts.value.size > 1) {
-                    onComplete(false)
-                    return@launch
-                }
-                
-                // Бришемо рачун
-                firestore.collection("users")
-                    .document(userId)
-                    .collection("accounts")
+                // Бришемо рачун из shared collection
+                sharedAccountsCollection
                     .document(accountId)
                     .delete()
                     .await()
                 
+                // Ажурирамо локалну листу рачуна
                 loadAccounts()
+                
                 onComplete(true)
             } catch (e: Exception) {
                 Log.e("AccountViewModel", "Грешка при брисању рачуна", e)
@@ -317,62 +289,32 @@ class AccountViewModel : ViewModel() {
         }
     }
     
-    private suspend fun updateDefaultAccount(userId: String, exceptAccountId: String = "") {
-        // Ажурирамо све рачуне осим изузетог да нису подразумевани
-        val batch = firestore.batch()
-        
-        val accountsSnapshot = firestore.collection("users")
-            .document(userId)
-            .collection("accounts")
-            .get()
-            .await()
-        
-        for (doc in accountsSnapshot.documents) {
-            if (doc.id != exceptAccountId) {
-                val accountRef = firestore.collection("users")
-                    .document(userId)
-                    .collection("accounts")
-                    .document(doc.id)
-                
-                batch.update(accountRef, "isDefault", false)
-            }
-        }
-        
-        batch.commit().await()
-    }
-    
-    private suspend fun setAllAccountsNonDefault(userId: String) {
-        // Ажурирамо све рачуне да нису подразумевани
-        val batch = firestore.batch()
-        
-        val accountsSnapshot = firestore.collection("users")
-            .document(userId)
-            .collection("accounts")
-            .get()
-            .await()
-        
-        for (doc in accountsSnapshot.documents) {
-            val accountRef = firestore.collection("users")
-                .document(userId)
-                .collection("accounts")
-                .document(doc.id)
+    // Update this method to work with shared collection
+    private suspend fun setAllAccountsNonDefault() {
+        try {
+            // Get all accounts from shared collection
+            val accountsSnapshot = sharedAccountsCollection
+                .get()
+                .await()
             
-            batch.update(accountRef, "isDefault", false)
+            // Update each account to not be default
+            for (doc in accountsSnapshot.documents) {
+                sharedAccountsCollection
+                    .document(doc.id)
+                    .update("isDefault", false)
+                    .await()
+            }
+        } catch (e: Exception) {
+            Log.e("AccountViewModel", "Грешка при ажурирању подразумеваних рачуна", e)
         }
-        
-        batch.commit().await()
     }
     
     fun setDefaultAccount(accountId: String, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val userId = auth.currentUser?.uid ?: return@launch
-                
                 // Прво проверавамо да ли рачун постоји
-                val accountDoc = firestore.collection("users")
-                    .document(userId)
-                    .collection("accounts")
+                val accountDoc = sharedAccountsCollection
                     .document(accountId)
                     .get()
                     .await()
@@ -383,12 +325,10 @@ class AccountViewModel : ViewModel() {
                 }
                 
                 // Ажурирамо све рачуне да нису подразумевани
-                updateDefaultAccount(userId, accountId)
+                setAllAccountsNonDefault()
                 
                 // Постављамо изабрани рачун као подразумевани
-                firestore.collection("users")
-                    .document(userId)
-                    .collection("accounts")
+                sharedAccountsCollection
                     .document(accountId)
                     .update("isDefault", true)
                     .await()
