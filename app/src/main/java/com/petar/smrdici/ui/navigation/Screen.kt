@@ -17,7 +17,9 @@ sealed class Screen(val route: String) {
     
     object Profile : Screen("profile")
     object AddEvent : Screen("add_event")
-    object AddExpense : Screen("add_expense")
+    object AddExpense : Screen("add_expense?date={date}") {
+        fun createRoute(date: String? = null) = if (date != null) "add_expense?date=$date" else "add_expense"
+    }
     object AddIncome : Screen("add_income")
     
     object Transfer : Screen("transfer")

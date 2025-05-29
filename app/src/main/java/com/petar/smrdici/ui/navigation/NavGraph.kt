@@ -97,10 +97,21 @@ fun NavGraph(
             AddEventScreen(navController = navController)
         }
         
-        composable(route = Screen.AddExpense.route) {
+        composable(
+            route = Screen.AddExpense.route,
+            arguments = listOf(
+                navArgument("date") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val date = backStackEntry.arguments?.getString("date")
             AddExpenseScreen(
                 onNavigateBack = { navController.popBackStack() },
-                navController = navController
+                navController = navController,
+                selectedDate = date
             )
         }
         
