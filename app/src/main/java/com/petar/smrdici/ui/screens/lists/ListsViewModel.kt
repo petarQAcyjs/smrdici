@@ -215,6 +215,13 @@ class ListsViewModel : ViewModel() {
                 // Спремамо тренутно стање за случај грешке
                 val currentState = _uiState.value
                 
+                // Get the list title for better logging
+                val listTitle = if (currentState is ListsUiState.Success) {
+                    currentState.lists.find { it.id == listId }?.title ?: "непознато"
+                } else "непознато"
+                
+                Log.d("ListsViewModel", "Започињем брисање листе: \"$listTitle\" (ID: $listId) из базе података")
+                
                 // Immediately update the UI to remove the list
                 if (currentState is ListsUiState.Success) {
                     val updatedLists = currentState.lists.filter { it.id != listId }
@@ -227,7 +234,7 @@ class ListsViewModel : ViewModel() {
                     .delete()
                     .addOnSuccessListener {
                         viewModelScope.launch {
-                            Log.d("ListsViewModel", "Листа $listId успешно обрисана")
+                            Log.d("ListsViewModel", "Листа \"$listTitle\" (ID: $listId) је успешно обрисана из Firestore базе података")
                             
                             // Уклањамо ID из сета листа које се бришу
                             _deletingListIds.value -= listId
@@ -241,7 +248,7 @@ class ListsViewModel : ViewModel() {
                     }
                     .addOnFailureListener { e ->
                         viewModelScope.launch {
-                            Log.e("ListsViewModel", "Грешка при брисању листе $listId: ${e.message}")
+                            Log.e("ListsViewModel", "Грешка при брисању листе \"$listTitle\" (ID: $listId) из Firestore базе података: ${e.message}")
                             
                             // Уклањамо ID из сета листа које се бришу
                             _deletingListIds.value -= listId

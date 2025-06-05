@@ -267,6 +267,14 @@ fun ListsScreen(
                                     onDelete = {
                                         lastDeletedList = list
                                         
+                                        // Log local deletion
+                                        Log.d("ListsScreen", "Листа \"${list.title}\" (ID: ${list.id}) је обрисана локално")
+                                        
+                                        // Actually delete the list from Firestore
+                                        list.id?.let { listId ->
+                                            listsViewModel.deleteShoppingList(listId)
+                                        }
+                                        
                                         coroutineScope.launch {
                                             val result = snackbarHostState.showSnackbar(
                                                 message = "Листа \"${list.title}\" је обрисана",
@@ -483,7 +491,7 @@ fun SwipeToDeleteListItem(
     
     LaunchedEffect(confirmDelete) {
         if (confirmDelete && !isDeleted && !isDeletionLocked) {
-            Log.d("SwipeToDeleteListItem", "Брисање листе: ${list.id}")
+            Log.d("SwipeToDeleteListItem", "Корисник потврдио брисање листе: ${list.id}, наслов: ${list.title}")
             
             isDeleted = true
             show = false
