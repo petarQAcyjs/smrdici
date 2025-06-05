@@ -57,6 +57,9 @@ import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.CategoryDropdown
 import com.petar.smrdici.ui.screens.settings.AccountViewModel
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -67,6 +70,7 @@ import java.util.UUID
 fun AddExpenseScreen(
     onNavigateBack: () -> Unit,
     navController: NavController,
+    selectedDate: String? = null,
     authViewModel: AuthViewModel = viewModel(),
     accountViewModel: AccountViewModel = viewModel()
 ) {
@@ -82,7 +86,28 @@ fun AddExpenseScreen(
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
-    var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    
+    // Initialize date with the passed date parameter if available, otherwise use current time
+    var selectedDateMillis by remember { 
+        mutableLongStateOf(
+            if (selectedDate != null) {
+                try {
+                    // Use UTC time zone consistently to avoid date shifts
+                    val localDate = LocalDate.parse(selectedDate)
+                    // Set to noon UTC to avoid any potential date boundary issues
+                    val instant = localDate.atTime(12, 0)
+                        .atZone(ZoneId.of("UTC"))
+                        .toInstant()
+                    instant.toEpochMilli()
+                } catch (e: Exception) {
+                    System.currentTimeMillis()
+                }
+            } else {
+                System.currentTimeMillis()
+            }
+        ) 
+    }
+    
     var selectedAccountId by remember { mutableStateOf("") }
     
     // Стање за грешке
@@ -191,9 +216,15 @@ fun AddExpenseScreen(
         if (isLoading) {
             try {
                 val amountValue = amount.toDouble()
+                
+                // Use UTC consistently for date formatting
                 val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
                 dateFormat.timeZone = TimeZone.getTimeZone("UTC")
-                val dateStr = dateFormat.format(Date(selectedDate))
+                
+                // Create a Calendar in UTC to avoid time zone shifts
+                val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                calendar.timeInMillis = selectedDateMillis
+                val dateStr = dateFormat.format(calendar.time)
                 
                 val expense = Expense(
                     id = UUID.randomUUID().toString(),
@@ -225,7 +256,7 @@ fun AddExpenseScreen(
     // DatePicker дијалог
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDate
+            initialSelectedDateMillis = selectedDateMillis
         )
         
         DatePickerDialog(
@@ -234,7 +265,7 @@ fun AddExpenseScreen(
                 TextButton(
                     onClick = {
                         datePickerState.selectedDateMillis?.let {
-                            selectedDate = it
+                            selectedDateMillis = it
                         }
                         showDatePicker = false
                     }
@@ -345,7 +376,7 @@ fun AddExpenseScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = dateFormatter.format(Date(selectedDate)),
+                        text = dateFormatter.format(Date(selectedDateMillis)),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Icon(

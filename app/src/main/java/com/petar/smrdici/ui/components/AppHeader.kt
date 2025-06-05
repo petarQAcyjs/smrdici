@@ -4,6 +4,7 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -73,42 +73,35 @@ fun AppHeader(
         label = "title scale animation"
     )
 
-    TopAppBar(
+    androidx.compose.material3.CenterAlignedTopAppBar(
         title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .scale(scale)
-                        .then(
-                            if (onTitleLongPress != null) {
-                                Modifier.pointerInput(Unit) {
-                                    detectTapGestures(
-                                        onLongPress = {
-                                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                                            isPressed = true
-                                            scope.launch {
-                                                delay(100)
-                                                isPressed = false
-                                                onTitleLongPress()
-                                            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .scale(scale)
+                    .then(
+                        if (onTitleLongPress != null) {
+                            Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onLongPress = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                        isPressed = true
+                                        scope.launch {
+                                            delay(100)
+                                            isPressed = false
+                                            onTitleLongPress()
                                         }
-                                    )
-                                }
-                            } else {
-                                Modifier
+                                    }
+                                )
                             }
-                        ),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
+                        } else {
+                            Modifier
+                        }
+                    ),
+                color = MaterialTheme.colorScheme.onSurface
+            )
         },
         navigationIcon = {
             if (showBackButton) {
@@ -152,7 +145,7 @@ fun AppHeader(
                 }
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(
+        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
             titleContentColor = MaterialTheme.colorScheme.onSurface
         )

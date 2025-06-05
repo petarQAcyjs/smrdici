@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.screens.lists
 
+import android.util.Log
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -546,6 +547,8 @@ fun ListDetailsScreen(
             DeleteConfirmationDialog(
                 onConfirm = {
                     selectedList?.id?.let { id ->
+                        // Log when user confirms deletion from the dialog
+                        Log.d("ListDetailsScreen", "Корисник потврдио брисање листе \"${selectedList?.title}\" (ID: $id) из дијалога")
                         listsViewModel.deleteShoppingList(id)
                         navController.navigateUp()
                     }

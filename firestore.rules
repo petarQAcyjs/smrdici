@@ -6,9 +6,9 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // Функција за проверу да ли је корисник власник
+    // Функција за проверу да ли је корисник власник документа
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return request.auth != null && request.auth.uid == userId;
     }
     
     // Правила за кориснике и њихове догађаје
@@ -16,28 +16,74 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
     
-    // Правила за календарске догађаје
-    match /calendar_events/{eventId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && 
-                   request.resource.data.createdBy == request.auth.uid;
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+    // Правила за дељене колекције - дозвољавамо свим аутентификованим корисницима
+    match /shared_expenses/{document=**} {
+      allow read, write: if isAuthenticated();
     }
     
-    // Правила за листе за куповину
-    match /shopping_lists/{listId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+    match /shared_incomes/{document=**} {
+      allow read, write: if isAuthenticated();
     }
     
-    // Правила за migration_flags колекцију
-    match /migration_flags/{userId} {
+    match /shared_accounts/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /shared_transfers/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Правила за нову унифицирану колекцију трансакција
+    match /transactions/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Омогућавамо приступ колекцији буџета унутар корисничког документа
+    match /users/{userId}/budgets/{budgetId} {
       allow read, write: if isOwner(userId);
     }
     
+    // Правила за старе буџете (за миграцију података)
+    match /budgets/{budgetId} {
+      allow read, write: if isAuthenticated() && 
+                          (resource == null || request.auth.uid == resource.data.userId);
+    }
+    
+    // Правила за календарске догађаје - сви пријављени корисници могу све
+    match /calendar_events/{eventId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Правила за листе за куповину - сви пријављени корисници могу све
+    match /shopping_lists/{listId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Правила за migration_flags колекцију - сви пријављени корисници могу све
+    match /migration_flags/{userId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Правила за рачуне - сви пријављени корисници могу све
+    match /accounts/{accountId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Правила за трошкове - сви пријављени корисници могу све
+    match /expenses/{expenseId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Правила за приходе - сви пријављени корисници могу све
+    match /incomes/{incomeId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Правила за породичне податке - дозвољавамо свим аутентификованим корисницима
+    match /families/{familyId}/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
     // Основна правила - забрањујемо све остало
     match /{document=**} {
       allow read, write: if false;

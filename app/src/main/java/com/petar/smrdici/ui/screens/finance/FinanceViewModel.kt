@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.petar.smrdici.data.model.Account
 import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.Income
+import com.petar.smrdici.data.model.Transaction
 import com.petar.smrdici.data.repository.ExpenseRepository
 import com.petar.smrdici.data.repository.IncomeRepository
 import com.petar.smrdici.data.repository.AccountRepository
 import com.petar.smrdici.data.repository.SettingsRepository
+import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.ui.screens.settings.Period
 import com.petar.smrdici.util.CurrencyConverter
 import com.petar.smrdici.utils.LogUtils
@@ -100,17 +102,17 @@ sealed class TransactionType {
     }
 }
 
-sealed class Transaction {
+sealed class UITransaction {
     abstract val amount: Double
     abstract val date: String
 }
 
-data class IncomeTransaction(val income: Income) : Transaction() {
+data class IncomeTransaction(val income: Income) : UITransaction() {
     override val amount: Double = income.amount
     override val date: String = income.date
 }
 
-data class ExpenseTransaction(val expense: Expense) : Transaction() {
+data class ExpenseTransaction(val expense: Expense) : UITransaction() {
     override val amount: Double = expense.amount
     override val date: String = expense.date
 }
@@ -119,7 +121,7 @@ data class FinanceScreenState(
     val selectedTimePeriod: TimePeriod = TimePeriod.Month(YearMonth.now()),
     val selectedAccountId: String? = null,
     val selectedTransactionType: TransactionType = TransactionType.Expense,
-    val transactions: List<Transaction> = emptyList(),
+    val transactions: List<UITransaction> = emptyList(),
     val totalAmount: Double = 0.0,
     val totalAmountInEur: Double = 0.0,
     val accountBalances: Map<String, AccountBalance> = emptyMap(),
@@ -140,8 +142,7 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
     private val _state = MutableStateFlow(FinanceScreenState())
     val state: StateFlow<FinanceScreenState> = _state.asStateFlow()
 
-    private val expenseRepository: ExpenseRepository by lazy { ExpenseRepository.getInstance() }
-    private val incomeRepository: IncomeRepository by lazy { IncomeRepository.getInstance() }
+    private val transactionRepository: TransactionRepository by lazy { TransactionRepository.getInstance() }
     private val accountRepository: AccountRepository by lazy { AccountRepository.getInstance() }
 
     init {
@@ -320,49 +321,46 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                     "\nSelected account: ${_state.value.selectedAccountId ?: "All accounts"}",
                     category = "finance")
                 
-                when (_state.value.selectedTransactionType) {
-                    is TransactionType.Income -> {
-                        incomeRepository.getIncomes().collect { incomes ->
-                            LogUtils.d("FinanceViewModel", 
-                                "Received ${incomes.size} incomes before filtering", 
-                                category = "finance")
-                            
-                            val filteredIncomes = incomes.filter { income ->
-                                val incomeDate = LocalDate.parse(income.date, formatter)
-                                (incomeDate.isEqual(startDate) || incomeDate.isAfter(startDate)) &&
-                                (incomeDate.isEqual(endDate) || incomeDate.isBefore(endDate)) &&
-                                (_state.value.selectedAccountId == null || income.accountId == _state.value.selectedAccountId)
-                            }.map { IncomeTransaction(it) }
-                            
-                            LogUtils.i("FinanceViewModel", 
-                                "Filtered to ${filteredIncomes.size} incomes in selected period" +
-                                "\nTotal amount: ${filteredIncomes.sumOf { it.amount }}", 
-                                category = "finance")
-                            
-                            updateTransactionsState(filteredIncomes)
+                // Get all transactions and filter them based on criteria
+                transactionRepository.getAllTransactions().collect { allTransactions ->
+                    LogUtils.d("FinanceViewModel", 
+                        "Received ${allTransactions.size} transactions before filtering", 
+                        category = "finance")
+                    
+                    // Filter transactions based on type, date range, and account
+                    val filteredTransactions = allTransactions.filter { transaction ->
+                        // First filter by transaction type
+                        val matchesType = when (_state.value.selectedTransactionType) {
+                            is TransactionType.Income -> transaction is Income
+                            is TransactionType.Expense -> transaction is Expense
+                        }
+                        
+                        if (!matchesType) return@filter false
+                        
+                        // Then filter by date range
+                        val transactionDate = LocalDate.parse(transaction.date, formatter)
+                        val inDateRange = (transactionDate.isEqual(startDate) || transactionDate.isAfter(startDate)) &&
+                                        (transactionDate.isEqual(endDate) || transactionDate.isBefore(endDate))
+                        
+                        if (!inDateRange) return@filter false
+                        
+                        // Finally filter by account if one is selected
+                        _state.value.selectedAccountId == null || transaction.accountId == _state.value.selectedAccountId
+                    }
+                    
+                    // Convert to UI transaction model
+                    val uiTransactions = filteredTransactions.map { transaction ->
+                        when (transaction) {
+                            is Income -> IncomeTransaction(transaction)
+                            is Expense -> ExpenseTransaction(transaction)
                         }
                     }
-                    is TransactionType.Expense -> {
-                        expenseRepository.getAllExpenses().collect { expenses ->
-                            LogUtils.d("FinanceViewModel", 
-                                "Received ${expenses.size} expenses before filtering", 
-                                category = "finance")
-                            
-                            val filteredExpenses = expenses.filter { expense ->
-                                val expenseDate = LocalDate.parse(expense.date, formatter)
-                                (expenseDate.isEqual(startDate) || expenseDate.isAfter(startDate)) &&
-                                (expenseDate.isEqual(endDate) || expenseDate.isBefore(endDate)) &&
-                                (_state.value.selectedAccountId == null || expense.accountId == _state.value.selectedAccountId)
-                            }.map { ExpenseTransaction(it) }
-                            
-                            LogUtils.i("FinanceViewModel", 
-                                "Filtered to ${filteredExpenses.size} expenses in selected period" +
-                                "\nTotal amount: ${filteredExpenses.sumOf { it.amount }}", 
-                                category = "finance")
-                            
-                            updateTransactionsState(filteredExpenses)
-                        }
-                    }
+                    
+                    LogUtils.i("FinanceViewModel", 
+                        "Filtered to ${uiTransactions.size} transactions in selected period", 
+                        category = "finance")
+                    
+                    updateTransactionsState(uiTransactions)
                 }
             } catch (e: Exception) {
                 LogUtils.e("FinanceViewModel", "Error refreshing data", e, category = "finance")
@@ -374,7 +372,7 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         }
     }
 
-    private fun updateTransactionsState(transactions: List<Transaction>) {
+    private fun updateTransactionsState(transactions: List<UITransaction>) {
         viewModelScope.launch {
             try {
                 // Get current account balances from repository
@@ -460,7 +458,7 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
     fun deleteIncome(incomeId: String) {
         viewModelScope.launch {
             try {
-                incomeRepository.deleteIncome(incomeId)
+                transactionRepository.deleteIncome(incomeId)
                 refreshData()
                 // Force refresh account data to update balances
                 accountRepository.loadAccounts()
@@ -473,7 +471,7 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
     fun deleteExpense(expenseId: String) {
         viewModelScope.launch {
             try {
-                expenseRepository.deleteExpense(expenseId)
+                transactionRepository.deleteExpense(expenseId)
                 refreshData()
                 // Force refresh account data to update balances
                 accountRepository.loadAccounts()

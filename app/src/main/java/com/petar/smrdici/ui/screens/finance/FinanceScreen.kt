@@ -30,6 +30,7 @@ import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.utils.LogUtils
+import org.threeten.bp.LocalDate
 import org.threeten.bp.format.DateTimeFormatter
 import org.threeten.bp.temporal.ChronoUnit
 import java.text.NumberFormat
@@ -49,7 +50,7 @@ fun FinanceScreen(
     
     // Log screen entry and refresh data
     LaunchedEffect(Unit) {
-        LogUtils.i("FinanceScreen", "Screen entered", "ui")
+        LogUtils.i("FinanceScreen", "Screen entered - using unified transactions collection", "ui")
         viewModel.refreshOnResume()
     }
 
@@ -83,7 +84,15 @@ fun FinanceScreen(
                 onClick = {
                     when (state.selectedTransactionType) {
                         is TransactionType.Income -> navController.navigate(Screen.AddIncome.route)
-                        is TransactionType.Expense -> navController.navigate(Screen.AddExpense.route)
+                        is TransactionType.Expense -> {
+                            // Pass the selected date when navigating to AddExpense
+                            val selectedDate = when (val period = state.selectedTimePeriod) {
+                                is TimePeriod.Day -> period.date.toString()
+                                is TimePeriod.Week, is TimePeriod.Month, is TimePeriod.Year, is TimePeriod.Custom -> 
+                                    LocalDate.now().toString() // Default to today for other period types
+                            }
+                            navController.navigate(Screen.AddExpense.createRoute(selectedDate))
+                        }
                     }
                 },
                 containerColor = when (state.selectedTransactionType) {
@@ -383,7 +392,7 @@ fun FinanceScreen(
                     )
                 }
             } else {
-                LogUtils.d("FinanceScreen", "Displaying ${state.transactions.size} transactions", "ui")
+                LogUtils.d("FinanceScreen", "Displaying ${state.transactions.size} transactions from unified collection", "ui")
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
@@ -421,6 +430,13 @@ fun FinanceScreen(
                     }
                 }
             }
+        }
+    }
+    
+    // Display error if any
+    if (state.error != null) {
+        LaunchedEffect(state.error) {
+            LogUtils.e("FinanceScreen", "Error: ${state.error}", category = "ui")
         }
     }
 }
@@ -626,7 +642,7 @@ fun TransactionTypeSelector(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionItem(
-    transaction: Transaction,
+    transaction: UITransaction,
     numberFormat: NumberFormat,
     onEdit: () -> Unit,
     onDelete: () -> Unit

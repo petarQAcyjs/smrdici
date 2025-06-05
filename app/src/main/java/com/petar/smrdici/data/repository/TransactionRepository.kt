@@ -19,18 +19,19 @@ class TransactionRepository private constructor() {
     private val currentUserId: String
         get() = auth.currentUser?.uid ?: throw IllegalStateException("No authenticated user")
 
-    // User-specific collections
-    private val userExpensesCollection
-        get() = firestore.collection("users").document(currentUserId).collection("expenses")
-    
-    private val userIncomesCollection
-        get() = firestore.collection("users").document(currentUserId).collection("incomes")
+    // Single transactions collection
+    private val transactionsCollection
+        get() = firestore.collection("transactions")
         
     // Reference to AccountRepository - initialize directly instead of using lazy
     private val accountRepository = AccountRepository.getInstance()
 
     suspend fun addExpense(expense: Expense) {
-        userExpensesCollection.document(expense.id).set(expense).await()
+        // Add type field to distinguish as expense
+        val expenseData = expense.toMap().toMutableMap()
+        expenseData["type"] = "EXPENSE"
+        
+        transactionsCollection.document(expense.id).set(expenseData).await()
         
         // Update account balance (decrease it)
         try {
@@ -43,7 +44,11 @@ class TransactionRepository private constructor() {
     }
 
     suspend fun addIncome(income: Income) {
-        userIncomesCollection.document(income.id).set(income).await()
+        // Add type field to distinguish as income
+        val incomeData = income.toMap().toMutableMap()
+        incomeData["type"] = "INCOME"
+        
+        transactionsCollection.document(income.id).set(incomeData).await()
         
         // Update account balance (increase it)
         try {
@@ -58,7 +63,7 @@ class TransactionRepository private constructor() {
     suspend fun updateExpense(expense: Expense) {
         try {
             // First get the old expense details to update the account balance
-            val oldExpenseDoc = userExpensesCollection.document(expense.id).get().await()
+            val oldExpenseDoc = transactionsCollection.document(expense.id).get().await()
             
             if (oldExpenseDoc.exists()) {
                 val oldAccountId = oldExpenseDoc.getString("accountId") ?: ""
@@ -72,8 +77,12 @@ class TransactionRepository private constructor() {
                 }
             }
             
+            // Add type field to distinguish as expense
+            val expenseData = expense.toMap().toMutableMap()
+            expenseData["type"] = "EXPENSE"
+            
             // Now update the document
-            userExpensesCollection.document(expense.id).set(expense).await()
+            transactionsCollection.document(expense.id).set(expenseData).await()
             
             // Apply the new expense amount (subtract from the account)
             LogUtils.i("TransactionRepository", "Applying updated expense: accountId=${expense.accountId}, amount=-${expense.amount}", "transaction")
@@ -82,14 +91,19 @@ class TransactionRepository private constructor() {
         } catch (e: Exception) {
             // If there's an error, just update the document without balance changes
             LogUtils.e("TransactionRepository", "Error updating expense with balance adjustment", e, "transaction")
-            userExpensesCollection.document(expense.id).set(expense).await()
+            
+            // Add type field to distinguish as expense
+            val expenseData = expense.toMap().toMutableMap()
+            expenseData["type"] = "EXPENSE"
+            
+            transactionsCollection.document(expense.id).set(expenseData).await()
         }
     }
 
     suspend fun updateIncome(income: Income) {
         try {
             // First get the old income details to update the account balance
-            val oldIncomeDoc = userIncomesCollection.document(income.id).get().await()
+            val oldIncomeDoc = transactionsCollection.document(income.id).get().await()
             
             if (oldIncomeDoc.exists()) {
                 val oldAccountId = oldIncomeDoc.getString("accountId") ?: ""
@@ -103,8 +117,12 @@ class TransactionRepository private constructor() {
                 }
             }
             
+            // Add type field to distinguish as income
+            val incomeData = income.toMap().toMutableMap()
+            incomeData["type"] = "INCOME"
+            
             // Now update the document
-            userIncomesCollection.document(income.id).set(income).await()
+            transactionsCollection.document(income.id).set(incomeData).await()
             
             // Apply the new income amount (add to the account)
             LogUtils.i("TransactionRepository", "Applying updated income: accountId=${income.accountId}, amount=${income.amount}", "transaction")
@@ -113,14 +131,19 @@ class TransactionRepository private constructor() {
         } catch (e: Exception) {
             // If there's an error, just update the document without balance changes
             LogUtils.e("TransactionRepository", "Error updating income with balance adjustment", e, "transaction")
-            userIncomesCollection.document(income.id).set(income).await()
+            
+            // Add type field to distinguish as income
+            val incomeData = income.toMap().toMutableMap()
+            incomeData["type"] = "INCOME"
+            
+            transactionsCollection.document(income.id).set(incomeData).await()
         }
     }
 
     suspend fun deleteExpense(expenseId: String) {
         try {
             // First get the expense details to update the account balance
-            val expenseDoc = userExpensesCollection.document(expenseId).get().await()
+            val expenseDoc = transactionsCollection.document(expenseId).get().await()
             
             if (expenseDoc.exists()) {
                 val accountId = expenseDoc.getString("accountId") ?: ""
@@ -134,19 +157,19 @@ class TransactionRepository private constructor() {
             }
             
             // Now delete the document
-            userExpensesCollection.document(expenseId).delete().await()
+            transactionsCollection.document(expenseId).delete().await()
             
         } catch (e: Exception) {
             LogUtils.e("TransactionRepository", "Error deleting expense with balance adjustment", e, "transaction")
             // Still try to delete the document even if balance update fails
-            userExpensesCollection.document(expenseId).delete().await()
+            transactionsCollection.document(expenseId).delete().await()
         }
     }
 
     suspend fun deleteIncome(incomeId: String) {
         try {
             // First get the income details to update the account balance
-            val incomeDoc = userIncomesCollection.document(incomeId).get().await()
+            val incomeDoc = transactionsCollection.document(incomeId).get().await()
             
             if (incomeDoc.exists()) {
                 val accountId = incomeDoc.getString("accountId") ?: ""
@@ -160,17 +183,17 @@ class TransactionRepository private constructor() {
             }
             
             // Now delete the document
-            userIncomesCollection.document(incomeId).delete().await()
+            transactionsCollection.document(incomeId).delete().await()
             
         } catch (e: Exception) {
             LogUtils.e("TransactionRepository", "Error deleting income with balance adjustment", e, "transaction")
             // Still try to delete the document even if balance update fails
-            userIncomesCollection.document(incomeId).delete().await()
+            transactionsCollection.document(incomeId).delete().await()
         }
     }
 
     fun getExpenses(): Flow<List<Expense>> = flow {
-        val snapshot = userExpensesCollection.get().await()
+        val snapshot = transactionsCollection.whereEqualTo("type", "EXPENSE").get().await()
         val expenses = snapshot.documents.mapNotNull { doc ->
             try {
                 val id = doc.id
@@ -200,20 +223,24 @@ class TransactionRepository private constructor() {
                     id = id,
                     userId = userId,
                     amount = amount,
-                    date = date,
-                    accountId = accountId,
                     description = description,
-                    category = category
+                    category = category,
+                    date = date,
+                    accountId = accountId
                 )
             } catch (e: Exception) {
+                LogUtils.e("TransactionRepository", "Error parsing expense document", e, "transaction")
                 null
             }
         }
         emit(expenses)
+    }.catch { e ->
+        LogUtils.e("TransactionRepository", "Error getting expenses", e, "transaction")
+        emit(emptyList())
     }
 
     fun getIncomes(): Flow<List<Income>> = flow {
-        val snapshot = userIncomesCollection.get().await()
+        val snapshot = transactionsCollection.whereEqualTo("type", "INCOME").get().await()
         val incomes = snapshot.documents.mapNotNull { doc ->
             try {
                 val id = doc.id
@@ -243,22 +270,52 @@ class TransactionRepository private constructor() {
                     id = id,
                     userId = userId,
                     amount = amount,
-                    date = date,
-                    accountId = accountId,
                     description = description,
-                    category = category
+                    category = category,
+                    date = date,
+                    accountId = accountId
                 )
             } catch (e: Exception) {
+                LogUtils.e("TransactionRepository", "Error parsing income document", e, "transaction")
                 null
             }
         }
         emit(incomes)
+    }.catch { e ->
+        LogUtils.e("TransactionRepository", "Error getting incomes", e, "transaction")
+        emit(emptyList())
+    }
+
+    // Helper method to convert Expense to Map
+    private fun Expense.toMap(): Map<String, Any> {
+        return mapOf(
+            "id" to id,
+            "userId" to userId,
+            "amount" to amount,
+            "description" to description,
+            "category" to category,
+            "date" to date,
+            "accountId" to accountId
+        )
+    }
+    
+    // Helper method to convert Income to Map
+    private fun Income.toMap(): Map<String, Any> {
+        return mapOf(
+            "id" to id,
+            "userId" to userId,
+            "amount" to amount,
+            "description" to description,
+            "category" to category,
+            "date" to date,
+            "accountId" to accountId
+        )
     }
 
     fun getExpenseById(expenseId: String): Flow<Expense?> = flow {
-        val doc = userExpensesCollection.document(expenseId).get().await()
+        val doc = transactionsCollection.document(expenseId).get().await()
         
-        if (!doc.exists()) {
+        if (!doc.exists() || doc.getString("type") != "EXPENSE") {
             emit(null)
             return@flow
         }
@@ -290,10 +347,10 @@ class TransactionRepository private constructor() {
             id = id,
             userId = userId,
             amount = amount,
-            date = date,
-            accountId = accountId,
             description = description,
-            category = category
+            category = category,
+            date = date,
+            accountId = accountId
         )
         
         emit(expense)
@@ -303,9 +360,9 @@ class TransactionRepository private constructor() {
     }
 
     fun getIncomeById(incomeId: String): Flow<Income?> = flow {
-        val doc = userIncomesCollection.document(incomeId).get().await()
+        val doc = transactionsCollection.document(incomeId).get().await()
         
-        if (!doc.exists()) {
+        if (!doc.exists() || doc.getString("type") != "INCOME") {
             emit(null)
             return@flow
         }
@@ -337,10 +394,10 @@ class TransactionRepository private constructor() {
             id = id,
             userId = userId,
             amount = amount,
-            date = date,
-            accountId = accountId,
             description = description,
-            category = category
+            category = category,
+            date = date,
+            accountId = accountId
         )
         
         emit(income)
@@ -352,9 +409,9 @@ class TransactionRepository private constructor() {
     // Direct suspend function to get expense by ID without using Flow
     suspend fun getExpenseByIdDirect(expenseId: String): Expense? {
         return try {
-            val doc = userExpensesCollection.document(expenseId).get().await()
+            val doc = transactionsCollection.document(expenseId).get().await()
             
-            if (!doc.exists()) {
+            if (!doc.exists() || doc.getString("type") != "EXPENSE") {
                 return null
             }
             
@@ -385,10 +442,10 @@ class TransactionRepository private constructor() {
                 id = id,
                 userId = userId,
                 amount = amount,
-                date = date,
-                accountId = accountId,
                 description = description,
-                category = category
+                category = category,
+                date = date,
+                accountId = accountId
             )
         } catch (e: Exception) {
             LogUtils.e("TransactionRepository", "Error getting expense by ID directly: $expenseId", e, "transaction")
@@ -399,9 +456,9 @@ class TransactionRepository private constructor() {
     // Direct suspend function to get income by ID without using Flow
     suspend fun getIncomeByIdDirect(incomeId: String): Income? {
         return try {
-            val doc = userIncomesCollection.document(incomeId).get().await()
+            val doc = transactionsCollection.document(incomeId).get().await()
             
-            if (!doc.exists()) {
+            if (!doc.exists() || doc.getString("type") != "INCOME") {
                 return null
             }
             
@@ -432,10 +489,10 @@ class TransactionRepository private constructor() {
                 id = id,
                 userId = userId,
                 amount = amount,
-                date = date,
-                accountId = accountId,
                 description = description,
-                category = category
+                category = category,
+                date = date,
+                accountId = accountId
             )
         } catch (e: Exception) {
             LogUtils.e("TransactionRepository", "Error getting income by ID directly: $incomeId", e, "transaction")
@@ -443,10 +500,83 @@ class TransactionRepository private constructor() {
         }
     }
 
+    // Method to get all transactions (both income and expense)
+    fun getAllTransactions(): Flow<List<Transaction>> = flow {
+        try {
+            LogUtils.d("TransactionRepository", "Getting all transactions from unified collection", "transaction")
+            val snapshot = transactionsCollection.get().await()
+            
+            val transactions = snapshot.documents.mapNotNull { doc ->
+                try {
+                    val id = doc.id
+                    val userId = doc.getString("userId") ?: currentUserId
+                    val amount = doc.getDouble("amount") ?: 0.0
+                    val description = doc.getString("description") ?: ""
+                    val category = doc.getString("category") ?: ""
+                    val accountId = doc.getString("accountId") ?: ""
+                    val type = doc.getString("type") ?: ""
+                    val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+                    val updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
+                    
+                    // Get date from document
+                    val dateField = doc.get("date")
+                    val date = when (dateField) {
+                        is com.google.firebase.Timestamp -> {
+                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            dateFormat.format(dateField.toDate())
+                        }
+                        is String -> dateField
+                        else -> {
+                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            dateFormat.format(java.util.Date())
+                        }
+                    }
+                    
+                    when (type) {
+                        "INCOME" -> Income(
+                            id = id,
+                            userId = userId,
+                            amount = amount,
+                            description = description,
+                            category = category,
+                            date = date,
+                            accountId = accountId,
+                            createdAt = createdAt,
+                            updatedAt = updatedAt
+                        )
+                        "EXPENSE" -> Expense(
+                            id = id,
+                            userId = userId,
+                            amount = amount,
+                            description = description,
+                            category = category,
+                            date = date,
+                            accountId = accountId,
+                            createdAt = createdAt,
+                            updatedAt = updatedAt
+                        )
+                        else -> null
+                    }
+                } catch (e: Exception) {
+                    LogUtils.e("TransactionRepository", "Error parsing transaction document", e, "transaction")
+                    null
+                }
+            }
+            
+            LogUtils.i("TransactionRepository", "Retrieved ${transactions.size} transactions from unified collection", "transaction")
+            emit(transactions)
+        } catch (e: Exception) {
+            LogUtils.e("TransactionRepository", "Error getting all transactions", e, "transaction")
+            emit(emptyList())
+        }
+    }
+
     companion object {
         @Volatile
         private var instance: TransactionRepository? = null
-
+        
         fun getInstance(): TransactionRepository {
             return instance ?: synchronized(this) {
                 instance ?: TransactionRepository().also { instance = it }

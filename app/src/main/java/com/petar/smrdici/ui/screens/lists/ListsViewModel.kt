@@ -30,6 +30,10 @@ class ListsViewModel : ViewModel() {
     private val _deletingListIds = MutableStateFlow<Set<String>>(emptySet())
     val deletingListIds: StateFlow<Set<String>> = _deletingListIds
 
+    // Add a state to track lists being restored
+    private val _restoringListIds = MutableStateFlow<Set<String>>(emptySet())
+    val restoringListIds: StateFlow<Set<String>> = _restoringListIds
+
     private val _editingItemId = MutableStateFlow<String?>(null)
     val editingItemId: StateFlow<String?> = _editingItemId.asStateFlow()
 
@@ -199,9 +203,9 @@ class ListsViewModel : ViewModel() {
     fun deleteShoppingList(listId: String) {
         viewModelScope.launch {
             try {
-                // Проверавамо да ли је листа већ у процесу брисања
-                if (_deletingListIds.value.contains(listId)) {
-                    Log.w("ListsViewModel", "Листа $listId је већ у процесу брисања")
+                // Проверавамо да ли је листа већ у процесу брисања или враћања
+                if (_deletingListIds.value.contains(listId) || _restoringListIds.value.contains(listId)) {
+                    Log.w("ListsViewModel", "Листа $listId је већ у процесу брисања или враћања")
                     return@launch
                 }
                 
@@ -211,12 +215,26 @@ class ListsViewModel : ViewModel() {
                 // Спремамо тренутно стање за случај грешке
                 val currentState = _uiState.value
                 
+                // Get the list title for better logging
+                val listTitle = if (currentState is ListsUiState.Success) {
+                    currentState.lists.find { it.id == listId }?.title ?: "непознато"
+                } else "непознато"
+                
+                Log.d("ListsViewModel", "Започињем брисање листе: \"$listTitle\" (ID: $listId) из базе података")
+                
+                // Immediately update the UI to remove the list
+                if (currentState is ListsUiState.Success) {
+                    val updatedLists = currentState.lists.filter { it.id != listId }
+                    _uiState.value = ListsUiState.Success(updatedLists)
+                }
+                
+                // Then delete from Firestore
                 firestore.collection("shopping_lists")
                     .document(listId)
                     .delete()
                     .addOnSuccessListener {
                         viewModelScope.launch {
-                            Log.d("ListsViewModel", "Листа $listId успешно обрисана")
+                            Log.d("ListsViewModel", "Листа \"$listTitle\" (ID: $listId) је успешно обрисана из Firestore базе података")
                             
                             // Уклањамо ID из сета листа које се бришу
                             _deletingListIds.value -= listId
@@ -230,7 +248,7 @@ class ListsViewModel : ViewModel() {
                     }
                     .addOnFailureListener { e ->
                         viewModelScope.launch {
-                            Log.e("ListsViewModel", "Грешка при брисању листе $listId: ${e.message}")
+                            Log.e("ListsViewModel", "Грешка при брисању листе \"$listTitle\" (ID: $listId) из Firestore базе података: ${e.message}")
                             
                             // Уклањамо ID из сета листа које се бришу
                             _deletingListIds.value -= listId
@@ -499,10 +517,13 @@ class ListsViewModel : ViewModel() {
                 }
                 
                 // Проверавамо да ли је ова листа већ у процесу брисања или враћања
-                if (_deletingListIds.value.contains(listId)) {
-                    Log.w("ListsViewModel", "Листа $listId је у процесу брисања, не можемо је вратити")
+                if (_deletingListIds.value.contains(listId) || _restoringListIds.value.contains(listId)) {
+                    Log.w("ListsViewModel", "Листа $listId је у процесу брисања или враћања, не можемо је вратити")
                     return@launch
                 }
+                
+                // Add to restoring set
+                _restoringListIds.value += listId
                 
                 // Спремамо тренутне листе у случају да треба да вратимо претходно стање
                 val currentState = _uiState.value
@@ -511,21 +532,27 @@ class ListsViewModel : ViewModel() {
                 // Правимо копију листе без ID-а да бисмо је додали у Firestore
                 val listToRestore = list.copy()
                 
-                // Проактивно ажурирамо UI - додајемо листу назад у листе
-                if (currentState is ListsUiState.Success) {
-                    val updatedLists = currentLists + listOf(list)
-                    _uiState.value = ListsUiState.Success(updatedLists.sortedByDescending { it.createdAt.seconds })
-                }
-                
                 // Додајемо листу назад у Firestore
                 firestore.collection("shopping_lists")
                     .document(listId) // Користимо исти ID
                     .set(listToRestore)
                     .addOnSuccessListener { documentReference ->
                         Log.d("ListsViewModel", "Листа $listId успешно враћена")
+                        // Remove from restoring set
+                        _restoringListIds.value -= listId
+                        
+                        // Reload lists to ensure UI is refreshed with the latest data
+                        // Add a delay to ensure the UI has time to update
+                        viewModelScope.launch {
+                            delay(500) // 500ms delay
+                            loadLists()
+                        }
                     }
                     .addOnFailureListener { e ->
                         Log.e("ListsViewModel", "Грешка приликом враћања листе ${listId}: ${e.message}")
+                        
+                        // Remove from restoring set
+                        _restoringListIds.value -= listId
                         
                         // У случају грешке, враћамо оригинално стање UI-а
                         if (currentState is ListsUiState.Success) {
@@ -538,6 +565,11 @@ class ListsViewModel : ViewModel() {
                 // У случају грешке, ажурирамо UI стање
                 Log.e("ListsViewModel", "Општа грешка приликом враћања листе: ${e.message}")
                 _uiState.value = ListsUiState.Error("Грешка приликом враћања листе: ${e.message}")
+                
+                // Make sure to clear from restoring set in case of exception
+                list.id?.let { listId ->
+                    _restoringListIds.value -= listId
+                }
             }
         }
     }

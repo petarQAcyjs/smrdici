@@ -15,6 +15,10 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import java.util.Date
 import java.util.UUID
+import com.google.firebase.Timestamp
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 class ExpenseRepository private constructor() {
     private val firestore = FirebaseFirestore.getInstance()
@@ -33,11 +37,25 @@ class ExpenseRepository private constructor() {
     private val currentUserId: String?
         get() = auth.currentUser?.uid
     
-    // Добијање колекције расхода за тренутног корисника
+    // Shared expenses collection
+    private val sharedExpensesCollection
+        get() = firestore.collection("shared_expenses")
+    
+    // Legacy: Добијање колекције расхода за тренутног корисника
     private val userExpensesCollection
         get() = currentUserId?.let { uid ->
             firestore.collection("users").document(uid).collection("expenses")
         }
+    
+    // Helper function to convert LocalDate to Timestamp
+    private fun localDateToTimestamp(date: LocalDate): Timestamp {
+        return Timestamp(date.atStartOfDay(ZoneId.systemDefault()).toInstant().epochSecond, 0)
+    }
+    
+    // Helper function to convert LocalDateTime to Timestamp
+    private fun localDateTimeToTimestamp(dateTime: LocalDateTime): Timestamp {
+        return Timestamp(dateTime.atZone(ZoneId.systemDefault()).toInstant().epochSecond, 0)
+    }
     
     // Додавање новог расхода
     suspend fun addExpense(expense: Expense, updateAccountBalance: Boolean = true): Result<Expense> {
@@ -46,8 +64,6 @@ class ExpenseRepository private constructor() {
                 LogUtils.d("ExpenseRepository", "Корисник није пријављен, не могу додати расход", category = "expense")
                 return Result.failure(IllegalStateException("Корисник није пријављен"))
             }
-            
-            val collection = userExpensesCollection ?: return Result.failure(IllegalStateException("Корисник није пријављен"))
             
             LogUtils.i("ExpenseRepository", "Dodajem rashod: $expense", category = "expense")
             
@@ -77,14 +93,14 @@ class ExpenseRepository private constructor() {
                 "amount" to expense.amount,
                 "description" to expense.description,
                 "category" to expense.category,
-                "date" to com.google.firebase.Timestamp(dateObject),
+                "date" to Timestamp(dateObject),
                 "accountId" to expense.accountId,
                 "createdAt" to expense.createdAt,
                 "updatedAt" to expense.updatedAt
             )
             
-            // Чувамо расход у бази података
-            collection.document(expenseId).set(expenseMap).await()
+            // Чувамо расход у бази података (shared collection)
+            sharedExpensesCollection.document(expenseId).set(expenseMap).await()
             
             // Ажурирамо баланс рачуна (смањујемо га) само ако је затражено
             if (updateAccountBalance) {
@@ -112,8 +128,8 @@ class ExpenseRepository private constructor() {
             }
             
             // Прво налазимо стари расход да бисмо добили стари износ
-            val oldExpenseDoc = userExpensesCollection?.document(expense.id)?.get()?.await()
-            val oldExpense = oldExpenseDoc?.toObject(Expense::class.java)
+            val oldExpenseDoc = sharedExpensesCollection.document(expense.id).get().await()
+            val oldExpense = oldExpenseDoc.toObject(Expense::class.java)
             
             // Осигурамо да имамо валидан датум у формату "YYYY-MM-DD"
             val validDate = if (expense.date.isEmpty() || !expense.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
@@ -137,12 +153,12 @@ class ExpenseRepository private constructor() {
                 "amount" to expenseToUpdate.amount,
                 "description" to expenseToUpdate.description,
                 "category" to expenseToUpdate.category,
-                "date" to com.google.firebase.Timestamp(dateObject),
+                "date" to Timestamp(dateObject),
                 "accountId" to expenseToUpdate.accountId
             )
             
-            // Ажурирамо расход у бази података
-            userExpensesCollection?.document(expenseToUpdate.id)?.set(expenseMap)?.await()
+            // Ажурирамо расход у бази података (shared collection)
+            sharedExpensesCollection.document(expenseToUpdate.id).set(expenseMap).await()
             
             // Ажурирамо баланс рачуна
             if (oldExpense != null) {
@@ -173,16 +189,16 @@ class ExpenseRepository private constructor() {
             }
             
             // Прво налазимо расход да бисмо добили износ и ID рачуна
-            val expenseDoc = userExpensesCollection?.document(expenseId)?.get()?.await()
+            val expenseDoc = sharedExpensesCollection.document(expenseId).get().await()
             
             // Instead of using toObject which requires a no-arg constructor, manually extract the fields
-            val accountId = expenseDoc?.getString("accountId") ?: ""
-            val amount = expenseDoc?.getDouble("amount") ?: 0.0
+            val accountId = expenseDoc.getString("accountId") ?: ""
+            val amount = expenseDoc.getDouble("amount") ?: 0.0
             
             // Only proceed if we have valid data
             if (accountId.isNotEmpty() && amount > 0) {
-                // Бришемо расход из базе података
-                userExpensesCollection?.document(expenseId)?.delete()?.await()
+                // Бришемо расход из базе података (shared collection)
+                sharedExpensesCollection.document(expenseId).delete().await()
                 
                 // Враћамо баланс рачуна (повећавамо га)
                 accountRepository?.updateAccountBalance(accountId, amount)
@@ -201,520 +217,218 @@ class ExpenseRepository private constructor() {
         }
     }
     
-    // Добијање свих расхода за тренутног корисника
-    fun getAllExpenses(): Flow<List<Expense>> = callbackFlow {
-        LogUtils.i("ExpenseRepository", "Учитавам све расходе", category = "expense")
-        
-        if (currentUserId == null) {
-            LogUtils.d("ExpenseRepository", "Корисник није пријављен, враћам празну листу", category = "expense")
-            trySend(emptyList())
-            awaitClose()
-            return@callbackFlow
-        }
-        
-        val collection = userExpensesCollection
-        if (collection == null) {
-            trySend(emptyList())
-            awaitClose()
-            return@callbackFlow
-        }
-        
-        val listener = collection
-            .orderBy("date", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("ExpenseRepository", "Грешка при слушању расхода", error)
-                    close(error)
-                    return@addSnapshotListener
-                }
-                
-                val expenses = snapshot?.documents?.mapNotNull { doc ->
-                    try {
-                        val id = doc.id
-                        val amount = doc.getDouble("amount") ?: 0.0
-                        val description = doc.getString("description") ?: ""
-                        val category = doc.getString("category") ?: ""
-                        val accountId = doc.getString("accountId") ?: ""
-                        
-                        // Poboljšana konverzija datuma
-                        val date = getDateFromDocument(doc)
-                        
-                        Expense(
-                            id = id,
-                            userId = currentUserId ?: "",
-                            amount = amount,
-                            date = date,
-                            accountId = accountId,
-                            description = description,
-                            category = category
-                        )
-                    } catch (e: Exception) {
-                        Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
-                        null
-                    }
-                } ?: emptyList()
-                
-                // Log samo ukupan broj i statistike umesto pojedinačnih stavki
-                if (expenses.isNotEmpty()) {
-                    val totalAmount = expenses.sumOf { it.amount }
-                    val avgAmount = totalAmount / expenses.size.toDouble()
-                    val minAmount = expenses.minOfOrNull { it.amount } ?: 0.0
-                    val maxAmount = expenses.maxOfOrNull { it.amount } ?: 0.0
-                    
-                    LogUtils.i("ExpenseRepository", 
-                        "Učitano ${expenses.size} rashoda. " +
-                        "Ukupno: $totalAmount, Prosek: $avgAmount, Min: $minAmount, Max: $maxAmount", 
-                        category = "expense")
-                }
-                
-                // Ažuriramo lokalni keš
-                _expenses.value = expenses
-                
-                // Šaljemo novu listu
-                trySend(expenses)
-            }
-        
-        // IMPORTANT: This ensures the listener is removed when the flow is cancelled
-        awaitClose {
-            LogUtils.d("ExpenseRepository", "Затварам listener за расходе", category = "expense")
-            listener.remove()
-        }
-    }
-    
-    // Освежавање листе расхода (користи се интерно)
-    private suspend fun refreshExpenses() {
-        try {
-            LogUtils.d("ExpenseRepository", "Osvežavam listu rashoda", category = "expense")
-            
-            val snapshot = userExpensesCollection?.get()?.await()
-            
-            val expenses = snapshot?.documents?.mapNotNull { doc ->
-                try {
-                    val id = doc.id
-                    val amount = doc.getDouble("amount") ?: 0.0
-                    val description = doc.getString("description") ?: ""
-                    val category = doc.getString("category") ?: ""
-                    val accountId = doc.getString("accountId") ?: ""
-                    
-                    // Poboljšana konverzija datuma
-                    val date = getDateFromDocument(doc)
-                    
-                    Expense(
-                        id = id,
-                        userId = currentUserId ?: "",
-                        amount = amount,
-                        date = date,
-                        accountId = accountId,
-                        description = description,
-                        category = category
-                    )
-                } catch (e: Exception) {
-                    Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
-                    null
-                }
-            } ?: emptyList()
-            
-            // Logujemo samo ukupan broj i statistike
-            if (expenses.isNotEmpty()) {
-                val totalAmount = expenses.sumOf { it.amount }
-                val avgAmount = totalAmount / expenses.size.toDouble()
-                
-                LogUtils.d("ExpenseRepository", 
-                    "Osveženo ${expenses.size} rashoda. Ukupno: $totalAmount, Prosek: $avgAmount", 
-                    category = "expense")
-            } else {
-                LogUtils.d("ExpenseRepository", "Nema rashoda za osvežavanje", category = "expense")
-            }
-            
-            _expenses.value = expenses
-        } catch (e: Exception) {
-            LogUtils.e("ExpenseRepository", "Greška pri osvežavanju rashoda", e, category = "expense")
-        }
-    }
-    
-    // Додајемо методу за добијање трошкова за одређени период
-    fun getExpensesForPeriod(startDate: Date, endDate: Date): Flow<List<Expense>> = callbackFlow {
-        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-        
-        val startDateStr = dateFormat.format(startDate)
-        val endDateStr = dateFormat.format(endDate)
-        
-        Log.d("ExpenseRepository", "Учитавам трошкове за период од $startDateStr до $endDateStr")
-        
-        if (currentUserId == null) {
-            LogUtils.d("ExpenseRepository", "Корисник није пријављен, враћам празну листу", category = "expense")
-            trySend(emptyList())
-            awaitClose()
-            return@callbackFlow
-        }
-        
-        val collection = userExpensesCollection
-        if (collection == null) {
-            trySend(emptyList())
-            awaitClose()
-            return@callbackFlow
-        }
-        
-        val listener = collection
-            .whereGreaterThanOrEqualTo("date", startDateStr)
-            .whereLessThanOrEqualTo("date", endDateStr)
-            .orderBy("date", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("ExpenseRepository", "Грешка при слушању расхода за период", error)
-                    
-                    // Проверавамо да ли је грешка везана за недостајући индекс
-                    if (error.message?.contains("FAILED_PRECONDITION") == true && 
-                        error.message?.contains("The query requires an index") == true) {
-                        
-                        // Извлачимо URL за креирање индекса из поруке о грешци
-                        val indexUrl = error.message?.let { msg ->
-                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
-                            val matchResult = urlPattern.find(msg)
-                            matchResult?.value
-                        }
-                        
-                        LogUtils.e("ExpenseRepository", "Potrebno je kreirati indeks u Firebase konzoli. " +
-                               "Koristite sledeći link: $indexUrl", category = "expense")
-                        
-                        // Шаљемо празну листу уместо да затворимо flow са грешком
-                        trySend(emptyList())
-                    } else {
-                        close(error)
-                    }
-                    return@addSnapshotListener
-                }
-                
-                val expenses = snapshot?.documents?.mapNotNull { doc ->
-                    try {
-                        val id = doc.id
-                        val amount = doc.getDouble("amount") ?: 0.0
-                        val description = doc.getString("description") ?: ""
-                        val category = doc.getString("category") ?: ""
-                        val accountId = doc.getString("accountId") ?: ""
-                        
-                        // Poboljšana konverzija datuma
-                        val date = getDateFromDocument(doc)
-                        
-                        Expense(
-                            id = id,
-                            userId = currentUserId ?: "",
-                            amount = amount,
-                            date = date,
-                            accountId = accountId,
-                            description = description,
-                            category = category
-                        )
-                    } catch (e: Exception) {
-                        Log.e("ExpenseRepository", "Грешка при конверзији документа у Expense", e)
-                        null
-                    }
-                } ?: emptyList()
-                
-                Log.d("ExpenseRepository", "Учитано ${expenses.size} расхода за период")
-                trySend(expenses)
-            }
-        
-        // IMPORTANT: This ensures the listener is removed when the flow is cancelled
-        awaitClose { 
-            LogUtils.d("ExpenseRepository", "Затварам listener за расходе за период", category = "expense")
-            listener.remove() 
-        }
-    }
-    
-    // Добијање расхода за одређени рачун
-    fun getExpensesForAccount(accountId: String): Flow<List<Expense>> = callbackFlow {
-        LogUtils.i("ExpenseRepository", "Učitavam troškove za račun: $accountId", category = "expense")
-        
-        if (currentUserId == null) {
-            LogUtils.d("ExpenseRepository", "Корисник није пријављен, враћам празну листу", category = "expense")
-            trySend(emptyList())
-            return@callbackFlow
-        }
-        
-        val collection = userExpensesCollection ?: return@callbackFlow
-        
-        val listener = collection
-            .whereEqualTo("accountId", accountId)
-            .orderBy("date", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("ExpenseRepository", "Грешка при слушању расхода за рачун", error)
-                    
-                    // Проверавамо да ли је грешка везана за недостајући индекс
-                    if (error.message?.contains("FAILED_PRECONDITION") == true && 
-                        error.message?.contains("The query requires an index") == true) {
-                        
-                        // Извлачимо URL за креирање индекса из поруке о грешци
-                        val indexUrl = error.message?.let { msg ->
-                            val urlPattern = "https://console\\.firebase\\.google\\.com\\S+".toRegex()
-                            val matchResult = urlPattern.find(msg)
-                            matchResult?.value
-                        }
-                        
-                        LogUtils.e("ExpenseRepository", "Potrebno je kreirati indeks u Firebase konzoli. " +
-                               "Koristite sledeći link: $indexUrl", category = "expense")
-                        
-                        // Шаљемо празну листу уместо да затворимо flow са грешком
-                        trySend(emptyList())
-                    } else {
-                        close(error)
-                    }
-                    return@addSnapshotListener
-                }
-                
-                val expenses = snapshot?.documents?.mapNotNull { doc ->
-                    try {
-                        val id = doc.id
-                        val amount = doc.getDouble("amount") ?: 0.0
-                        val description = doc.getString("description") ?: ""
-                        val category = doc.getString("category") ?: ""
-                        val accountId = doc.getString("accountId") ?: ""
-                        
-                        // Poboljšana konverzija datuma
-                        val date = getDateFromDocument(doc)
-                        
-                        Expense(
-                            id = id,
-                            userId = currentUserId ?: "",
-                            amount = amount,
-                            date = date,
-                            accountId = accountId,
-                            description = description,
-                            category = category
-                        )
-                    } catch (e: Exception) {
-                        LogUtils.e("ExpenseRepository", "Greška pri konverziji dokumenta u Expense", e, category = "expense")
-                        null
-                    }
-                } ?: emptyList()
-                
-                // Log samo ukupan broj i statistike umesto pojedinačnih stavki
-                if (expenses.isNotEmpty()) {
-                    val totalAmount = expenses.sumOf { it.amount }
-                    val avgAmount = if (expenses.isNotEmpty()) totalAmount / expenses.size else 0.0
-                    val minAmount = expenses.minOfOrNull { it.amount } ?: 0.0
-                    val maxAmount = expenses.maxOfOrNull { it.amount } ?: 0.0
-                    
-                    LogUtils.i("ExpenseRepository", 
-                        "Učitano ${expenses.size} rashoda za račun $accountId. " +
-                        "Ukupno: $totalAmount, Prosek: $avgAmount, Min: $minAmount, Max: $maxAmount", 
-                        category = "expense")
-                    
-                    // Samo u VERBOSE modu prikazati distribuciju vrednosti (opciono)
-                    if (LogUtils.Config.DETAIL_LEVEL == LogUtils.DetailLevel.VERBOSE) {
-                        // Grupisati po kategorijama za bolji pregled
-                        val categoryDistribution = expenses.groupBy { it.category }
-                            .mapValues { entry -> entry.value.sumOf { it.amount } }
-                        
-                        LogUtils.d("ExpenseRepository", "Distribucija troškova po kategorijama za račun $accountId: $categoryDistribution", 
-                            category = "expense")
-                        
-                        // Grupisati po opsegu vrednosti
-                        val valueDistribution = expenses.groupBy { expense ->
-                            when {
-                                expense.amount < 1000 -> "< 1,000"
-                                expense.amount < 5000 -> "1,000 - 5,000"
-                                expense.amount < 10000 -> "5,000 - 10,000"
-                                else -> "> 10,000"
-                            }
-                        }.mapValues { it.value.size }
-                        
-                        LogUtils.d("ExpenseRepository", "Distribucija troškova po iznosima za račun $accountId: $valueDistribution", 
-                            category = "expense")
-                    }
-                } else {
-                    LogUtils.i("ExpenseRepository", "Nema učitanih rashoda za račun $accountId.", category = "expense")
-                }
-                
-                trySend(expenses)
-            }
-        
-        awaitClose { 
-            LogUtils.d("ExpenseRepository", "Zatvaram listener za rashode za račun", category = "expense")
-            listener.remove() 
-        }
-    }
-    
-    // Добијање свих расхода као Flow за observovanje
-    fun getExpenses(): Flow<List<Expense>> {
-        return _expenses.asStateFlow()
-    }
-    
-    // Брисање свих расхода (за операцију увоза)
-    suspend fun deleteAllExpenses() {
-        try {
-            Log.d("ExpenseRepository", "Бришем све расходе")
-            
-            val snapshot = userExpensesCollection?.get()?.await()
-            
-            val batch = firestore.batch()
-            for (document in snapshot?.documents ?: emptyList()) {
-                batch.delete(userExpensesCollection?.document(document.id) ?: continue)
-            }
-            
-            batch.commit().await()
-            
-            // Освежавање локалног кеша
-            _expenses.value = emptyList()
-            
-            Log.d("ExpenseRepository", "Сви расходи су обрисани")
-        } catch (e: Exception) {
-            Log.e("ExpenseRepository", "Грешка при брисању свих расхода", e)
-        }
-    }
-    
-    // Dobijanje rashoda za određeni račun i period
-    fun getExpensesForAccount(accountId: String, startDate: Date, endDate: Date): List<Expense> {
-        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-        
-        val startDateStr = dateFormat.format(startDate)
-        val endDateStr = dateFormat.format(endDate)
-        
-        LogUtils.d("ExpenseRepository", "Učitavam troškove za račun: $accountId i period od $startDateStr do $endDateStr", 
-            category = "expense")
-        
-        if (currentUserId == null) {
-            LogUtils.d("ExpenseRepository", "Корисник није пријављен, враћам празну листу", category = "expense")
-            return emptyList()
-        }
-        
-        try {
-            // Filtriramo rashode za račun u datom vremenskom periodu
-            val expenses = _expenses.value.filter { expense -> 
-                expense.accountId == accountId &&
-                expense.date >= startDateStr &&
-                expense.date <= endDateStr
-            }
-            
-            // Logujemo samo ukupan broj i statistike
-            if (expenses.isNotEmpty()) {
-                val totalAmount = expenses.sumOf { it.amount }
-                val avgAmount = if (expenses.isNotEmpty()) totalAmount / expenses.size else 0.0
-                
-                LogUtils.d("ExpenseRepository", 
-                    "Filtrirano ${expenses.size} rashoda za račun $accountId i period. " +
-                    "Ukupno: $totalAmount, Prosek: $avgAmount", 
-                    category = "expense")
-                
-                // Samo u VERBOSE modu prikazati distribuciju po datumima
-                if (LogUtils.Config.DETAIL_LEVEL == LogUtils.DetailLevel.VERBOSE) {
-                    // Grupisati po mesecima za bolji pregled
-                    val monthDistribution = expenses.groupBy { 
-                        val parts = it.date.split("-")
-                        if (parts.size >= 2) "${parts[0]}-${parts[1]}" else it.date 
-                    }.mapValues { it.value.sumOf { expense -> expense.amount } }
-                    
-                    LogUtils.d("ExpenseRepository", "Mesečna distribucija troškova za period: $monthDistribution", 
-                        category = "expense")
-                }
-            } else {
-                LogUtils.d("ExpenseRepository", "Nema rashoda za račun $accountId u periodu od $startDateStr do $endDateStr", 
-                    category = "expense")
-            }
-            
-            return expenses
-        } catch (e: Exception) {
-            LogUtils.e("ExpenseRepository", "Greška pri filtriranju rashoda za račun i period", e, category = "expense")
-            return emptyList()
-        }
-    }
-    
-    // Добијање расхода по ID-у
+    // Get expense by ID
     suspend fun getExpenseById(expenseId: String): Expense? {
         return try {
-            LogUtils.d("ExpenseRepository", "Учитавам расход по ID-у: $expenseId", category = "expense")
-            
-            if (currentUserId == null) {
-                LogUtils.d("ExpenseRepository", "Корисник није пријављен", category = "expense")
+            val expenseDoc = sharedExpensesCollection.document(expenseId).get().await()
+            if (!expenseDoc.exists()) {
                 return null
             }
             
-            val doc = userExpensesCollection?.document(expenseId)?.get()?.await()
+            val data = expenseDoc.data ?: return null
             
-            if (doc == null || !doc.exists()) {
-                LogUtils.d("ExpenseRepository", "Расход није пронађен: $expenseId", category = "expense")
-                return null
+            // Extract date from Timestamp
+            val timestamp = data["date"] as? Timestamp
+            val dateStr = if (timestamp != null) {
+                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                dateFormat.format(timestamp.toDate())
+            } else {
+                ""
             }
-            
-            val id = doc.id
-            val amount = doc.getDouble("amount") ?: 0.0
-            val description = doc.getString("description") ?: ""
-            val category = doc.getString("category") ?: ""
-            val accountId = doc.getString("accountId") ?: ""
-            val date = getDateFromDocument(doc)
             
             Expense(
-                id = id,
-                userId = currentUserId ?: "",
-                amount = amount,
-                date = date,
-                accountId = accountId,
-                description = description,
-                category = category
+                id = expenseDoc.id,
+                userId = data["userId"] as? String ?: "",
+                amount = (data["amount"] as? Number)?.toDouble() ?: 0.0,
+                description = data["description"] as? String ?: "",
+                category = data["category"] as? String ?: "",
+                date = dateStr,
+                accountId = data["accountId"] as? String ?: "",
+                createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
             )
         } catch (e: Exception) {
-            LogUtils.e("ExpenseRepository", "Грешка при учитавању расхода по ID-у: $expenseId", e, category = "expense")
+            LogUtils.e("ExpenseRepository", "Error getting expense by ID: $expenseId", e, category = "expense")
             null
         }
     }
     
-    // На kraju klase dodati helper funkciju за конверзију датума
-    /**
-     * Pomoćna funkcija za dobijanje datuma iz Firestore dokumenta
-     */
-    private fun getDateFromDocument(doc: DocumentSnapshot): String {
-        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-        
-        try {
-            // Prvo dobavljamo vrednost kao Object da bismo proverili tip
-            val dateField = doc.get("date")
-            
-            when (dateField) {
-                is com.google.firebase.Timestamp -> {
-                    return dateFormat.format(dateField.toDate())
+    // Добијање свих расхода
+    fun getAllExpenses(): Flow<List<Expense>> = callbackFlow {
+        val listenerRegistration = sharedExpensesCollection
+            .orderBy("date", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    LogUtils.e("ExpenseRepository", "Greška pri dobavljanju rashoda", error, category = "expense")
+                    trySend(emptyList())
+                    return@addSnapshotListener
                 }
-                is String -> {
-                    // Ako je string u očekivanom formatu, vratimo ga direktno
-                    if (dateField.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
-                        return dateField
-                    }
-                    // Pokušaj parsiranje ako je u nekom drugom string formatu
-                    return try {
-                        val parsedDate = dateFormat.parse(dateField)
-                        dateFormat.format(parsedDate ?: Date())
+                
+                val expenses = snapshot?.documents?.mapNotNull { doc ->
+                    try {
+                        // Manually map document to Expense object
+                        val data = doc.data ?: return@mapNotNull null
+                        
+                        // Extract date from Timestamp
+                        val timestamp = data["date"] as? Timestamp
+                        val dateStr = if (timestamp != null) {
+                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            dateFormat.format(timestamp.toDate())
+                        } else {
+                            ""
+                        }
+                        
+                        Expense(
+                            id = doc.id,
+                            userId = data["userId"] as? String ?: "",
+                            amount = (data["amount"] as? Number)?.toDouble() ?: 0.0,
+                            description = data["description"] as? String ?: "",
+                            category = data["category"] as? String ?: "",
+                            date = dateStr,
+                            accountId = data["accountId"] as? String ?: "",
+                            createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                            updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                        )
                     } catch (e: Exception) {
-                        LogUtils.w("ExpenseRepository", 
-                            "Neispravan format string datuma za dokument ID: ${doc.id}, koristim današnji datum", 
-                            category = "expense")
-                        dateFormat.format(Date())
+                        LogUtils.e("ExpenseRepository", "Greška pri mapiranju dokumenta u Expense", e, category = "expense")
+                        null
                     }
-                }
-                is java.util.Date -> {
-                    return dateFormat.format(dateField)
-                }
-                null -> {
-                    LogUtils.w("ExpenseRepository", 
-                        "Datum je null za dokument ID: ${doc.id}, koristim današnji datum", 
-                        category = "expense")
-                    return dateFormat.format(Date())
-                }
-                else -> {
-                    LogUtils.w("ExpenseRepository", 
-                        "Nepoznat tip datuma (${dateField.javaClass.name}) za dokument ID: ${doc.id}, koristim današnji datum", 
-                        category = "expense")
-                    return dateFormat.format(Date())
-                }
+                } ?: emptyList()
+                
+                trySend(expenses)
             }
-        } catch (e: Exception) {
-            LogUtils.e("ExpenseRepository", 
-                "Greška pri konverziji datuma iz dokumenta ID: ${doc.id}", e, 
-                category = "expense")
-            return dateFormat.format(Date())
+        
+        awaitClose {
+            listenerRegistration.remove()
         }
+    }
+    
+    // Добијање расхода за одређени месец
+    fun getExpensesForMonth(year: Int, month: Int): Flow<List<Expense>> = callbackFlow {
+        // Креирамо датуме за почетак и крај месеца
+        val startDate = LocalDate.of(year, month, 1)
+        val endDate = startDate.plusMonths(1)
+        
+        // Конвертујемо у Timestamp за Firestore
+        val startTimestamp = localDateToTimestamp(startDate)
+        val endTimestamp = localDateToTimestamp(endDate)
+        
+        val listenerRegistration = sharedExpensesCollection
+            .whereGreaterThanOrEqualTo("date", startTimestamp)
+            .whereLessThan("date", endTimestamp)
+            .orderBy("date", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    LogUtils.e("ExpenseRepository", "Greška pri dobavljanju rashoda za mesec", error, category = "expense")
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                
+                val expenses = snapshot?.documents?.mapNotNull { doc ->
+                    try {
+                        // Manually map document to Expense object
+                        val data = doc.data ?: return@mapNotNull null
+                        
+                        // Extract date from Timestamp
+                        val timestamp = data["date"] as? Timestamp
+                        val dateStr = if (timestamp != null) {
+                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            dateFormat.format(timestamp.toDate())
+                        } else {
+                            ""
+                        }
+                        
+                        Expense(
+                            id = doc.id,
+                            userId = data["userId"] as? String ?: "",
+                            amount = (data["amount"] as? Number)?.toDouble() ?: 0.0,
+                            description = data["description"] as? String ?: "",
+                            category = data["category"] as? String ?: "",
+                            date = dateStr,
+                            accountId = data["accountId"] as? String ?: "",
+                            createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                            updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                        )
+                    } catch (e: Exception) {
+                        LogUtils.e("ExpenseRepository", "Greška pri mapiranju dokumenta u Expense", e, category = "expense")
+                        null
+                    }
+                } ?: emptyList()
+                
+                trySend(expenses)
+            }
+        
+        awaitClose {
+            listenerRegistration.remove()
+        }
+    }
+    
+    // Добијање расхода за одређени дан
+    fun getExpensesForDay(year: Int, month: Int, day: Int): Flow<List<Expense>> = callbackFlow {
+        // Креирамо датум
+        val date = LocalDate.of(year, month, day)
+        
+        // Конвертујемо у Timestamp за Firestore
+        val startTimestamp = localDateToTimestamp(date)
+        val endTimestamp = localDateToTimestamp(date.plusDays(1))
+        
+        val listenerRegistration = sharedExpensesCollection
+            .whereGreaterThanOrEqualTo("date", startTimestamp)
+            .whereLessThan("date", endTimestamp)
+            .orderBy("date", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    LogUtils.e("ExpenseRepository", "Greška pri dobavljanju rashoda za dan", error, category = "expense")
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                
+                val expenses = snapshot?.documents?.mapNotNull { doc ->
+                    try {
+                        // Manually map document to Expense object
+                        val data = doc.data ?: return@mapNotNull null
+                        
+                        // Extract date from Timestamp
+                        val timestamp = data["date"] as? Timestamp
+                        val dateStr = if (timestamp != null) {
+                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            dateFormat.format(timestamp.toDate())
+                        } else {
+                            ""
+                        }
+                        
+                        Expense(
+                            id = doc.id,
+                            userId = data["userId"] as? String ?: "",
+                            amount = (data["amount"] as? Number)?.toDouble() ?: 0.0,
+                            description = data["description"] as? String ?: "",
+                            category = data["category"] as? String ?: "",
+                            date = dateStr,
+                            accountId = data["accountId"] as? String ?: "",
+                            createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                            updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                        )
+                    } catch (e: Exception) {
+                        LogUtils.e("ExpenseRepository", "Greška pri mapiranju dokumenta u Expense", e, category = "expense")
+                        null
+                    }
+                } ?: emptyList()
+                
+                trySend(expenses)
+            }
+        
+        awaitClose {
+            listenerRegistration.remove()
+        }
+    }
+    
+    // Освежавање локалног кеша
+    private fun refreshExpenses() {
+        // Имплементација ће бити додата касније
     }
     
     companion object {
@@ -724,14 +438,6 @@ class ExpenseRepository private constructor() {
         fun getInstance(): ExpenseRepository {
             return instance ?: synchronized(this) {
                 instance ?: ExpenseRepository().also { instance = it }
-            }
-        }
-        
-        fun initialize() {
-            if (instance == null) {
-                instance = ExpenseRepository()
-                // Повезујемо са AccountRepository
-                instance?.setAccountRepository(AccountRepository.getInstance())
             }
         }
     }

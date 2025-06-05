@@ -90,6 +90,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import androidx.compose.foundation.gestures.detectTapGestures
+import kotlin.random.Random
+
+/**
+ * Generates a unique key for a list that won't conflict even after deletion and restoration
+ */
+private fun generateUniqueListKey(listId: String?): String {
+    if (listId == null) return "null_${Random.nextLong()}"
+    return "list_${listId}_${System.currentTimeMillis()}_${Random.nextLong(0, 10000)}"
+}
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -100,6 +109,7 @@ fun ListsScreen(
 ) {
     val listsUiState by listsViewModel.uiState.collectAsState()
     val deletingListIds by listsViewModel.deletingListIds.collectAsState()
+    val restoringListIds by listsViewModel.restoringListIds.collectAsState()
     val isDeletionInProgress = deletingListIds.isNotEmpty()
     
     val coroutineScope = rememberCoroutineScope()
@@ -233,43 +243,59 @@ fun ListsScreen(
                         }
                         is ListsUiState.Success -> {
                             val customLists = (listsUiState as ListsUiState.Success).lists
+                            
+                            // Filter out lists that are being deleted or restored before passing to items()
+                            val filteredLists = customLists.filter { list ->
+                                val listId = list.id ?: return@filter false
+                                !deletingListIds.contains(listId) && !restoringListIds.contains(listId)
+                            }
+                            
                             items(
-                                items = customLists,
-                                key = { list -> 
-                                    "${list.id}_${System.currentTimeMillis()}"
-                                }
+                                items = filteredLists,
+                                // Use our function to generate unique keys
+                                key = { list -> generateUniqueListKey(list.id) }
                             ) { list ->
-                                list.id?.let { listId ->
-                                    if (!deletingListIds.contains(listId)) {
-                                        SwipeToDeleteListItem(
-                                            list = list,
-                                            onClick = {
-                                                if (!isDeletionInProgress) {
-                                                    navController.navigate(Screen.ListDetails.createRoute(listId))
-                                                }
-                                            },
-                                            onDelete = {
-                                                lastDeletedList = list
-                                                
-                                                coroutineScope.launch {
-                                                    val result = snackbarHostState.showSnackbar(
-                                                        message = "Листа \"${list.title}\" је обрисана",
-                                                        actionLabel = "Поништи",
-                                                        duration = SnackbarDuration.Short
-                                                    )
-                                                    
-                                                    if (result == SnackbarResult.ActionPerformed) {
-                                                        lastDeletedList?.let { deletedList ->
-                                                            listsViewModel.restoreList(deletedList)
-                                                        }
+                                SwipeToDeleteListItem(
+                                    list = list,
+                                    onClick = {
+                                        if (!isDeletionInProgress) {
+                                            list.id?.let { listId ->
+                                                navController.navigate(Screen.ListDetails.createRoute(listId))
+                                            }
+                                        }
+                                    },
+                                    onDelete = {
+                                        lastDeletedList = list
+                                        
+                                        // Log local deletion
+                                        Log.d("ListsScreen", "Листа \"${list.title}\" (ID: ${list.id}) је обрисана локално")
+                                        
+                                        // Actually delete the list from Firestore
+                                        list.id?.let { listId ->
+                                            listsViewModel.deleteShoppingList(listId)
+                                        }
+                                        
+                                        coroutineScope.launch {
+                                            val result = snackbarHostState.showSnackbar(
+                                                message = "Листа \"${list.title}\" је обрисана",
+                                                actionLabel = "Поништи",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                            
+                                            if (result == SnackbarResult.ActionPerformed) {
+                                                lastDeletedList?.let { deletedList ->
+                                                    // Add a short delay before restoring
+                                                    coroutineScope.launch {
+                                                        delay(300) // 300ms delay
+                                                        listsViewModel.restoreList(deletedList)
                                                     }
                                                 }
-                                            },
-                                            isDeletionLocked = isDeletionInProgress,
-                                            listsViewModel = listsViewModel
-                                        )
-                                    }
-                                }
+                                            }
+                                        }
+                                    },
+                                    isDeletionLocked = isDeletionInProgress,
+                                    listsViewModel = listsViewModel
+                                )
                             }
                         }
                         is ListsUiState.Error -> {
@@ -429,11 +455,6 @@ fun SwipeToDeleteListItem(
         Log.d("SwipeToDeleteListItem", "Листа $listId, наслов: $title, статус брисања: $isBeingDeleted")
     }
     
-    if (isBeingDeleted) {
-        Log.d("SwipeToDeleteListItem", "Прескачемо рендеровање листе $listId јер је у процесу брисања")
-        return
-    }
-    
     var show by remember { mutableStateOf(true) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -470,7 +491,7 @@ fun SwipeToDeleteListItem(
     
     LaunchedEffect(confirmDelete) {
         if (confirmDelete && !isDeleted && !isDeletionLocked) {
-            Log.d("SwipeToDeleteListItem", "Брисање листе: ${list.id}")
+            Log.d("SwipeToDeleteListItem", "Корисник потврдио брисање листе: ${list.id}, наслов: ${list.title}")
             
             isDeleted = true
             show = false

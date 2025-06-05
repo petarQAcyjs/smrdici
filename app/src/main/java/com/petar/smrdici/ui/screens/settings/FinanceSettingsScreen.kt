@@ -26,8 +26,8 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -74,8 +74,7 @@ fun FinanceSettingsScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
     financeSettingsViewModel: FinanceSettingsViewModel = viewModel(factory = FinanceSettingsViewModel.Factory(LocalContext.current)),
-    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory()),
-    dataExportImportViewModel: DataExportImportViewModel = viewModel(factory = DataExportImportViewModel.Factory(LocalContext.current))
+    accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory())
 ) {
     // Спречавамо непотребно учитавање EventRepository-а
     DisposableEffect(Unit) {
@@ -91,71 +90,6 @@ fun FinanceSettingsScreen(
     // Стање за снекбар
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
-    
-    // Пратимо стање процеса извоза/увоза
-    val exportSuccess by dataExportImportViewModel.exportSuccess.collectAsState()
-    val importSuccess by dataExportImportViewModel.importSuccess.collectAsState()
-    
-    // Додатна стања за напредни увоз
-    val importPreview by dataExportImportViewModel.importPreview.collectAsState()
-    val importProgress by dataExportImportViewModel.importProgress.collectAsState()
-    val importProgressText by dataExportImportViewModel.importProgressText.collectAsState()
-    val isImporting by dataExportImportViewModel.isImporting.collectAsState()
-    val selectedImportMode by dataExportImportViewModel.importMode.collectAsState()
-    
-    // Стање за приказ напредног дијалога
-    var showAdvancedImportDialog by remember { mutableStateOf(false) }
-    
-    // Launcher за бирање локације за чување извезених података
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        uri?.let {
-            dataExportImportViewModel.exportData(it)
-        }
-    }
-    
-    // Launcher за бирање локације за увоз података
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let {
-            // Уместо приказивања потврдног дијалога, учитавамо фајл за преглед
-            dataExportImportViewModel.loadImportFile(it)
-        }
-    }
-    
-    // Observer зa успешан извоз
-    LaunchedEffect(exportSuccess) {
-        exportSuccess?.let { success ->
-            if (success) {
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Подаци су успешно извезени")
-                }
-            } else {
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Грешка при извозу података")
-                }
-            }
-            dataExportImportViewModel.resetExportStatus()
-        }
-    }
-    
-    // Observer зa успешан увоз
-    LaunchedEffect(importSuccess) {
-        importSuccess?.let { success ->
-            if (success) {
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Подаци су успешно увезени")
-                }
-            } else {
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Грешка при увозу података")
-                }
-            }
-            dataExportImportViewModel.resetImportStatus()
-        }
-    }
     
     // Функција за приказивање снекбара
     fun showSnackbar(message: String) {
@@ -440,6 +374,18 @@ fun FinanceSettingsScreen(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
+                // Додајемо картицу за категорије
+                SettingsCategoriesCard(
+                    onIncomeClick = { 
+                        navController.navigate("income_categories")
+                    },
+                    onExpenseClick = { 
+                        navController.navigate("expense_categories")
+                    }
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
                 // Картица за управљање рачунима
                 Card(
                     modifier = Modifier
@@ -513,7 +459,7 @@ fun FinanceSettingsScreen(
                                 }
                             ) {
                                 Icon(
-                                    imageVector = Icons.Outlined.SwapHoriz,
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = null
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -538,33 +484,10 @@ fun FinanceSettingsScreen(
                         }
                     }
                 }
-
-                // Додајемо картицу за категорије
-                Spacer(modifier = Modifier.height(16.dp))
-                CategoriesCard(
-                    onIncomeClick = { 
-                        navController.navigate("income_categories")
-                    },
-                    onExpenseClick = { 
-                        navController.navigate("expense_categories")
-                    }
-                )
-
-                // Карта за извоз и увоз података
-                Section(title = "Извоз и увоз података") {
-                    ExportImportCard(
-                        onExportClick = {
-                            // Покрећемо извоз података
-                            exportLauncher.launch(dataExportImportViewModel.getExportFilename())
-                        },
-                        onImportClick = {
-                            // Приказујемо напредни дијалог за увоз
-                            showAdvancedImportDialog = true
-                            dataExportImportViewModel.resetImportPreview()
-                        }
-                    )
-                }
             }
+            
+            // Додајемо простор на крају
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
     
@@ -765,37 +688,6 @@ fun FinanceSettingsScreen(
             }
         )
     }
-    
-    // Напредни дијалог за увоз података
-    ImportDialog(
-        isVisible = showAdvancedImportDialog,
-        importPreview = importPreview,
-        importProgress = importProgress,
-        importProgressText = importProgressText,
-        isImporting = isImporting,
-        selectedImportMode = selectedImportMode,
-        onDismiss = {
-            if (!isImporting) {
-                showAdvancedImportDialog = false
-                dataExportImportViewModel.resetImportPreview()
-            }
-        },
-        onSelectFile = {
-            importLauncher.launch("application/json")
-        },
-        onImportModeChange = { mode ->
-            dataExportImportViewModel.setImportMode(mode)
-        },
-        onImport = {
-            dataExportImportViewModel.importData()
-        },
-        onCancel = {
-            if (!isImporting) {
-                showAdvancedImportDialog = false
-                dataExportImportViewModel.resetImportPreview()
-            }
-        }
-    )
 }
 
 @Composable
@@ -931,5 +823,60 @@ fun Section(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
         content()
+    }
+}
+
+@Composable
+private fun SettingsCategoriesCard(
+    onIncomeClick: () -> Unit,
+    onExpenseClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Категорије",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "Управљајте категоријама прихода и расхода",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = onExpenseClick
+                ) {
+                    Text("Категорије расхода")
+                }
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                TextButton(
+                    onClick = onIncomeClick
+                ) {
+                    Text("Категорије прихода")
+                }
+            }
+        }
     }
 } 
