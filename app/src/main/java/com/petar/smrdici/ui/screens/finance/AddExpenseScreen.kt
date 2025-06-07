@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -56,6 +57,10 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.CategoryDropdown
 import com.petar.smrdici.ui.screens.settings.AccountViewModel
+import com.petar.smrdici.data.model.CategoryManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.CircularProgressIndicator
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.ZoneId
@@ -64,6 +69,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
+import androidx.compose.runtime.mutableStateListOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,6 +143,20 @@ fun AddExpenseScreen(
     
     // Initialize transaction repository
     val transactionRepository = remember { TransactionRepository.getInstance() }
+    
+    val context = LocalContext.current
+    val categoryManager = remember { CategoryManager.getInstance(context) }
+    val scope = rememberCoroutineScope()
+    var isLoadingCategories by remember { mutableStateOf(true) }
+    val expenseCategories = remember { mutableStateListOf<String>() }
+
+    LaunchedEffect(Unit) {
+        isLoadingCategories = true
+        val categories = categoryManager.getExpenseCategoriesWithFallback()
+        expenseCategories.clear()
+        expenseCategories.addAll(categories)
+        isLoadingCategories = false
+    }
     
     // Приказ ако корисник није пријављен
     if (user == null) {
@@ -339,20 +359,27 @@ fun AddExpenseScreen(
             
             // Избор категорије
             Column {
-                CategoryDropdown(
-                    selectedCategory = selectedCategory,
-                    onCategorySelected = { category -> selectedCategory = category },
-                    categories = ExpenseCategory.entries.toList(),
-                    getDisplayName = { category -> category.getDisplayName() }
-                )
-                
-                if (categoryError.isNotEmpty()) {
-                    Text(
-                        text = categoryError,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                if (isLoadingCategories) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    CategoryDropdown(
+                        selectedCategory = selectedCategory?.name ?: "",
+                        onCategorySelected = { name -> selectedCategory = if (name.isNotBlank()) ExpenseCategory.entries.find { it.name == name } else null },
+                        categories = expenseCategories,
+                        getDisplayName = { name ->
+                            try { ExpenseCategory.valueOf(name).getDisplayName() } catch (_: Exception) { name }
+                        }
                     )
+                    if (categoryError.isNotEmpty()) {
+                        Text(
+                            text = categoryError,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                        )
+                    }
                 }
             }
             

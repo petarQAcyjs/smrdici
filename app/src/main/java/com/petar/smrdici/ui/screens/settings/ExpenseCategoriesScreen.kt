@@ -1,6 +1,9 @@
 package com.petar.smrdici.ui.screens.settings
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,8 +15,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,25 +28,44 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
-import com.petar.smrdici.data.model.ExpenseCategory
-import com.petar.smrdici.data.model.CategoryManager
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
-import com.petar.smrdici.ui.components.AppHeader
-import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.auth.AuthState
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.runtime.collectAsState
+import androidx.navigation.NavController
+import com.petar.smrdici.data.model.CategoryManager
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
+import kotlinx.coroutines.launch
+import androidx.compose.material3.HorizontalDivider
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import android.content.Context
+import androidx.lifecycle.ViewModelProvider
+
+class CategoryMigrationViewModel(context: Context) : ViewModel() {
+    private val categoryManager = CategoryManager.getInstance(context)
+    private val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+
+    fun migrateIfNeeded() {
+        val migrated = prefs.getBoolean("categories_migrated", false)
+        if (!migrated) {
+            viewModelScope.launch {
+                categoryManager.migrateEnumCategoriesToFirestore()
+                prefs.edit().putBoolean("categories_migrated", true).apply()
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,14 +83,24 @@ fun ExpenseCategoriesScreen(
     val context = LocalContext.current
     val categoryManager = remember { CategoryManager.getInstance(context) }
     
-    // Inicijalno popunimo listu svim dostupnim kategorijama
-    LaunchedEffect(Unit) {
-        expenseCategories.clear()
-        // Koristimo getAllExpenseCategories umesto direktnog pristupa enumeraciji
-        categoryManager.getAllExpenseCategories().forEach { categoryName ->
-            // Dobavljamo display name za svaku kategoriju
-            expenseCategories.add(categoryManager.getExpenseCategoryDisplayName(categoryName))
+    val isLoading = remember { mutableStateOf(true) }
+    
+    val migrationViewModel: CategoryMigrationViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                @Suppress("UNCHECKED_CAST")
+                return CategoryMigrationViewModel(context) as T
+            }
         }
+    )
+    
+    LaunchedEffect(Unit) {
+        migrationViewModel.migrateIfNeeded()
+        isLoading.value = true
+        val categories = categoryManager.getExpenseCategoriesWithFallback()
+        expenseCategories.clear()
+        expenseCategories.addAll(categories)
+        isLoading.value = false
     }
     
     // Stanje za dijaloge
@@ -90,52 +122,68 @@ fun ExpenseCategoriesScreen(
                 user = user
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            androidx.compose.material3.FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Додај категорију")
+            }
+        }
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(expenseCategories) { category ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = category,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    IconButton(onClick = { 
-                        selectedCategory = category
-                        newCategoryName = category
-                        showEditDialog = true 
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Измени категорију"
+        if (isLoading.value) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                items(expenseCategories) { category ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = category,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
                         )
+                        
+                        IconButton(onClick = {
+                            Log.d("ExpenseCategoriesScreen", "Edit icon clicked for category: $category")
+                            selectedCategory = category
+                            newCategoryName = category
+                            showEditDialog = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Измени категорију"
+                            )
+                        }
+                        
+                        IconButton(onClick = { 
+                            selectedCategory = category
+                            showDeleteDialog = true 
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Обриши категорију",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                     
-                    IconButton(onClick = { 
-                        selectedCategory = category
-                        showDeleteDialog = true 
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Обриши категорију",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
+                    HorizontalDivider()
                 }
-                
-                HorizontalDivider()
             }
         }
     }
@@ -154,20 +202,17 @@ fun ExpenseCategoriesScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (newCategoryName.isNotBlank()) {
-                        // Proveravamo da li kategorija već postoji
-                        if (!categoryManager.hasExpenseCategory(newCategoryName)) {
-                            // Dodajemo novu kategoriju
-                            categoryManager.addExpenseCategory(newCategoryName)
-                            // Osvežavamo listu
-                            expenseCategories.clear()
-                            categoryManager.getAllExpenseCategories().forEach { categoryName ->
-                                expenseCategories.add(categoryManager.getExpenseCategoryDisplayName(categoryName))
-                            }
-                            showAddDialog = false
-                        } else {
-                            // Prikazujemo poruku da kategorija već postoji
-                            scope.launch {
+                    scope.launch {
+                        if (newCategoryName.isNotBlank()) {
+                            if (!categoryManager.hasExpenseCategory(newCategoryName)) {
+                                isLoading.value = true
+                                categoryManager.addExpenseCategoryBoth(newCategoryName)
+                                val categories = categoryManager.getExpenseCategoriesWithFallback()
+                                expenseCategories.clear()
+                                expenseCategories.addAll(categories)
+                                isLoading.value = false
+                                showAddDialog = false
+                            } else {
                                 snackbarHostState.showSnackbar("Категорија већ постоји!")
                             }
                         }
@@ -198,20 +243,17 @@ fun ExpenseCategoriesScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (newCategoryName.isNotBlank() && selectedCategory.isNotBlank()) {
-                        // Proveravamo da li nova kategorija već postoji
-                        if (!categoryManager.hasExpenseCategory(newCategoryName) || newCategoryName == selectedCategory) {
-                            // Ažuriramo kategoriju
-                            categoryManager.updateExpenseCategory(selectedCategory, newCategoryName)
-                            // Osvežavamo listu
-                            expenseCategories.clear()
-                            categoryManager.getAllExpenseCategories().forEach { categoryName ->
-                                expenseCategories.add(categoryManager.getExpenseCategoryDisplayName(categoryName))
-                            }
-                            showEditDialog = false
-                        } else {
-                            // Prikazujemo poruku da kategorija već postoji
-                            scope.launch {
+                    scope.launch {
+                        if (newCategoryName.isNotBlank() && selectedCategory.isNotBlank()) {
+                            if (!categoryManager.hasExpenseCategory(newCategoryName) || newCategoryName == selectedCategory) {
+                                isLoading.value = true
+                                categoryManager.updateExpenseCategoryBoth(selectedCategory, newCategoryName)
+                                val categories = categoryManager.getExpenseCategoriesWithFallback()
+                                expenseCategories.clear()
+                                expenseCategories.addAll(categories)
+                                isLoading.value = false
+                                showEditDialog = false
+                            } else {
                                 snackbarHostState.showSnackbar("Категорија већ постоји!")
                             }
                         }
@@ -236,15 +278,16 @@ fun ExpenseCategoriesScreen(
             text = { Text("Да ли сте сигурни да желите да обришете категорију '$selectedCategory'?") },
             confirmButton = {
                 TextButton(onClick = {
-                    if (selectedCategory.isNotBlank()) {
-                        // Brišemo kategoriju
-                        categoryManager.deleteExpenseCategory(selectedCategory)
-                        // Osvežavamo listu
-                        expenseCategories.clear()
-                        categoryManager.getAllExpenseCategories().forEach { categoryName ->
-                            expenseCategories.add(categoryManager.getExpenseCategoryDisplayName(categoryName))
+                    scope.launch {
+                        if (selectedCategory.isNotBlank()) {
+                            isLoading.value = true
+                            categoryManager.deleteExpenseCategoryBoth(selectedCategory)
+                            val categories = categoryManager.getExpenseCategoriesWithFallback()
+                            expenseCategories.clear()
+                            expenseCategories.addAll(categories)
+                            isLoading.value = false
+                            showDeleteDialog = false
                         }
-                        showDeleteDialog = false
                     }
                 }) {
                     Text("Обриши")

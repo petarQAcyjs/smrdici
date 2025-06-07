@@ -709,11 +709,14 @@ class ListsViewModel : ViewModel() {
     fun updateListTitle(listId: String, newTitle: String) {
         viewModelScope.launch {
             try {
-                val currentList = _selectedList.value ?: return@launch
-                
+                // Try to get the list from _selectedList, otherwise from the UI state
+                val currentList = _selectedList.value
+                    ?: (_uiState.value as? ListsUiState.Success)?.lists?.find { it.id == listId }
+                    ?: return@launch
+
                 // Create updated list with new title
                 val updatedList = currentList.copy(title = newTitle)
-                
+
                 // Update in Firestore
                 firestore.collection("shopping_lists").document(listId)
                     .set(updatedList)
