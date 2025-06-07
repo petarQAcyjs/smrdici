@@ -1,6 +1,7 @@
 package com.petar.smrdici.ui.screens.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,6 +44,13 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.auth.AuthState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.PaddingValues
+import android.util.Log
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import android.content.Context
+import androidx.lifecycle.ViewModelProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,14 +68,24 @@ fun IncomeCategoriesScreen(
     val context = LocalContext.current
     val categoryManager = remember { CategoryManager.getInstance(context) }
     
-    // Inicijalno popunimo listu svim dostupnim kategorijama
-    LaunchedEffect(Unit) {
-        incomeCategories.clear()
-        // Koristimo getAllIncomeCategories umesto direktnog pristupa enumeraciji
-        categoryManager.getAllIncomeCategories().forEach { categoryName ->
-            // Dobavljamo display name za svaku kategoriju
-            incomeCategories.add(categoryManager.getIncomeCategoryDisplayName(categoryName))
+    val isLoading = remember { mutableStateOf(true) }
+    
+    val migrationViewModel: CategoryMigrationViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                @Suppress("UNCHECKED_CAST")
+                return CategoryMigrationViewModel(context) as T
+            }
         }
+    )
+    
+    LaunchedEffect(Unit) {
+        migrationViewModel.migrateIfNeeded()
+        isLoading.value = true
+        val categories = categoryManager.getIncomeCategoriesWithFallback()
+        incomeCategories.clear()
+        incomeCategories.addAll(categories)
+        isLoading.value = false
     }
     
     // Stanje za dijaloge
@@ -89,52 +107,68 @@ fun IncomeCategoriesScreen(
                 user = user
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            androidx.compose.material3.FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Додај категорију")
+            }
+        }
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(incomeCategories) { category ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = category,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    IconButton(onClick = { 
-                        selectedCategory = category
-                        newCategoryName = category
-                        showEditDialog = true 
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Измени категорију"
+        if (isLoading.value) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                items(incomeCategories) { category ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = category,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
                         )
+                        
+                        IconButton(onClick = {
+                            Log.d("IncomeCategoriesScreen", "Edit icon clicked for category: $category")
+                            selectedCategory = category
+                            newCategoryName = category
+                            showEditDialog = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Измени категорију"
+                            )
+                        }
+                        
+                        IconButton(onClick = { 
+                            selectedCategory = category
+                            showDeleteDialog = true 
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Обриши категорију",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                     
-                    IconButton(onClick = { 
-                        selectedCategory = category
-                        showDeleteDialog = true 
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Обриши категорију",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
+                    HorizontalDivider()
                 }
-                
-                HorizontalDivider()
             }
         }
     }
@@ -153,21 +187,20 @@ fun IncomeCategoriesScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (newCategoryName.isNotBlank()) {
-                        // Proveravamo da li kategorija već postoji
-                        if (!categoryManager.hasIncomeCategory(newCategoryName)) {
-                            // Dodajemo novu kategoriju
-                            categoryManager.addIncomeCategory(newCategoryName)
-                            // Osvežavamo listu
-                            incomeCategories.clear()
-                            categoryManager.getAllIncomeCategories().forEach { categoryName ->
-                                incomeCategories.add(categoryManager.getIncomeCategoryDisplayName(categoryName))
-                            }
-                            showAddDialog = false
-                        } else {
-                            // Prikazujemo poruku da kategorija već postoji
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Категорија већ постоји!")
+                    scope.launch {
+                        if (newCategoryName.isNotBlank()) {
+                            if (!categoryManager.hasIncomeCategory(newCategoryName)) {
+                                isLoading.value = true
+                                categoryManager.addIncomeCategoryBoth(newCategoryName)
+                                val categories = categoryManager.getIncomeCategoriesWithFallback()
+                                incomeCategories.clear()
+                                incomeCategories.addAll(categories)
+                                isLoading.value = false
+                                showAddDialog = false
+                            } else {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Категорија већ постоји!")
+                                }
                             }
                         }
                     }
@@ -197,21 +230,20 @@ fun IncomeCategoriesScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (newCategoryName.isNotBlank() && selectedCategory.isNotBlank()) {
-                        // Proveravamo da li nova kategorija već postoji
-                        if (!categoryManager.hasIncomeCategory(newCategoryName) || newCategoryName == selectedCategory) {
-                            // Ažuriramo kategoriju
-                            categoryManager.updateIncomeCategory(selectedCategory, newCategoryName)
-                            // Osvežavamo listu
-                            incomeCategories.clear()
-                            categoryManager.getAllIncomeCategories().forEach { categoryName ->
-                                incomeCategories.add(categoryManager.getIncomeCategoryDisplayName(categoryName))
-                            }
-                            showEditDialog = false
-                        } else {
-                            // Prikazujemo poruku da kategorija već postoji
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Категорија већ постоји!")
+                    scope.launch {
+                        if (newCategoryName.isNotBlank() && selectedCategory.isNotBlank()) {
+                            if (!categoryManager.hasIncomeCategory(newCategoryName) || newCategoryName == selectedCategory) {
+                                isLoading.value = true
+                                categoryManager.updateIncomeCategoryBoth(selectedCategory, newCategoryName)
+                                val categories = categoryManager.getIncomeCategoriesWithFallback()
+                                incomeCategories.clear()
+                                incomeCategories.addAll(categories)
+                                isLoading.value = false
+                                showEditDialog = false
+                            } else {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Категорија већ постоји!")
+                                }
                             }
                         }
                     }
@@ -235,15 +267,16 @@ fun IncomeCategoriesScreen(
             text = { Text("Да ли сте сигурни да желите да обришете категорију '$selectedCategory'?") },
             confirmButton = {
                 TextButton(onClick = {
-                    if (selectedCategory.isNotBlank()) {
-                        // Brišemo kategoriju
-                        categoryManager.deleteIncomeCategory(selectedCategory)
-                        // Osvežavamo listu
-                        incomeCategories.clear()
-                        categoryManager.getAllIncomeCategories().forEach { categoryName ->
-                            incomeCategories.add(categoryManager.getIncomeCategoryDisplayName(categoryName))
+                    scope.launch {
+                        if (selectedCategory.isNotBlank()) {
+                            isLoading.value = true
+                            categoryManager.deleteIncomeCategoryBoth(selectedCategory)
+                            val categories = categoryManager.getIncomeCategoriesWithFallback()
+                            incomeCategories.clear()
+                            incomeCategories.addAll(categories)
+                            isLoading.value = false
+                            showDeleteDialog = false
                         }
-                        showDeleteDialog = false
                     }
                 }) {
                     Text("Обриши")
