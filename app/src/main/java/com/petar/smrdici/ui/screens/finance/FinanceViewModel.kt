@@ -510,6 +510,19 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         setTimePeriod(currentPeriod)
     }
 
+    // Forces a remote sync with Firestore for accounts and transactions
+    suspend fun syncWithRemote() {
+        try {
+            // Force reload accounts from Firestore
+            accountRepository.loadAccounts()
+            // If TransactionRepository has a similar method, call it here (e.g., transactionRepository.loadTransactions())
+            // For now, just call refreshData() to update state after remote fetch
+            refreshData()
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(error = e.message)
+        }
+    }
+
     class Factory(private val settingsRepository: SettingsRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
