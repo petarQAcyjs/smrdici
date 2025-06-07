@@ -1,12 +1,14 @@
 package com.petar.smrdici.ui.screens.finance
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -20,10 +22,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -36,13 +41,14 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.CategoryDropdown
 import com.petar.smrdici.ui.components.DatePickerDialog
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import com.petar.smrdici.data.model.CategoryManager
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,10 +64,25 @@ fun EditExpenseScreen(
     // State variables
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
+    var selectedCategory by remember { mutableStateOf("") }
     var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var selectedAccountId by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
+    
+    // Category loading
+    val context = LocalContext.current
+    val categoryManager = remember { CategoryManager.getInstance(context) }
+    val scope = rememberCoroutineScope()
+    var isLoadingCategories by remember { mutableStateOf(true) }
+    val expenseCategories = remember { mutableStateListOf<String>() }
+    
+    LaunchedEffect(Unit) {
+        isLoadingCategories = true
+        val categories = categoryManager.getExpenseCategoriesWithFallback()
+        expenseCategories.clear()
+        expenseCategories.addAll(categories)
+        isLoadingCategories = false
+    }
     
     // Initialize transaction repository
     val transactionRepository = remember { TransactionRepository.getInstance() }
@@ -76,7 +97,7 @@ fun EditExpenseScreen(
         expense?.let {
             amount = it.amount.toString()
             description = it.description
-            selectedCategory = ExpenseCategory.valueOf(it.category)
+            selectedCategory = it.category
             
             // Parse date using UTC timezone
             val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -87,7 +108,6 @@ fun EditExpenseScreen(
         }
     }
     
-    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
@@ -123,12 +143,20 @@ fun EditExpenseScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            CategoryDropdown(
-                selectedCategory = selectedCategory,
-                onCategorySelected = { selectedCategory = it },
-                categories = ExpenseCategory.entries.toList(),
-                getDisplayName = { it.getDisplayName() }
-            )
+            if (isLoadingCategories) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                CategoryDropdown(
+                    selectedCategory = selectedCategory,
+                    onCategorySelected = { selectedCategory = it },
+                    categories = expenseCategories,
+                    getDisplayName = { name ->
+                        try { ExpenseCategory.valueOf(name).getDisplayName() } catch (_: Exception) { name }
+                    }
+                )
+            }
 
             OutlinedButton(
                 onClick = { showDatePicker = true },
@@ -161,7 +189,7 @@ fun EditExpenseScreen(
                             val updatedExpense = expense?.copy(
                                 amount = amountValue,
                                 description = description,
-                                category = selectedCategory?.name ?: "",
+                                category = selectedCategory,
                                 date = dateStr,
                                 accountId = selectedAccountId,
                                 userId = user?.uid ?: ""

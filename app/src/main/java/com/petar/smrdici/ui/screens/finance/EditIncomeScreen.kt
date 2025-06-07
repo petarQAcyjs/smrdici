@@ -1,12 +1,14 @@
 package com.petar.smrdici.ui.screens.finance
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -20,16 +22,20 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.Income
 import com.petar.smrdici.data.model.IncomeCategory
+import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
@@ -56,10 +62,25 @@ fun EditIncomeScreen(
     // State variables
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf<IncomeCategory?>(null) }
+    var selectedCategory by remember { mutableStateOf("") }
     var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var selectedAccountId by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
+    
+    // Category loading
+    val context = LocalContext.current
+    val categoryManager = remember { CategoryManager.getInstance(context) }
+    val scope = rememberCoroutineScope()
+    var isLoadingCategories by remember { mutableStateOf(true) }
+    val incomeCategories = remember { mutableStateListOf<String>() }
+    
+    LaunchedEffect(Unit) {
+        isLoadingCategories = true
+        val categories = categoryManager.getIncomeCategoriesWithFallback()
+        incomeCategories.clear()
+        incomeCategories.addAll(categories)
+        isLoadingCategories = false
+    }
     
     // Initialize transaction repository
     val transactionRepository = remember { TransactionRepository.getInstance() }
@@ -74,13 +95,12 @@ fun EditIncomeScreen(
         income?.let {
             amount = it.amount.toString()
             description = it.description
-            selectedCategory = IncomeCategory.valueOf(it.category)
+            selectedCategory = it.category
             selectedDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(it.date)?.time ?: System.currentTimeMillis()
             selectedAccountId = it.accountId
         }
     }
     
-    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
@@ -116,12 +136,20 @@ fun EditIncomeScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            CategoryDropdown(
-                selectedCategory = selectedCategory,
-                onCategorySelected = { selectedCategory = it },
-                categories = IncomeCategory.entries.toList(),
-                getDisplayName = { it.getDisplayName() }
-            )
+            if (isLoadingCategories) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                CategoryDropdown(
+                    selectedCategory = selectedCategory,
+                    onCategorySelected = { selectedCategory = it },
+                    categories = incomeCategories,
+                    getDisplayName = { name ->
+                        try { IncomeCategory.valueOf(name).getDisplayName() } catch (_: Exception) { name }
+                    }
+                )
+            }
 
             OutlinedButton(
                 onClick = { showDatePicker = true },
@@ -144,7 +172,7 @@ fun EditIncomeScreen(
                             val updatedIncome = income?.copy(
                                 amount = amountValue,
                                 description = description,
-                                category = selectedCategory?.name ?: "",
+                                category = selectedCategory,
                                 date = dateFormat.format(Date(selectedDate)),
                                 accountId = selectedAccountId,
                                 userId = user?.uid ?: ""
