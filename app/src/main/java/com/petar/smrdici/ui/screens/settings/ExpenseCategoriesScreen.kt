@@ -80,6 +80,7 @@ import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
 
 class CategoryMigrationViewModel(context: Context) : ViewModel() {
@@ -182,11 +183,8 @@ fun ExpenseCategoriesScreen(
     }
     
     // Stanje za dijaloge
-    var showAddDialog by remember { mutableStateOf(false) }
-    var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("") }
-    var newCategoryName by remember { mutableStateOf("") }
     
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
@@ -280,9 +278,7 @@ fun ExpenseCategoriesScreen(
                             name = category,
                             color = getExpenseCategoryColor(category),
                             onEdit = {
-                                selectedCategory = category
-                                newCategoryName = category
-                                showEditDialog = true
+                                navController.navigate(Screen.EditCategory.createRoute(category, "EXPENSE"))
                             },
                             onDelete = {
                                 selectedCategory = category
@@ -300,8 +296,7 @@ fun ExpenseCategoriesScreen(
                                 .clip(CircleShape)
                                 .background(Color(0xFF9E9E9E)) // Grey color for create button
                                 .clickable {
-                                    newCategoryName = ""
-                                    showAddDialog = true
+                                    navController.navigate(Screen.EditCategory.createRoute("", "EXPENSE"))
                                 },
                             contentAlignment = Alignment.Center
                         ) {
@@ -316,88 +311,6 @@ fun ExpenseCategoriesScreen(
                 }
             }
         }
-    }
-    
-    // Dijalog za dodavanje nove kategorije
-    if (showAddDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text("Додај нову категорију") },
-            text = {
-                OutlinedTextField(
-                    value = newCategoryName,
-                    onValueChange = { newCategoryName = it },
-                    label = { Text("Назив категорије") }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        if (newCategoryName.isNotBlank()) {
-                            if (!categoryManager.hasExpenseCategory(newCategoryName)) {
-                                isLoading.value = true
-                                categoryManager.addExpenseCategoryBoth(newCategoryName)
-                                val categories = categoryManager.getExpenseCategoriesWithFallback()
-                                expenseCategories.clear()
-                                expenseCategories.addAll(categories)
-                                isLoading.value = false
-                                showAddDialog = false
-                            } else {
-                                snackbarHostState.showSnackbar("Категорија већ постоји!")
-                            }
-                        }
-                    }
-                }) {
-                    Text("Додај")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
-                    Text("Откажи")
-                }
-            }
-        )
-    }
-    
-    // Dijalog za izmenu kategorije
-    if (showEditDialog) {
-        AlertDialog(
-            onDismissRequest = { showEditDialog = false },
-            title = { Text("Измени категорију") },
-            text = {
-                OutlinedTextField(
-                    value = newCategoryName,
-                    onValueChange = { newCategoryName = it },
-                    label = { Text("Нови назив категорије") }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        if (newCategoryName.isNotBlank() && selectedCategory.isNotBlank()) {
-                            if (!categoryManager.hasExpenseCategory(newCategoryName) || newCategoryName == selectedCategory) {
-                                isLoading.value = true
-                                categoryManager.updateExpenseCategoryBoth(selectedCategory, newCategoryName)
-                                val categories = categoryManager.getExpenseCategoriesWithFallback()
-                                expenseCategories.clear()
-                                expenseCategories.addAll(categories)
-                                isLoading.value = false
-                                showEditDialog = false
-                            } else {
-                                snackbarHostState.showSnackbar("Категорија већ постоји!")
-                            }
-                        }
-                    }
-                }) {
-                    Text("Сачувај")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) {
-                    Text("Откажи")
-                }
-            }
-        )
     }
     
     // Dijalog za brisanje kategorije
