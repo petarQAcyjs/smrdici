@@ -279,7 +279,7 @@ fun IncomeCategoriesScreen(
                                 imageVector = Icons.Default.Add,
                                 contentDescription = "Create",
                                 tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(32.dp)
                             )
                         }
                     }
@@ -435,7 +435,7 @@ fun IncomeCategoryItem(
                         imageVector = getIncomeCategoryIcon(name),
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 }
             }
