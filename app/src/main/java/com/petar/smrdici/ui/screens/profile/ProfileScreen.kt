@@ -3,6 +3,7 @@ package com.petar.smrdici.ui.screens.profile
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -102,6 +103,22 @@ fun ProfileScreen(
     } else null
 
     val syncStatus by homeViewModel.syncStatus.collectAsState()
+    
+    // Пратимо промене у статусу синхронизације
+    LaunchedEffect(syncStatus) {
+        Log.d("ProfileScreen", "Промена статуса синхронизације: $syncStatus")
+        when (syncStatus) {
+            is SyncStatus.Success -> {
+                showSnackbar("Синхронизација успешна")
+            }
+            is SyncStatus.Error -> {
+                val errorMsg = (syncStatus as SyncStatus.Error).message
+                Log.e("ProfileScreen", "Грешка при синхронизацији: $errorMsg")
+                showSnackbar("Грешка: $errorMsg")
+            }
+            else -> {}
+        }
+    }
 
     // Pratimo stanje autentifikacije i navigiramo na Login kad korisnik nije autentifikovan
     LaunchedEffect(authState) {
@@ -202,7 +219,10 @@ fun ProfileScreen(
 
                                 // Дугме за синхронизацију
                                 SettingsItem(
-                                    icon = Icons.Default.Refresh,
+                                    icon = if (syncStatus is SyncStatus.Syncing) 
+                                        Icons.Default.Refresh 
+                                    else 
+                                        Icons.Default.Refresh,
                                     title = "Синхронизуј податке",
                                     subtitle = when (syncStatus) {
                                         is SyncStatus.Syncing -> "Синхронизација у току..."
@@ -210,7 +230,11 @@ fun ProfileScreen(
                                         is SyncStatus.Error -> "Грешка: ${(syncStatus as SyncStatus.Error).message}"
                                         else -> null
                                     },
-                                    onClick = { homeViewModel.syncEvents() }
+                                    onClick = { 
+                                        Log.d("ProfileScreen", "Клик на дугме за синхронизацију")
+                                        homeViewModel.syncEvents() 
+                                    },
+                                    isLoading = syncStatus is SyncStatus.Syncing
                                 )
 
                                 HorizontalDivider(
@@ -263,7 +287,7 @@ fun ProfileScreen(
                                     icon = Icons.Default.Notifications,
                                     title = "Подешавања обавештења",
                                     onClick = {
-                                        showSnackbar("Подешавања обавештења ће бити доступна ускоро")
+                                        navController.navigate(Screen.NotificationSettings.route)
                                     }
                                 )
                             }
@@ -422,22 +446,31 @@ fun SettingsItem(
     title: String,
     subtitle: String? = null,
     trailingText: String? = null,
+    isLoading: Boolean = false,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(64.dp) // Смањујемо висину на 64dp за све ставке
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick, enabled = !isLoading)
             .padding(horizontal = 16.dp), // Уклањамо вертикални падинг
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(24.dp)
-        )
+        if (isLoading) {
+            androidx.compose.material3.CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 2.dp
+            )
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
 
         Spacer(modifier = Modifier.width(16.dp))
 

@@ -193,6 +193,11 @@ fun ListDetailsScreen(
         lazyListState.scrollToItem(0)
     }
     
+    // Track keyboard visibility changes
+    LaunchedEffect(isKeyboardVisible) {
+        keyboardVisible = isKeyboardVisible
+    }
+    
     // Функција за додавање нове празне ставке у листу
     val addEmptyItem = {
         // Генеришемо привремени ID за нову ставку
@@ -228,68 +233,30 @@ fun ListDetailsScreen(
         }
     }
     
-    // Scroll effect to keep the last item visible
-    LaunchedEffect(selectedList?.items?.size) {
+    // COMPLETELY REPLACE all three LaunchedEffect blocks for scrolling with this single one
+    LaunchedEffect(selectedList?.items?.size, isKeyboardVisible, currentEditingItemId) {
         selectedList?.let { list ->
-            if (list.items.isNotEmpty() && currentEditingItemId != null) {
-                delay(150) // Short delay for smooth animation
-                val lastIndex = list.items.size - 1
-                val offset = if (isKeyboardVisible) -200 else -50
-                reorderableState.listState.animateScrollToItem(
-                    index = lastIndex,
-                    scrollOffset = offset
-                )
-            }
-        }
-    }
-    
-    // Додајемо ефекат који прати када се тастатура појави/нестане
-    LaunchedEffect(currentEditingItemId) {
-        if (currentEditingItemId != null) {
-            keyboardVisible = true
-        }
-    }
-    
-    // Poboljšavamo logiku za skrolovanje - fokusiramo se na to da poslednja stavka bude vidljiva
-    LaunchedEffect(selectedList?.items?.size, isKeyboardVisible) {
-        selectedList?.let { list ->
-            if (list.items.isEmpty()) {
-                // Ako je lista prazna, skrolujemo na vrh
-                lazyListState.scrollToItem(0)
-            } else if (currentEditingItemId != null || isKeyboardVisible) {
-                // Dodajemo odlaganje da bi animacija bila glatka
+            val itemCount = list.items.size
+            
+            // Only perform auto-scrolling for lists with 5 or more items
+            if (itemCount >= 5 && (currentEditingItemId != null || isKeyboardVisible)) {
                 delay(150)
-                
                 try {
-                    // Skrolujemo do poslednje stavke samo kada dodajemo novu ili je tastatura vidljiva
+                    // Scroll to the last item with appropriate offset
+                    val lastIndex = itemCount - 1
                     val offset = if (isKeyboardVisible) -200 else -50
                     
-                    lazyListState.animateScrollToItem(
-                        index = list.items.size - 1,
+                    // Use reorderableState for consistency
+                    reorderableState.listState.animateScrollToItem(
+                        index = lastIndex,
                         scrollOffset = offset
                     )
                 } catch (_: Exception) {
-                    // Ignorišemo greške pri skrolovanju
+                    // Ignore scrolling errors
                 }
-            }
-            // Ne radimo ništa ako samo brišemo stavke
-        }
-    }
-    
-    // Modify the LaunchedEffect for new items to be more specific
-    LaunchedEffect(selectedList?.items?.lastOrNull()?.id) {
-        selectedList?.let { list ->
-            if (list.items.isNotEmpty() && (isKeyboardVisible || currentEditingItemId != null)) {
-                delay(100)
-                try {
-                    // Skrolujemo do poslednje stavke samo kada dodajemo novu
-                    lazyListState.animateScrollToItem(
-                        index = list.items.size - 1,
-                        scrollOffset = -200
-                    )
-                } catch (_: Exception) {
-                    // Ignorišemo greške pri skrolovanju
-                }
+            } else if (itemCount == 0) {
+                // For empty lists, scroll to top
+                reorderableState.listState.scrollToItem(0)
             }
         }
     }
@@ -473,9 +440,17 @@ fun ListDetailsScreen(
                             state = reorderableState.listState,
                             contentPadding = PaddingValues(
                                 top = 8.dp,
-                                bottom = if (isKeyboardVisible) 120.dp else 80.dp
+                                bottom = if (isKeyboardVisible) 160.dp else 80.dp
                             )
                         ) {
+                            // Add large spacer at the top for short lists when keyboard is visible
+                            if (isKeyboardVisible && listState.items.size < 5) {
+                                item {
+                                    // This spacer pushes content down so it's visible above the keyboard
+                                    Spacer(modifier = Modifier.padding(top = 200.dp))
+                                }
+                            }
+                            
                             items(
                                 items = listState.items,
                                 key = { item -> item.id }
@@ -869,23 +844,6 @@ fun ShoppingItemRow(
                             listsViewModel.setEditingItemId(item.id)
                         }
                 )
-            }
-
-            if (isKucniPoslovi) {
-                val ageInDays = remember(item.createdAt) {
-                    val now = Timestamp.now()
-                    val diffInSeconds = now.seconds - item.createdAt.seconds
-                    val days = diffInSeconds / (24 * 60 * 60)
-                    days.toInt()
-                }
-                if (ageInDays >= 7) {
-                    Text(
-                        text = "${ageInDays}д",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
             }
         }
     }

@@ -197,7 +197,7 @@ class HomeViewModel() : ViewModel() {
     
     // Функција за синхронизацију догађаја
     fun syncEvents() {
-        if (isLoadingEvents) {
+        if (_syncStatus.value == SyncStatus.Syncing) {
             Log.d("HomeViewModel", "Синхронизација у току, нећу поново покренути")
             return
         }
@@ -216,19 +216,22 @@ class HomeViewModel() : ViewModel() {
                         _syncStatus.value = SyncStatus.Success
                         // Поново учитавамо догађаје након успешне синхронизације
                         loadTodayEvents()
+                        // Враћамо статус на Idle након кратког времена
+                        delay(3000)
+                        if (_syncStatus.value == SyncStatus.Success) {
+                            _syncStatus.value = SyncStatus.Idle
+                        }
                     }
                     .onFailure { e ->
                         Log.e("HomeViewModel", "Грешка при синхронизацији", e)
                         _syncStatus.value = SyncStatus.Error(e.message ?: "Грешка при синхронизацији")
                     }
+                
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Грешка при синхронизацији", e)
                 _syncStatus.value = SyncStatus.Error(e.message ?: "Непозната грешка")
             } finally {
                 isLoadingEvents = false
-                // Враћамо статус на Idle након кратког времена
-                delay(1000)
-                _syncStatus.value = SyncStatus.Idle
                 Log.d("HomeViewModel", "Синхронизација завршена!")
             }
         }

@@ -140,4 +140,10 @@ dependencies {
 
     // ThreeTenABP for java.time backport
     implementation(libs.threetenabp)
+    
+    // WorkManager for scheduling notifications
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    
+    // Notification dependencies
+    implementation("androidx.core:core-ktx:1.12.0")
 }

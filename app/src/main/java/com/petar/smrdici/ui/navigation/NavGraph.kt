@@ -26,11 +26,14 @@ import com.petar.smrdici.ui.screens.home.HomeScreen
 import com.petar.smrdici.ui.screens.lists.ListDetailsScreen
 import com.petar.smrdici.ui.screens.lists.ListsScreen
 import com.petar.smrdici.ui.screens.lists.ListsViewModel
+import com.petar.smrdici.ui.screens.profile.NotificationSettingsScreen
 import com.petar.smrdici.ui.screens.profile.ProfileScreen
 import com.petar.smrdici.ui.screens.settings.FinanceSettingsScreen
 import com.petar.smrdici.ui.screens.settings.FinanceSettingsViewModel
 import com.petar.smrdici.ui.screens.settings.ExpenseCategoriesScreen
 import com.petar.smrdici.ui.screens.settings.IncomeCategoriesScreen
+import com.petar.smrdici.ui.screens.settings.EditCategoryScreen
+import com.petar.smrdici.ui.screens.settings.CategoryType
 import com.petar.smrdici.ui.screens.transfer.TransferScreen
 import com.petar.smrdici.ui.screens.finance.FinanceScreen
 import com.petar.smrdici.ui.screens.finance.FinanceViewModel
@@ -91,6 +94,10 @@ fun NavGraph(
             MainLayout {
                 ProfileScreen(navController = navController)
             }
+        }
+        
+        composable(route = Screen.NotificationSettings.route) {
+            NotificationSettingsScreen(navController = navController)
         }
         
         composable(route = Screen.AddEvent.route) {
@@ -176,6 +183,28 @@ fun NavGraph(
         
         composable(Screen.IncomeCategories.route) {
             IncomeCategoriesScreen(navController = navController)
+        }
+        
+        composable(
+            route = Screen.EditCategory.route,
+            arguments = listOf(
+                navArgument("categoryName") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("categoryType") {
+                    type = NavType.StringType
+                }
+            )
+        ) { backStackEntry ->
+            val categoryName = backStackEntry.arguments?.getString("categoryName") ?: ""
+            val categoryType = backStackEntry.arguments?.getString("categoryType") ?: "EXPENSE"
+            
+            EditCategoryScreen(
+                navController = navController,
+                categoryName = categoryName.replace("_", "/"),
+                categoryType = if (categoryType == "EXPENSE") CategoryType.EXPENSE else CategoryType.INCOME
+            )
         }
         
         composable(Screen.Transfer.route) {

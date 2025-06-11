@@ -1,11 +1,13 @@
 package com.petar.smrdici.data.repository
 
+import android.content.Context
 import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.Event
+import com.petar.smrdici.notification.NotificationManager
 import kotlinx.coroutines.tasks.await
 import java.util.Date
 import kotlinx.coroutines.channels.awaitClose
@@ -15,7 +17,8 @@ import kotlinx.coroutines.flow.callbackFlow
 // Класа је измењена да прима зависности кроз конструктор уместо да их креира интерно
 class EventRepository(
     private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    private val context: Context? = null
 ) {
     private val eventsCollection = firestore.collection("calendar_events")
     
@@ -23,11 +26,14 @@ class EventRepository(
     private var cachedEvents: List<Event> = emptyList()
     private var lastFetchTime: Long = 0
     
+    // Notification manager for event notifications
+    private val notificationManager = context?.let { NotificationManager(it) }
+    
     // Функција за синхронизацију догађаја
     suspend fun syncEvents(): Result<Unit> {
         return try {
-            auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
-            val batch = firestore.batch()
+            val userId = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
+            Log.d("EventRepository", "Почињем синхронизацију за корисника: $userId")
             
             // 1. Прво учитавамо све догађаје из базе
             val remoteEvents = eventsCollection
@@ -36,31 +42,60 @@ class EventRepository(
                 .await()
                 .documents
                 .mapNotNull { doc ->
-                try {
+                    try {
                         doc.toObject(Event::class.java)?.copy(id = doc.id)
-                } catch (e: Exception) {
+                    } catch (e: Exception) {
                         Log.e("EventRepository", "Грешка при конверзији документа", e)
-                    null
-                }
+                        null
+                    }
                 }
             
-            // 2. Учитавамо локалне промене
-            val localChanges = getLocalChanges()
+            Log.d("EventRepository", "Учитано ${remoteEvents.size} догађаја из Firestore базе")
             
-            // 3. Примењујемо batch операције
-            localChanges.forEach { event ->
-                val docRef = eventsCollection.document(event.id ?: eventsCollection.document().id)
-                batch.set(docRef, event)
+            // 2. Учитавамо све локалне догађаје
+            val localEvents = getAllEvents()
+            Log.d("EventRepository", "Учитано ${localEvents.size} локалних догађаја")
+            
+            // 3. Идентификујемо догађаје који постоје само локално
+            val localOnlyEvents = localEvents.filter { localEvent -> 
+                remoteEvents.none { it.id == localEvent.id }
+            }
+            Log.d("EventRepository", "Пронађено ${localOnlyEvents.size} догађаја који постоје само локално")
+            
+            // 4. Креирамо batch операцију за слање локалних догађаја на сервер
+            if (localOnlyEvents.isNotEmpty()) {
+                val batch = firestore.batch()
+                
+                localOnlyEvents.forEach { event ->
+                    val docRef = if (event.id != null) {
+                        eventsCollection.document(event.id!!)
+                    } else {
+                        eventsCollection.document()
+                    }
+                    batch.set(docRef, event)
+                }
+                
+                batch.commit().await()
+                Log.d("EventRepository", "Послато ${localOnlyEvents.size} локалних догађаја на сервер")
             }
             
-            // 4. Извршавамо batch
-            batch.commit().await()
+            // 5. Идентификујемо догађаје који постоје само на серверу
+            val remoteOnlyEvents = remoteEvents.filter { remoteEvent ->
+                localEvents.none { it.id == remoteEvent.id }
+            }
+            Log.d("EventRepository", "Пронађено ${remoteOnlyEvents.size} догађаја који постоје само на серверу")
             
-            // 5. Инвалидирамо кеш
-            lastFetchTime = 0
-            cachedEvents = remoteEvents
+            // 6. Ажурирамо локални кеш са свим догађајима
+            cachedEvents = (localEvents + remoteOnlyEvents).distinctBy { it.id }
+            lastFetchTime = System.currentTimeMillis()
             
-            Log.d("EventRepository", "Синхронизовано ${remoteEvents.size} догађаја")
+            // 7. Cancel notifications for past events
+            cancelPastEventNotifications(cachedEvents)
+            
+            // 8. Schedule notifications for upcoming events
+            scheduleNotificationsForEvents(cachedEvents)
+            
+            Log.d("EventRepository", "Синхронизација завршена. Укупно догађаја након синхронизације: ${cachedEvents.size}")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("EventRepository", "Грешка при синхронизацији", e)
@@ -87,6 +122,11 @@ class EventRepository(
             )
             
             val docRef = eventsCollection.add(eventData).await()
+            
+            // Schedule notification for the new event
+            val newEvent = event.copy(id = docRef.id)
+            scheduleNotificationForEvent(newEvent)
+            
             Result.success(docRef.id)
         } catch (e: Exception) {
             Log.e("EventRepository", "Грешка при додавању догађаја", e)
@@ -115,6 +155,17 @@ class EventRepository(
                     .update(eventData.toMap())
                     .await()
                 
+                // Cancel existing notifications and reschedule
+                notificationManager?.cancelEventNotifications(id)
+                
+                // Only schedule if the event is in the future
+                if (isEventInFuture(event)) {
+                    scheduleNotificationForEvent(event)
+                    Log.d("EventRepository", "Заказано обавештење за будући догађај: ${event.title}")
+                } else {
+                    Log.d("EventRepository", "Догађај је у прошлости, обавештења нису заказана: ${event.title}")
+                }
+                
                 Log.d("EventRepository", "Догађај успешно ажуриран у бази")
             } ?: throw IllegalStateException("Event ID cannot be null")
             
@@ -132,11 +183,53 @@ class EventRepository(
                 .delete()
                 .await()
             
+            // Cancel notifications for deleted event
+            notificationManager?.cancelEventNotifications(eventId)
+            
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("EventRepository", "Грешка при брисању догађаја", e)
             Result.failure(e)
         }
+    }
+    
+    // Schedule notification for a single event
+    private fun scheduleNotificationForEvent(event: Event) {
+        // Only schedule notifications for future events
+        if (isEventInFuture(event)) {
+            notificationManager?.scheduleEventNotification(event)
+        } else {
+            Log.d("EventRepository", "Прескачем заказивање обавештења за прошли догађај: ${event.title}")
+        }
+    }
+    
+    // Schedule notifications for multiple events
+    private fun scheduleNotificationsForEvents(events: List<Event>) {
+        val futureEvents = events.filter { isEventInFuture(it) }
+        Log.d("EventRepository", "Заказујем обавештења за ${futureEvents.size} будућих догађаја од укупно ${events.size}")
+        
+        futureEvents.forEach { event ->
+            scheduleNotificationForEvent(event)
+        }
+    }
+    
+    // Cancel notifications for events that are in the past
+    private fun cancelPastEventNotifications(events: List<Event>) {
+        val pastEvents = events.filter { !isEventInFuture(it) }
+        Log.d("EventRepository", "Отказујем обавештења за ${pastEvents.size} прошлих догађаја")
+        
+        pastEvents.forEach { event ->
+            event.id?.let { eventId ->
+                notificationManager?.cancelEventNotifications(eventId)
+                Log.d("EventRepository", "Отказано обавештење за прошли догађај: ${event.title}")
+            }
+        }
+    }
+    
+    // Check if an event is in the future
+    private fun isEventInFuture(event: Event): Boolean {
+        val now = System.currentTimeMillis()
+        return event.startTime?.toDate()?.time?.let { it > now } ?: false
     }
     
     // Добављање свих догађаја за извоз/увоз
@@ -250,8 +343,14 @@ class EventRepository(
     // Помоћна функција за добављање локалних промена
     // Ово би требало да буде имплементирано за рад ван мреже
     private fun getLocalChanges(): List<Event> {
-        // Овде бисмо имплементирали локални кеш са Room или неком другом базом
-        return emptyList()
+        // У овој имплементацији, враћамо све локалне догађаје који нису синхронизовани
+        // У правој имплементацији, ово би користило Room базу или другу локалну базу
+        // за праћење промена које нису синхронизоване са сервером
+        return cachedEvents.filter { event ->
+            // Овде би требало да имамо неки начин да пратимо који догађаји су модификовани
+            // али пошто немамо такав механизам, враћамо празну листу
+            false
+        }
     }
     
     // Добављање догађаја између два датума
@@ -361,6 +460,16 @@ class EventRepository(
                 instance ?: EventRepository(
                     FirebaseFirestore.getInstance(),
                     FirebaseAuth.getInstance()
+                ).also { instance = it }
+            }
+        }
+        
+        fun getInstance(context: Context): EventRepository {
+            return instance ?: synchronized(this) {
+                instance ?: EventRepository(
+                    FirebaseFirestore.getInstance(),
+                    FirebaseAuth.getInstance(),
+                    context
                 ).also { instance = it }
             }
         }

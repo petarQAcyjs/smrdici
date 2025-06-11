@@ -101,3 +101,27 @@ fabric.properties
 *.bak
 *.tmp
 *.temp
+
+# Cursor-specific files
+cursor.rules
+.cursor/
+.cursor.json
+.cursor
+
+# VS Code
+.vscode/
+
+# Android Profiling
+*.hprof
+
+# Generated files by Android Studio
+/*/build/
+/*/release/
+/*/debug/
+*.apk
+*.ap_
+*.aab
+
+# Gradle wrapper
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
