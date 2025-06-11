@@ -1,19 +1,41 @@
 package com.petar.smrdici.ui.screens.settings
 
+import android.content.Context
+import android.util.Log
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Work
+import androidx.compose.material.icons.filled.MoneyOff
+import androidx.compose.material.icons.filled.LocalAtm
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,10 +44,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,23 +58,62 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryManager
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import kotlinx.coroutines.launch
-import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.auth.AuthState
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.runtime.collectAsState
-import androidx.compose.foundation.layout.PaddingValues
-import android.util.Log
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import android.content.Context
-import androidx.lifecycle.ViewModelProvider
+
+// Funkcija za generisanje boje na osnovu imena kategorije
+fun getIncomeCategoryColor(categoryName: String): Color {
+    val colors = listOf(
+        Color(0xFF4FC3F7), // Light Blue
+        Color(0xFFFF8A65), // Orange
+        Color(0xFF9575CD), // Deep Purple
+        Color(0xFF4DB6AC), // Teal
+        Color(0xFFF06292), // Pink
+        Color(0xFF7986CB), // Indigo
+        Color(0xFFA1887F), // Brown
+        Color(0xFF90A4AE), // Blue Grey
+        Color(0xFFFFB74D), // Amber
+        Color(0xFFAED581), // Light Green
+        Color(0xFFE57373), // Red
+        Color(0xFF64B5F6), // Blue
+        Color(0xFFFFD54F), // Yellow
+        Color(0xFF81C784), // Green
+        Color(0xFFBA68C8), // Purple
+    )
+    
+    // Koristimo hash kod imena kategorije za odabir boje
+    val index = Math.abs(categoryName.hashCode()) % colors.size
+    return colors[index]
+}
+
+// Funkcija za dobijanje odgovarajuće ikone za kategoriju prihoda
+fun getIncomeCategoryIcon(categoryName: String): ImageVector {
+    return when (categoryName.lowercase()) {
+        "paycheck", "плата", "plata" -> Icons.Default.Payments
+        "gift", "поклон", "poklon" -> Icons.Default.CardGiftcard
+        "interest", "камата", "kamata" -> Icons.Default.AccountBalance
+        "refund", "повраћај", "povraćaj" -> Icons.Default.MoneyOff
+        "salary", "зарада", "zarada" -> Icons.Default.Work
+        "savings", "уштеђевина", "ušteđevina" -> Icons.Default.Savings
+        "cash", "готовина", "gotovina" -> Icons.Default.LocalAtm
+        else -> Icons.Default.AttachMoney
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,67 +170,119 @@ fun IncomeCategoriesScreen(
                 user = user
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            androidx.compose.material3.FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Додај категорију")
-            }
-        }
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         if (isLoading.value) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
         } else {
-            LazyColumn(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 80.dp)
             ) {
-                items(incomeCategories) { category ->
-                    Row(
+                // Tab switcher for EXPENSES/INCOME
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .weight(1f)
+                            .padding(4.dp)
+                            .clickable {
+                                navController.navigate("expense_categories") {
+                                    popUpTo("income_categories") { inclusive = true }
+                                }
+                            }
                     ) {
                         Text(
-                            text = category,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f)
+                            text = "EXPENSES",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
-                        
-                        IconButton(onClick = {
-                            Log.d("IncomeCategoriesScreen", "Edit icon clicked for category: $category")
-                            selectedCategory = category
-                            newCategoryName = category
-                            showEditDialog = true
-                        }) {
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(4.dp)
+                    ) {
+                        Text(
+                            text = "INCOME",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        // Underline for active tab
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .background(MaterialTheme.colorScheme.primary)
+                                .align(Alignment.BottomCenter)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Grid of categories
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(5),
+                    contentPadding = PaddingValues(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                ) {
+                    items(incomeCategories) { category ->
+                        IncomeCategoryItem(
+                            name = category,
+                            color = getIncomeCategoryColor(category),
+                            onEdit = {
+                                selectedCategory = category
+                                newCategoryName = category
+                                showEditDialog = true
+                            },
+                            onDelete = {
+                                selectedCategory = category
+                                showDeleteDialog = true
+                            }
+                        )
+                    }
+                    
+                    // Add "Create" item at the end
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f)
+                                .clip(CircleShape)
+                                .background(Color(0xFF9E9E9E)) // Grey color for create button
+                                .clickable {
+                                    newCategoryName = ""
+                                    showAddDialog = true
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Измени категорију"
-                            )
-                        }
-                        
-                        IconButton(onClick = { 
-                            selectedCategory = category
-                            showDeleteDialog = true 
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Обриши категорију",
-                                tint = MaterialTheme.colorScheme.error
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Create",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
-                    
-                    HorizontalDivider()
                 }
             }
         }
@@ -287,6 +402,92 @@ fun IncomeCategoriesScreen(
                     Text("Откажи")
                 }
             }
+        )
+    }
+}
+
+@Composable
+fun IncomeCategoryItem(
+    name: String,
+    color: Color,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(bottom = 2.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+        ) {
+            // Circle background with icon
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .clickable { onEdit() },
+                color = color
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = getIncomeCategoryIcon(name),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            
+            // Edit button - small white circle in top-right
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(2.dp)
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .clickable { onEdit() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit",
+                    tint = color,
+                    modifier = Modifier.size(8.dp)
+                )
+            }
+            
+            // Delete button - small white circle in bottom-right
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(2.dp)
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .clickable { onDelete() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = color,
+                    modifier = Modifier.size(8.dp)
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(1.dp))
+        
+        // Category name
+        Text(
+            text = name,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 } 
