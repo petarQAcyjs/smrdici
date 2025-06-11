@@ -29,4 +29,6 @@ sealed class Screen(val route: String) {
     
     object EditExpense : Screen("edit_expense/{expenseId}")
     object EditIncome : Screen("edit_income/{incomeId}")
+    
+    object NotificationSettings : Screen("notification_settings")
 } 

@@ -6,6 +6,8 @@ import android.content.Context
 import android.os.Process
 import android.os.StrictMode
 import android.util.Log
+import androidx.work.Configuration
+import androidx.work.WorkManager
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException
@@ -14,15 +16,23 @@ import com.google.android.gms.security.ProviderInstaller
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.petar.smrdici.data.repository.AccountRepository
 import com.petar.smrdici.data.repository.RepositoryManager
+import com.petar.smrdici.notification.NotificationManager
 import com.petar.smrdici.utils.AppGlobals
 import com.petar.smrdici.utils.LogUtils
 
 /**
  * Glavna aplikacijska klasa koja se inicijalizuje pri pokretanju aplikacije.
  */
-class SmrdiciApplication : Application() {
+class SmrdiciApplication : Application(), Configuration.Provider {
     companion object {
         private const val TAG = "SmrdiciApplication"
+        
+        // Singleton instance of NotificationManager
+        private lateinit var notificationManagerInstance: NotificationManager
+        
+        fun getNotificationManager(): NotificationManager {
+            return notificationManagerInstance
+        }
     }
     
     override fun onCreate() {
@@ -44,6 +54,9 @@ class SmrdiciApplication : Application() {
         
         // Иницијализујемо AppGlobals
         AppGlobals.initialize(applicationContext)
+        
+        // Initialize NotificationManager
+        initializeNotifications()
         
         // Офлајн подршка је подразумевано укључена у новијим верзијама Firebase-а
         // Нема потребе за додатном конфигурацијом
@@ -225,4 +238,17 @@ class SmrdiciApplication : Application() {
         
         Log.d("SmrdiciApplication", "Repozitorijumi inicijalizovani")
     }
+    
+    private fun initializeNotifications() {
+        // Initialize the NotificationManager
+        notificationManagerInstance = NotificationManager(applicationContext)
+        
+        Log.d(TAG, "Notification system initialized")
+    }
+    
+    // WorkManager configuration
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setMinimumLoggingLevel(android.util.Log.INFO)
+            .build()
 }

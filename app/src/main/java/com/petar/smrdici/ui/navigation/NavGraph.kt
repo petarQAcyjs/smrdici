@@ -26,6 +26,7 @@ import com.petar.smrdici.ui.screens.home.HomeScreen
 import com.petar.smrdici.ui.screens.lists.ListDetailsScreen
 import com.petar.smrdici.ui.screens.lists.ListsScreen
 import com.petar.smrdici.ui.screens.lists.ListsViewModel
+import com.petar.smrdici.ui.screens.profile.NotificationSettingsScreen
 import com.petar.smrdici.ui.screens.profile.ProfileScreen
 import com.petar.smrdici.ui.screens.settings.FinanceSettingsScreen
 import com.petar.smrdici.ui.screens.settings.FinanceSettingsViewModel
@@ -91,6 +92,10 @@ fun NavGraph(
             MainLayout {
                 ProfileScreen(navController = navController)
             }
+        }
+        
+        composable(route = Screen.NotificationSettings.route) {
+            NotificationSettingsScreen(navController = navController)
         }
         
         composable(route = Screen.AddEvent.route) {

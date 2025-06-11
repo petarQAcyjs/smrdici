@@ -287,7 +287,7 @@ fun ProfileScreen(
                                     icon = Icons.Default.Notifications,
                                     title = "Подешавања обавештења",
                                     onClick = {
-                                        showSnackbar("Подешавања обавештења ће бити доступна ускоро")
+                                        navController.navigate(Screen.NotificationSettings.route)
                                     }
                                 )
                             }
