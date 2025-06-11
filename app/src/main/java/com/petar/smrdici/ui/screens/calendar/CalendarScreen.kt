@@ -47,6 +47,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -78,6 +81,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -90,7 +96,8 @@ import java.util.Locale
 @Composable
 fun CalendarScreen(
     navController: NavController,
-    calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModel.Factory())
+    calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModel.Factory()),
+    authViewModel: AuthViewModel = viewModel()
 ) {
     val calendarUiState by calendarViewModel.uiState.collectAsState()
     val eventFormState by calendarViewModel.eventFormState.collectAsState()
@@ -98,10 +105,17 @@ fun CalendarScreen(
     val events by calendarViewModel.events.collectAsState()
     val editingEvent by calendarViewModel.editingEvent.collectAsState()
     val datesWithEvents by calendarViewModel.datesWithEvents.collectAsState()
+    val authState by authViewModel.authState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     
     var showAddEventDialog by remember { mutableStateOf(false) }
     var selectedEvent by remember { mutableStateOf<Event?>(null) }
     var showEventDetailsDialog by remember { mutableStateOf(false) }
+    
+    // Get user from auth state
+    val user = if (authState is AuthState.Authenticated) {
+        (authState as AuthState.Authenticated).user
+    } else null
     
     // Приказујемо дијалог за уређивање када се појави догађај за уређивање
     LaunchedEffect(editingEvent) {
@@ -195,138 +209,128 @@ fun CalendarScreen(
             .fillMaxSize()
             .pullRefresh(pullRefreshState)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Враћамо на стари начин приказа заглавља
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { navController.navigateUp() }
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Назад"
-                    )
-                }
-                
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                Text(
-                    text = "Календар",
-                    style = MaterialTheme.typography.headlineMedium
+        Scaffold(
+            topBar = {
+                AppHeader(
+                    title = "Календар",
+                    user = user,
+                    navController = navController,
+                    showBackButton = true
                 )
-            }
-
-            // Add month navigation controls
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { 
-                        val calendar = Calendar.getInstance().apply { time = selectedDate }
-                        calendar.add(Calendar.MONTH, -1)
-                        calendarViewModel.selectDate(calendar.time)
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = {
+                        calendarViewModel.resetEventForm()
+                        showAddEventDialog = true
                     }
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Претходни месец"
-                    )
-                }
-
-                Text(
-                    text = SimpleDateFormat("MMMM yyyy", Locale.forLanguageTag("sr")).format(selectedDate),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-
-                IconButton(
-                    onClick = { 
-                        val calendar = Calendar.getInstance().apply { time = selectedDate }
-                        calendar.add(Calendar.MONTH, 1)
-                        calendarViewModel.selectDate(calendar.time)
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Следећи месец",
-                        modifier = Modifier.rotate(180f)
-                    )
+                    Icon(Icons.Default.Add, "Додај догађај")
                 }
             }
-            
-            // Враћамо CalendarGrid уместо MonthCalendar
-            CalendarGrid(
-                dates = dates,
-                selectedDate = selectedDate,
-                datesWithEvents = datesWithEvents,
-                onDateSelected = { date -> 
-                    calendarViewModel.selectDate(date)
-                }
-            )
-            
-            when (val state = calendarUiState) {
-                is CalendarUiState.Loading -> {
-                    if (!isRefreshing && events.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                // Add month navigation controls
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = { 
+                            val calendar = Calendar.getInstance().apply { time = selectedDate }
+                            calendar.add(Calendar.MONTH, -1)
+                            calendarViewModel.selectDate(calendar.time)
                         }
-                    } else {
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Претходни месец"
+                        )
+                    }
+
+                    Text(
+                        text = SimpleDateFormat("MMMM yyyy", Locale.forLanguageTag("sr")).format(selectedDate),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    IconButton(
+                        onClick = { 
+                            val calendar = Calendar.getInstance().apply { time = selectedDate }
+                            calendar.add(Calendar.MONTH, 1)
+                            calendarViewModel.selectDate(calendar.time)
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Следећи месец",
+                            modifier = Modifier.rotate(180f)
+                        )
+                    }
+                }
+                
+                // Враћамо CalendarGrid уместо MonthCalendar
+                CalendarGrid(
+                    dates = dates,
+                    selectedDate = selectedDate,
+                    datesWithEvents = datesWithEvents,
+                    onDateSelected = { date -> 
+                        calendarViewModel.selectDate(date)
+                    }
+                )
+                
+                when (val state = calendarUiState) {
+                    is CalendarUiState.Loading -> {
+                        if (!isRefreshing && events.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        } else {
+                            EventsList(
+                                events = emptyList(),
+                                onEventClick = { },
+                                selectedDate = selectedDate,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                            )
+                        }
+                    }
+                    is CalendarUiState.Success -> {
                         EventsList(
-                            events = emptyList(),
-                            onEventClick = { },
+                            events = state.events,
+                            onEventClick = { event ->
+                                selectedEvent = event
+                                showEventDetailsDialog = true
+                            },
                             selectedDate = selectedDate,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
                         )
                     }
-                }
-                is CalendarUiState.Success -> {
-                    EventsList(
-                        events = state.events,
-                        onEventClick = { event ->
-                            selectedEvent = event
-                            showEventDetailsDialog = true
-                        },
-                        selectedDate = selectedDate,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    )
-                }
-                is CalendarUiState.Error -> {
-                    Text(
-                        text = state.message,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(16.dp)
-                    )
+                    is CalendarUiState.Error -> {
+                        Text(
+                            text = state.message,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
                 }
             }
-        }
-        
-        FloatingActionButton(
-            onClick = {
-                calendarViewModel.resetEventForm()
-                showAddEventDialog = true
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-        ) {
-            Icon(Icons.Default.Add, "Додај догађај")
         }
 
         StandardPullRefreshIndicator(
