@@ -26,8 +26,8 @@ class EventRepository(
     // Функција за синхронизацију догађаја
     suspend fun syncEvents(): Result<Unit> {
         return try {
-            auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
-            val batch = firestore.batch()
+            val userId = auth.currentUser?.uid ?: throw IllegalStateException("Корисник није пријављен")
+            Log.d("EventRepository", "Почињем синхронизацију за корисника: $userId")
             
             // 1. Прво учитавамо све догађаје из базе
             val remoteEvents = eventsCollection
@@ -36,31 +36,54 @@ class EventRepository(
                 .await()
                 .documents
                 .mapNotNull { doc ->
-                try {
+                    try {
                         doc.toObject(Event::class.java)?.copy(id = doc.id)
-                } catch (e: Exception) {
+                    } catch (e: Exception) {
                         Log.e("EventRepository", "Грешка при конверзији документа", e)
-                    null
-                }
+                        null
+                    }
                 }
             
-            // 2. Учитавамо локалне промене
-            val localChanges = getLocalChanges()
+            Log.d("EventRepository", "Учитано ${remoteEvents.size} догађаја из Firestore базе")
             
-            // 3. Примењујемо batch операције
-            localChanges.forEach { event ->
-                val docRef = eventsCollection.document(event.id ?: eventsCollection.document().id)
-                batch.set(docRef, event)
+            // 2. Учитавамо све локалне догађаје
+            val localEvents = getAllEvents()
+            Log.d("EventRepository", "Учитано ${localEvents.size} локалних догађаја")
+            
+            // 3. Идентификујемо догађаје који постоје само локално
+            val localOnlyEvents = localEvents.filter { localEvent -> 
+                remoteEvents.none { it.id == localEvent.id }
+            }
+            Log.d("EventRepository", "Пронађено ${localOnlyEvents.size} догађаја који постоје само локално")
+            
+            // 4. Креирамо batch операцију за слање локалних догађаја на сервер
+            if (localOnlyEvents.isNotEmpty()) {
+                val batch = firestore.batch()
+                
+                localOnlyEvents.forEach { event ->
+                    val docRef = if (event.id != null) {
+                        eventsCollection.document(event.id!!)
+                    } else {
+                        eventsCollection.document()
+                    }
+                    batch.set(docRef, event)
+                }
+                
+                batch.commit().await()
+                Log.d("EventRepository", "Послато ${localOnlyEvents.size} локалних догађаја на сервер")
             }
             
-            // 4. Извршавамо batch
-            batch.commit().await()
+            // 5. Идентификујемо догађаје који постоје само на серверу
+            val remoteOnlyEvents = remoteEvents.filter { remoteEvent ->
+                localEvents.none { it.id == remoteEvent.id }
+            }
+            Log.d("EventRepository", "Пронађено ${remoteOnlyEvents.size} догађаја који постоје само на серверу")
             
-            // 5. Инвалидирамо кеш
-            lastFetchTime = 0
-            cachedEvents = remoteEvents
+            // 6. Ажурирамо локални кеш са свим догађајима
+            cachedEvents = (localEvents + remoteOnlyEvents).distinctBy { it.id }
+            lastFetchTime = System.currentTimeMillis()
             
-            Log.d("EventRepository", "Синхронизовано ${remoteEvents.size} догађаја")
+            Log.d("EventRepository", "Синхронизација завршена. Укупно догађаја након синхронизације: ${cachedEvents.size}")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("EventRepository", "Грешка при синхронизацији", e)
@@ -250,8 +273,14 @@ class EventRepository(
     // Помоћна функција за добављање локалних промена
     // Ово би требало да буде имплементирано за рад ван мреже
     private fun getLocalChanges(): List<Event> {
-        // Овде бисмо имплементирали локални кеш са Room или неком другом базом
-        return emptyList()
+        // У овој имплементацији, враћамо све локалне догађаје који нису синхронизовани
+        // У правој имплементацији, ово би користило Room базу или другу локалну базу
+        // за праћење промена које нису синхронизоване са сервером
+        return cachedEvents.filter { event ->
+            // Овде би требало да имамо неки начин да пратимо који догађаји су модификовани
+            // али пошто немамо такав механизам, враћамо празну листу
+            false
+        }
     }
     
     // Добављање догађаја између два датума
