@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Све боје су уклоњене јер се не користе у апликацији -->
+    <!-- Avatar background colors -->
+    <color name="avatar_everyone_color">#4285F4</color>
+    <color name="avatar_petar_color">#3F51B5</color>
+    <color name="avatar_natasa_color">#DB4437</color>
+    <color name="avatar_milica_color">#E91E63</color>
+    <color name="avatar_bogdan_color">#F4B400</color>
 </resources>
