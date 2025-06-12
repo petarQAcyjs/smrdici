@@ -7,6 +7,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.petar.smrdici.data.model.Event
+import com.petar.smrdici.notification.NotificationHelper
 import com.petar.smrdici.notification.NotificationManager
 import kotlinx.coroutines.tasks.await
 import java.util.Date
@@ -196,8 +197,11 @@ class EventRepository(
     // Schedule notification for a single event
     private fun scheduleNotificationForEvent(event: Event) {
         // Only schedule notifications for future events
-        if (isEventInFuture(event)) {
-            notificationManager?.scheduleEventNotification(event)
+        if (isEventInFuture(event) && event.id != null) {
+            context?.let { ctx ->
+                NotificationHelper.scheduleNotificationsForEvent(ctx, event)
+                Log.d("EventRepository", "Scheduled notifications for event: ${event.title}")
+            } ?: Log.e("EventRepository", "Context is null, cannot schedule notifications")
         } else {
             Log.d("EventRepository", "Прескачем заказивање обавештења за прошли догађај: ${event.title}")
         }

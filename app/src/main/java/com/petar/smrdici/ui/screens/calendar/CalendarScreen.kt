@@ -75,6 +75,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,6 +86,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.petar.smrdici.R
 import com.petar.smrdici.SmrdiciApplication
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
@@ -102,6 +104,8 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import com.petar.smrdici.notification.NotificationHelper
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -612,11 +616,22 @@ fun EventItem(
                     )
                     .border(1.dp, Color(event.color.toColorInt()), CircleShape)
             ) {
-                // Експлицитан тип String за Text
-                Text(
-                    text = assignee.initial,
-                    color = Color(event.color.toColorInt()),
-                    fontWeight = FontWeight.Bold
+                // Get avatar image resource based on assignee
+                val avatarRes = when(assignee) {
+                    EventAssignee.EVERYONE -> R.drawable.avatar_everyone
+                    EventAssignee.PETAR -> R.drawable.avatar_petar
+                    EventAssignee.NATASA -> R.drawable.avatar_natasa
+                    EventAssignee.MILICA -> R.drawable.avatar_milica
+                    EventAssignee.BOGDAN -> R.drawable.avatar_bogdan
+                }
+                
+                Image(
+                    painter = painterResource(id = avatarRes),
+                    contentDescription = assignee.displayName,
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
                 )
             }
             
@@ -969,6 +984,15 @@ fun AssigneeAvatar(
     } else {
         MaterialTheme.colorScheme.onSurface
     }
+    
+    // Get avatar image resource based on assignee
+    val avatarRes = when(assignee) {
+        EventAssignee.EVERYONE -> R.drawable.avatar_everyone
+        EventAssignee.PETAR -> R.drawable.avatar_petar
+        EventAssignee.NATASA -> R.drawable.avatar_natasa
+        EventAssignee.MILICA -> R.drawable.avatar_milica
+        EventAssignee.BOGDAN -> R.drawable.avatar_bogdan
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -990,12 +1014,13 @@ fun AssigneeAvatar(
                 )
                 .clickable { onClick() }
         ) {
-            // Експлицитно додајемо типизацију за Text
-            Text(
-                text = assignee.initial,
-                color = Color(assignee.color.toColorInt()),
-                fontWeight = FontWeight.Bold,
-                fontSize = 20.sp
+            Image(
+                painter = painterResource(id = avatarRes),
+                contentDescription = assignee.displayName,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
@@ -1060,10 +1085,22 @@ fun EventDetailsDialog(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = assignee.initial,
-                                color = Color(assignee.color.toColorInt()),
-                                style = MaterialTheme.typography.titleMedium
+                            // Get avatar image resource based on assignee
+                            val avatarRes = when(assignee) {
+                                EventAssignee.EVERYONE -> R.drawable.avatar_everyone
+                                EventAssignee.PETAR -> R.drawable.avatar_petar
+                                EventAssignee.NATASA -> R.drawable.avatar_natasa
+                                EventAssignee.MILICA -> R.drawable.avatar_milica
+                                EventAssignee.BOGDAN -> R.drawable.avatar_bogdan
+                            }
+                            
+                            Image(
+                                painter = painterResource(id = avatarRes),
+                                contentDescription = assignee.displayName,
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
                             )
                         }
                         

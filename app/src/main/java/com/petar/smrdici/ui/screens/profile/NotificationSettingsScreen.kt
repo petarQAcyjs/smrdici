@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -21,6 +23,11 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +50,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.petar.smrdici.SmrdiciApplication
+import com.petar.smrdici.notification.DailyWeatherWorker
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -59,6 +69,7 @@ fun NotificationSettingsScreen(
     val notificationManager = SmrdiciApplication.getNotificationManager()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    val scrollState = rememberScrollState()
     
     // Get the current user
     val authState by authViewModel.authState.collectAsState()
@@ -72,6 +83,12 @@ fun NotificationSettingsScreen(
     var hourBeforeNotificationEnabled by remember { mutableStateOf(notificationManager.hourBeforeNotificationEnabled) }
     var notificationSoundEnabled by remember { mutableStateOf(notificationManager.notificationSoundEnabled) }
     var notificationVibrationEnabled by remember { mutableStateOf(notificationManager.notificationVibrationEnabled) }
+    
+    // State for new notification features
+    var avatarNotificationsEnabled by remember { mutableStateOf(notificationManager.avatarNotificationsEnabled) }
+    var dynamicTimingEnabled by remember { mutableStateOf(notificationManager.dynamicTimingEnabled) }
+    var smartGroupingEnabled by remember { mutableStateOf(notificationManager.smartGroupingEnabled) }
+    var weatherAwareEnabled by remember { mutableStateOf(notificationManager.weatherAwareEnabled) }
     
     // Check if notification permission is granted
     val notificationPermissionGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -109,6 +126,7 @@ fun NotificationSettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp)
+                .verticalScroll(scrollState)
         ) {
             // Main notification settings card
             Card(
@@ -211,6 +229,125 @@ fun NotificationSettingsScreen(
                         },
                         enabled = notificationsEnabled && notificationPermissionGranted
                     )
+                    
+                    // Dynamic timing toggle
+                    SwitchSettingsItem(
+                        icon = Icons.Default.AccessTime,
+                        title = "Динамичко време",
+                        subtitle = "Паметно време обавештења (08:00 или 12:00)",
+                        checked = dynamicTimingEnabled,
+                        onCheckedChange = { checked ->
+                            dynamicTimingEnabled = checked
+                            notificationManager.dynamicTimingEnabled = checked
+                        },
+                        enabled = notificationsEnabled && notificationPermissionGranted
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Advanced notification features
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "Напредне функције",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    // Avatar notifications toggle
+                    SwitchSettingsItem(
+                        icon = Icons.Default.Person,
+                        title = "Аватари у обавештењима",
+                        subtitle = "Прикажи аватаре особа у обавештењима",
+                        checked = avatarNotificationsEnabled,
+                        onCheckedChange = { checked ->
+                            avatarNotificationsEnabled = checked
+                            notificationManager.avatarNotificationsEnabled = checked
+                        },
+                        enabled = notificationsEnabled && notificationPermissionGranted
+                    )
+                    
+                    // Smart grouping toggle
+                    SwitchSettingsItem(
+                        icon = Icons.AutoMirrored.Filled.FormatListBulleted,
+                        title = "Паметно груписање",
+                        subtitle = "Групиши више догађаја у једном дану",
+                        checked = smartGroupingEnabled,
+                        onCheckedChange = { checked ->
+                            smartGroupingEnabled = checked
+                            notificationManager.smartGroupingEnabled = checked
+                        },
+                        enabled = notificationsEnabled && notificationPermissionGranted
+                    )
+                    
+                    // Weather-aware notifications toggle
+                    SwitchSettingsItem(
+                        icon = Icons.Default.WbSunny,
+                        title = "Временска прогноза",
+                        subtitle = "Додај информације о времену у обавештења",
+                        checked = weatherAwareEnabled,
+                        onCheckedChange = { checked ->
+                            weatherAwareEnabled = checked
+                            notificationManager.weatherAwareEnabled = checked
+                        },
+                        enabled = notificationsEnabled && notificationPermissionGranted
+                    )
+                }
+            }
+            
+            // Add a separate card for the test weather button
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "Тестирање",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            // Create a test weather notification now
+                            val weatherWorker = OneTimeWorkRequestBuilder<DailyWeatherWorker>()
+                                .build()
+                            WorkManager.getInstance(context).enqueue(weatherWorker)
+                            
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Тест обавештења о времену је покренут"
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = weatherAwareEnabled && notificationsEnabled && notificationPermissionGranted
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Default.WbSunny,
+                            contentDescription = "Тестирај обавештење о времену"
+                        )
+                        androidx.compose.material3.Text(
+                            text = "Тестирај дневно обавештење о времену",
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
                 }
             }
             
@@ -235,7 +372,7 @@ fun NotificationSettingsScreen(
                     
                     // Sound toggle
                     SwitchSettingsItem(
-                        icon = Icons.Default.VolumeUp,
+                        icon = Icons.AutoMirrored.Filled.VolumeUp,
                         title = "Звук",
                         subtitle = "Пуштај звук при обавештењу",
                         checked = notificationSoundEnabled,
@@ -274,6 +411,10 @@ fun NotificationSettingsScreen(
                     hourBeforeNotificationEnabled = notificationManager.hourBeforeNotificationEnabled
                     notificationSoundEnabled = notificationManager.notificationSoundEnabled
                     notificationVibrationEnabled = notificationManager.notificationVibrationEnabled
+                    avatarNotificationsEnabled = notificationManager.avatarNotificationsEnabled
+                    dynamicTimingEnabled = notificationManager.dynamicTimingEnabled
+                    smartGroupingEnabled = notificationManager.smartGroupingEnabled
+                    weatherAwareEnabled = notificationManager.weatherAwareEnabled
                     
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar(
@@ -292,6 +433,9 @@ fun NotificationSettingsScreen(
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
+            
+            // Add extra space at the bottom to ensure everything is visible
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 } 

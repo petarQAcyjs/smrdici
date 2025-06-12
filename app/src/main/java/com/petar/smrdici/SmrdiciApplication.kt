@@ -16,7 +16,9 @@ import com.google.android.gms.security.ProviderInstaller
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.petar.smrdici.data.repository.AccountRepository
 import com.petar.smrdici.data.repository.RepositoryManager
+import com.petar.smrdici.notification.DailyWeatherScheduler
 import com.petar.smrdici.notification.NotificationManager
+import com.petar.smrdici.util.TimeFormatUtil
 import com.petar.smrdici.utils.AppGlobals
 import com.petar.smrdici.utils.LogUtils
 
@@ -30,13 +32,23 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         // Singleton instance of NotificationManager
         private lateinit var notificationManagerInstance: NotificationManager
         
+        // Application instance
+        private lateinit var instance: SmrdiciApplication
+        
         fun getNotificationManager(): NotificationManager {
             return notificationManagerInstance
+        }
+        
+        fun getInstance(): SmrdiciApplication {
+            return instance
         }
     }
     
     override fun onCreate() {
         super.onCreate()
+        
+        // Store instance
+        instance = this
         
         Log.d(TAG, "Inicijalizacija Smrdici aplikacije")
         
@@ -45,6 +57,9 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         
         // Inicijalizacija log sistema
         initLogging()
+        
+        // Force 24-hour time format
+        TimeFormatUtil.force24HourFormat(this)
         
         // Иницијализујемо Google Play сервисе правилно
         initGooglePlayServices()
@@ -242,6 +257,14 @@ class SmrdiciApplication : Application(), Configuration.Provider {
     private fun initializeNotifications() {
         // Initialize the NotificationManager
         notificationManagerInstance = NotificationManager(applicationContext)
+        
+        // Setup daily weather notification if weather-aware notifications are enabled
+        if (notificationManagerInstance.weatherAwareEnabled) {
+            DailyWeatherScheduler.scheduleDailyWeatherNotification(applicationContext)
+        } else {
+            // Cancel any existing scheduled weather notifications
+            DailyWeatherScheduler.cancelDailyWeatherNotification(applicationContext)
+        }
         
         Log.d(TAG, "Notification system initialized")
     }

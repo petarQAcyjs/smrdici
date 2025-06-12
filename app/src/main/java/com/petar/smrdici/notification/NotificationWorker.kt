@@ -27,6 +27,35 @@ class NotificationWorker(
         
         // Notification timing constants (in milliseconds)
         const val ONE_DAY_MILLIS = 24 * 60 * 60 * 1000L
+        
+        /**
+         * Translate common weather descriptions from English to Serbian Cyrillic
+         */
+        fun translateWeatherDescription(description: String): String {
+            return when {
+                description.contains("Sunny", ignoreCase = true) -> "Сунчано"
+                description.contains("Clear", ignoreCase = true) -> "Ведро"
+                description.contains("Partly cloudy", ignoreCase = true) -> "Делимично облачно"
+                description.contains("Cloudy", ignoreCase = true) -> "Облачно"
+                description.contains("Overcast", ignoreCase = true) -> "Тмурно"
+                description.contains("Mist", ignoreCase = true) -> "Измаглица"
+                description.contains("Fog", ignoreCase = true) -> "Магла"
+                description.contains("Light rain", ignoreCase = true) -> "Слаба киша"
+                description.contains("Rain", ignoreCase = true) -> "Киша"
+                description.contains("Heavy rain", ignoreCase = true) -> "Јака киша"
+                description.contains("Thunderstorm", ignoreCase = true) -> "Грмљавина"
+                description.contains("Thunder", ignoreCase = true) -> "Грмљавина"
+                description.contains("Snow", ignoreCase = true) -> "Снег"
+                description.contains("Light snow", ignoreCase = true) -> "Слаб снег"
+                description.contains("Heavy snow", ignoreCase = true) -> "Јак снег"
+                description.contains("Sleet", ignoreCase = true) -> "Суснежица"
+                description.contains("Freezing", ignoreCase = true) -> "Ледено"
+                description.contains("Drizzle", ignoreCase = true) -> "Росуља"
+                description.contains("Hail", ignoreCase = true) -> "Град"
+                description.contains("Shower", ignoreCase = true) -> "Пљусак"
+                else -> description // Return original if no translation found
+            }
+        }
     }
     
     override suspend fun doWork(): Result {
