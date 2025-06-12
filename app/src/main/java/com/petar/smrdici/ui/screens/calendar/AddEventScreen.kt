@@ -46,6 +46,7 @@ import androidx.navigation.NavController
 import com.petar.smrdici.data.model.EventColor
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.ui.components.TimePickerWrapper
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -329,13 +330,14 @@ fun AddEventScreen(
             initialMinute = when (timePickerMode) {
                 TimePickerMode.START -> formState.startTime?.minute ?: 0
                 TimePickerMode.END -> formState.endTime?.minute ?: 0
-            }
+            },
+            is24Hour = true
         )
         
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
             title = { Text("Изаберите време") },
-            text = { TimePicker(state = timePickerState) },
+            text = { TimePickerWrapper(state = timePickerState) },
             confirmButton = {
                 TextButton(
                     onClick = {
