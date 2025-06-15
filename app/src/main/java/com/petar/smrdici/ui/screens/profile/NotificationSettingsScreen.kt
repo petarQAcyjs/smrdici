@@ -348,6 +348,63 @@ fun NotificationSettingsScreen(
                             modifier = Modifier.padding(start = 8.dp)
                         )
                     }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Test dynamic timing notification
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            // Use the helper method to schedule a test dynamic notification
+                            com.petar.smrdici.notification.NotificationHelper.scheduleTestDynamicNotification(context)
+                            
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Тест динамичког обавештења је покренут за 1 минут"
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = dynamicTimingEnabled && notificationsEnabled && notificationPermissionGranted
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Default.AccessTime,
+                            contentDescription = "Тестирај динамичко обавештење"
+                        )
+                        androidx.compose.material3.Text(
+                            text = "Тестирај динамичко обавештење",
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                    
+                    // Show exact alarm permission status
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                        val canScheduleExact = com.petar.smrdici.notification.NotificationHelper.canScheduleExactAlarms(context)
+                        
+                        if (!canScheduleExact) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            androidx.compose.material3.Button(
+                                onClick = {
+                                    val intent = com.petar.smrdici.notification.NotificationHelper.getExactAlarmSettingsIntent(context)
+                                    if (intent != null) {
+                                        context.startActivity(intent)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = androidx.compose.material3.MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Дозвола за тачне аларме"
+                                )
+                                androidx.compose.material3.Text(
+                                    text = "Дозволи тачне аларме (потребно за динамичка обавештења)",
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
             

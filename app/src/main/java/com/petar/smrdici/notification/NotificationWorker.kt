@@ -203,6 +203,8 @@ class NotificationWorker(
             }
         }
         
+        Log.d(TAG, "Dynamic timing calculation: Event at ${Date(startTimeMillis)}, Notification scheduled for ${Date(notificationTime.timeInMillis)}")
+        
         // Only schedule if the notification time is in the future
         if (notificationTime.timeInMillis > System.currentTimeMillis()) {
             val intent = Intent(context, NotificationReceiver::class.java).apply {
@@ -234,21 +236,44 @@ class NotificationWorker(
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    notificationTime.timeInMillis,
-                    pendingIntent
-                )
+            // Check if we can schedule exact alarms (Android 12+)
+            val canScheduleExact = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                alarmManager.canScheduleExactAlarms()
             } else {
-                alarmManager.setExact(
-                    AlarmManager.RTC_WAKEUP,
-                    notificationTime.timeInMillis,
-                    pendingIntent
-                )
+                true
             }
             
-            Log.d(TAG, "Scheduled dynamic notification for ${Date(notificationTime.timeInMillis)}, event: $title at ${Date(startTimeMillis)}")
+            Log.d(TAG, "Can schedule exact alarms: $canScheduleExact")
+            
+            try {
+                if (canScheduleExact && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        notificationTime.timeInMillis,
+                        pendingIntent
+                    )
+                    Log.d(TAG, "Scheduled exact alarm for dynamic notification: ${Date(notificationTime.timeInMillis)}")
+                } else if (canScheduleExact) {
+                    alarmManager.setExact(
+                        AlarmManager.RTC_WAKEUP,
+                        notificationTime.timeInMillis,
+                        pendingIntent
+                    )
+                    Log.d(TAG, "Scheduled exact alarm (pre-M) for dynamic notification: ${Date(notificationTime.timeInMillis)}")
+                } else {
+                    // Fallback to inexact alarm
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        notificationTime.timeInMillis,
+                        pendingIntent
+                    )
+                    Log.d(TAG, "Scheduled inexact alarm (fallback) for dynamic notification: ${Date(notificationTime.timeInMillis)}")
+                }
+                
+                Log.d(TAG, "Successfully scheduled dynamic notification for ${Date(notificationTime.timeInMillis)}, event: $title")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error scheduling dynamic notification for event: $title", e)
+            }
         } else {
             Log.d(TAG, "Skipping dynamic notification for past time: ${Date(notificationTime.timeInMillis)}")
         }
@@ -416,9 +441,20 @@ class NotificationWorker(
                 }
             }
             
+            Log.d(TAG, "Dynamic timing calculation: Event at ${Date(startTimeMillis)}, Notification scheduled for ${Date(notificationTime.timeInMillis)}")
+            
             // Only schedule if the notification time is in the future
             if (notificationTime.timeInMillis > System.currentTimeMillis()) {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                
+                // Check if we can schedule exact alarms (Android 12+)
+                val canScheduleExact = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    alarmManager.canScheduleExactAlarms()
+                } else {
+                    true
+                }
+                
+                Log.d(TAG, "Can schedule exact alarms: $canScheduleExact")
                 
                 val intent = Intent(context, NotificationReceiver::class.java).apply {
                     putExtra("EVENT_ID", event.id)
@@ -452,21 +488,37 @@ class NotificationWorker(
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        notificationTime.timeInMillis,
-                        pendingIntent
-                    )
-                } else {
-                    alarmManager.setExact(
-                        AlarmManager.RTC_WAKEUP,
-                        notificationTime.timeInMillis,
-                        pendingIntent
-                    )
+                try {
+                    if (canScheduleExact && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                        alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            notificationTime.timeInMillis,
+                            pendingIntent
+                        )
+                        Log.d(TAG, "Scheduled exact alarm for dynamic notification: ${Date(notificationTime.timeInMillis)}")
+                    } else if (canScheduleExact) {
+                        alarmManager.setExact(
+                            AlarmManager.RTC_WAKEUP,
+                            notificationTime.timeInMillis,
+                            pendingIntent
+                        )
+                        Log.d(TAG, "Scheduled exact alarm (pre-M) for dynamic notification: ${Date(notificationTime.timeInMillis)}")
+                    } else {
+                        // Fallback to inexact alarm
+                        alarmManager.setAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            notificationTime.timeInMillis,
+                            pendingIntent
+                        )
+                        Log.d(TAG, "Scheduled inexact alarm (fallback) for dynamic notification: ${Date(notificationTime.timeInMillis)}")
+                    }
+                    
+                    Log.d(TAG, "Successfully scheduled dynamic notification for ${Date(notificationTime.timeInMillis)}, event: ${event.title}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error scheduling dynamic notification for event: ${event.title}", e)
                 }
-                
-                Log.d(TAG, "Scheduled dynamic notification for ${Date(notificationTime.timeInMillis)}, event: ${event.title}")
+            } else {
+                Log.d(TAG, "Skipping dynamic notification for past time: ${Date(notificationTime.timeInMillis)}")
             }
         }
         

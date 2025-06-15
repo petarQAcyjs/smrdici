@@ -223,4 +223,48 @@ object NotificationHelper {
             Log.e(TAG, "Error scheduling notification", e)
         }
     }
+    
+    /**
+     * Schedule a test dynamic timing notification for debugging
+     */
+    fun scheduleTestDynamicNotification(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        
+        // Schedule for 1 minute from now for testing
+        val testTime = System.currentTimeMillis() + (60 * 1000) // 1 minute from now
+        
+        val intent = Intent(context, NotificationReceiver::class.java).apply {
+            putExtra("EVENT_ID", "test_dynamic")
+            putExtra("EVENT_TITLE", "Test Dynamic Event")
+            putExtra("EVENT_MESSAGE", "This is a test dynamic timing notification")
+            putExtra("EVENT_ASSIGNEE", "EVERYONE")
+        }
+        
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            "test_dynamic".hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        try {
+            if (canScheduleExactAlarms(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    testTime,
+                    pendingIntent
+                )
+                Log.d(TAG, "Test dynamic notification scheduled for ${Date(testTime)}")
+            } else {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    testTime,
+                    pendingIntent
+                )
+                Log.d(TAG, "Test dynamic notification scheduled (inexact) for ${Date(testTime)}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error scheduling test dynamic notification", e)
+        }
+    }
 } 

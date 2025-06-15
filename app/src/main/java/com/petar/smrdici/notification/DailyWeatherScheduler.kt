@@ -30,9 +30,9 @@ object DailyWeatherScheduler {
             .putString("LOCATION", location)
             .build()
         
-        // Set constraints - ideally we want network connectivity
+        // Set constraints - we want network connectivity but will work without it
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+            .setRequiredNetworkType(androidx.work.NetworkType.NOT_REQUIRED)
             .build()
         
         // Build the periodic work request - runs every 24 hours

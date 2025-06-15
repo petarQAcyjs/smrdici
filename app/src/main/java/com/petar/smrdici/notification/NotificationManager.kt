@@ -62,7 +62,7 @@ class NotificationManager(private val context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_SMART_GROUPING, value).apply()
     
     var weatherAwareEnabled: Boolean
-        get() = prefs.getBoolean(KEY_WEATHER_AWARE, false)
+        get() = prefs.getBoolean(KEY_WEATHER_AWARE, true)
         set(value) {
             prefs.edit().putBoolean(KEY_WEATHER_AWARE, value).apply()
             
