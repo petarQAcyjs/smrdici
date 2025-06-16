@@ -18,6 +18,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.toColorInt
 import com.petar.smrdici.R
 import com.petar.smrdici.SmrdiciApplication
 import com.petar.smrdici.data.model.EventAssignee
@@ -46,36 +48,7 @@ class NotificationService(private val context: Context) {
         private val eventsByDate = ConcurrentHashMap<String, MutableList<EventNotificationData>>()
         
         // Date formatter for grouping key
-        private val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        
-        /**
-         * Translate common weather descriptions from English to Serbian Cyrillic
-         */
-        fun translateWeatherDescription(description: String): String {
-            return when {
-                description.contains("Sunny", ignoreCase = true) -> "Сунчано"
-                description.contains("Clear", ignoreCase = true) -> "Ведро"
-                description.contains("Partly cloudy", ignoreCase = true) -> "Делимично облачно"
-                description.contains("Cloudy", ignoreCase = true) -> "Облачно"
-                description.contains("Overcast", ignoreCase = true) -> "Тмурно"
-                description.contains("Mist", ignoreCase = true) -> "Измаглица"
-                description.contains("Fog", ignoreCase = true) -> "Магла"
-                description.contains("Light rain", ignoreCase = true) -> "Слаба киша"
-                description.contains("Rain", ignoreCase = true) -> "Киша"
-                description.contains("Heavy rain", ignoreCase = true) -> "Јака киша"
-                description.contains("Thunderstorm", ignoreCase = true) -> "Грмљавина"
-                description.contains("Thunder", ignoreCase = true) -> "Грмљавина"
-                description.contains("Snow", ignoreCase = true) -> "Снег"
-                description.contains("Light snow", ignoreCase = true) -> "Слаб снег"
-                description.contains("Heavy snow", ignoreCase = true) -> "Јак снег"
-                description.contains("Sleet", ignoreCase = true) -> "Суснежица"
-                description.contains("Freezing", ignoreCase = true) -> "Ледено"
-                description.contains("Drizzle", ignoreCase = true) -> "Росуља"
-                description.contains("Hail", ignoreCase = true) -> "Град"
-                description.contains("Shower", ignoreCase = true) -> "Пљусак"
-                else -> description // Return original if no translation found
-            }
-        }
+        private val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     }
     
     init {
@@ -123,7 +96,7 @@ class NotificationService(private val context: Context) {
             eventsByDate.getOrPut(dateKey) { mutableListOf() }.add(eventData)
             
             // If there are multiple events for this date, show grouped notification
-            if (eventsByDate[dateKey]?.size ?: 0 > 1) {
+            if ((eventsByDate[dateKey]?.size ?: 0) > 1) {
                 showGroupedNotifications(dateKey)
                 return
             }
@@ -191,7 +164,7 @@ class NotificationService(private val context: Context) {
                 builder.setLargeIcon(avatarIcon)
                 
                 // Set color based on assignee
-                builder.setColor(Color.parseColor(eventAssignee.color))
+                builder.setColor(eventAssignee.color.toColorInt())
             } catch (e: Exception) {
                 Log.e("NotificationService", "Error creating avatar for assignee: ${eventData.assignee}", e)
             }
@@ -327,7 +300,7 @@ class NotificationService(private val context: Context) {
             
             // Convert drawable to bitmap
             val drawable = context.resources.getDrawable(drawableResId, context.theme)
-            val bitmap = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888)
+            val bitmap = createBitmap(128, 128, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             drawable.setBounds(0, 0, canvas.width, canvas.height)
             drawable.draw(canvas)
@@ -338,12 +311,12 @@ class NotificationService(private val context: Context) {
             
             // Fallback to the old method if drawable loading fails
             val size = 128 // Size of the avatar in pixels
-            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val bitmap = createBitmap(size, size, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             
             // Background paint
             val backgroundPaint = Paint().apply {
-                color = Color.parseColor(assignee.color)
+                color = assignee.color.toColorInt()
                 isAntiAlias = true
             }
             
@@ -361,7 +334,7 @@ class NotificationService(private val context: Context) {
             
             // Draw text (initial)
             val xPos = size / 2f
-            val yPos = size / 2f - (textPaint.descent() + textPaint.ascent()) / 2
+            val yPos = size / 2f - ((textPaint.descent() + textPaint.ascent()) / 2)
             canvas.drawText(assignee.initial, xPos, yPos, textPaint)
             
             return bitmap
@@ -395,7 +368,7 @@ class NotificationService(private val context: Context) {
     private fun formatDate(date: Date?): String {
         if (date == null) return "Today"
         
-        val formatter = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())
+        val formatter = SimpleDateFormat("EEEE, MMMM d", Locale.US)
         return formatter.format(date)
     }
     
@@ -405,22 +378,8 @@ class NotificationService(private val context: Context) {
     private fun formatTime(date: Date?): String {
         if (date == null) return ""
         
-        val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val formatter = SimpleDateFormat("HH:mm", Locale.US)
         return formatter.format(date)
-    }
-    
-    /**
-     * Clear events for a specific date
-     */
-    fun clearEventsForDate(dateKey: String) {
-        eventsByDate.remove(dateKey)
-    }
-    
-    /**
-     * Clear all stored events
-     */
-    fun clearAllEvents() {
-        eventsByDate.clear()
     }
     
     /**
@@ -469,7 +428,7 @@ class NotificationService(private val context: Context) {
         builder.setLargeIcon(createWeatherIcon())
         
         // Set a specific color for weather notifications
-        builder.setColor(Color.parseColor("#03A9F4")) // Light Blue
+        builder.setColor("#03A9F4".toColorInt()) // Light Blue
         
         // Set sound and vibration based on user preferences
         if (notificationManager.notificationSoundEnabled) {
@@ -505,7 +464,7 @@ class NotificationService(private val context: Context) {
     
     private fun createWeatherIcon(): Bitmap {
         val size = 128
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         
         val paint = Paint().apply {
@@ -523,8 +482,8 @@ class NotificationService(private val context: Context) {
         // Draw cloud
         paint.color = Color.WHITE
         canvas.drawCircle(size / 2f, size / 2f + 10, size / 4f, paint)
-        canvas.drawCircle(size / 2f + 15, size / 2f + 5, size / 5f, paint)
-        canvas.drawCircle(size / 2f - 15, size / 2f + 5, size / 5f, paint)
+        canvas.drawCircle((size / 2f + 15), (size / 2f + 5), size / 5f, paint)
+        canvas.drawCircle((size / 2f - 15), (size / 2f + 5), size / 5f, paint)
         
         return bitmap
     }
