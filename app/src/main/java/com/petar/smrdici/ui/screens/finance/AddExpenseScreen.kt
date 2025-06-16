@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -38,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,7 +50,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.petar.smrdici.data.model.Account
+import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.ExpenseCategory
 import com.petar.smrdici.data.repository.TransactionRepository
@@ -57,19 +59,12 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.CategoryDropdown
 import com.petar.smrdici.ui.screens.settings.AccountViewModel
-import com.petar.smrdici.data.model.CategoryManager
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.material3.CircularProgressIndicator
 import java.text.SimpleDateFormat
-import java.time.LocalDate
-import java.time.ZoneId
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import androidx.compose.runtime.mutableStateListOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,13 +94,18 @@ fun AddExpenseScreen(
             if (selectedDate != null) {
                 try {
                     // Use UTC time zone consistently to avoid date shifts
-                    val localDate = LocalDate.parse(selectedDate)
+                    val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                    dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+                    val parsedDate = dateFormat.parse(selectedDate) ?: Date()
                     // Set to noon UTC to avoid any potential date boundary issues
-                    val instant = localDate.atTime(12, 0)
-                        .atZone(ZoneId.of("UTC"))
-                        .toInstant()
-                    instant.toEpochMilli()
-                } catch (e: Exception) {
+                    val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                    calendar.time = parsedDate
+                    calendar.set(Calendar.HOUR_OF_DAY, 12)
+                    calendar.set(Calendar.MINUTE, 0)
+                    calendar.set(Calendar.SECOND, 0)
+                    calendar.set(Calendar.MILLISECOND, 0)
+                    calendar.timeInMillis
+                } catch (_: Exception) {
                     System.currentTimeMillis()
                 }
             } else {
@@ -122,7 +122,6 @@ fun AddExpenseScreen(
     var accountError by remember { mutableStateOf("") }
     
     // Стање за падајуће меније
-    var categoryMenuExpanded by remember { mutableStateOf(false) }
     var accountMenuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     
@@ -146,7 +145,6 @@ fun AddExpenseScreen(
     
     val context = LocalContext.current
     val categoryManager = remember { CategoryManager.getInstance(context) }
-    val scope = rememberCoroutineScope()
     var isLoadingCategories by remember { mutableStateOf(true) }
     val expenseCategories = remember { mutableStateListOf<String>() }
 
@@ -177,7 +175,7 @@ fun AddExpenseScreen(
     // Аутоматски постављамо подразумевани рачун ако постоји
     LaunchedEffect(accounts) {
         if (accounts.isNotEmpty() && selectedAccountId.isEmpty()) {
-            val defaultAccount = accounts.find { account: Account -> account.isDefault }
+            val defaultAccount = accounts.find { account -> account.isDefault }
             selectedAccountId = defaultAccount?.id ?: (if (accounts.isNotEmpty()) accounts.first().id else "")
         }
     }
@@ -199,7 +197,7 @@ fun AddExpenseScreen(
                 } else {
                     amountError = ""
                 }
-            } catch (e: NumberFormatException) {
+            } catch (_: NumberFormatException) {
                 amountError = "Невалидан формат износа"
                 isValid = false
             }
@@ -248,7 +246,7 @@ fun AddExpenseScreen(
                 
                 val expense = Expense(
                     id = UUID.randomUUID().toString(),
-                    userId = user?.uid ?: "",
+                    userId = user.uid,
                     amount = amountValue,
                     description = description,
                     category = selectedCategory!!.name,
@@ -441,7 +439,7 @@ fun AddExpenseScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = accounts.find { account: Account -> account.id == selectedAccountId }?.name ?: "Изабери рачун",
+                            text = accounts.find { account -> account.id == selectedAccountId }?.name ?: "Изабери рачун",
                             color = if (selectedAccountId.isEmpty()) {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             } else {
@@ -469,7 +467,7 @@ fun AddExpenseScreen(
                     onDismissRequest = { accountMenuExpanded = false },
                     modifier = Modifier.fillMaxWidth(0.9f)
                 ) {
-                    accounts.forEach { account: Account ->
+                    accounts.forEach { account ->
                         DropdownMenuItem(
                             text = { Text(account.name) },
                             onClick = {

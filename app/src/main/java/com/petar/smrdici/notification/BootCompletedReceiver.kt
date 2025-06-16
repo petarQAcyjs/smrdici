@@ -7,7 +7,6 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.SmrdiciApplication
-import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.repository.EventRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +42,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
                     
                     // Find future events
                     val futureEvents = allEvents.filter { event ->
-                        event.startTime?.toDate()?.after(Date()) ?: false
+                        event.startTime?.toDate()?.after(Date()) == true
                     }
                     
                     Log.d(TAG, "Found ${futureEvents.size} future events to reschedule notifications for")

@@ -233,7 +233,7 @@ class EventRepository(
     // Check if an event is in the future
     private fun isEventInFuture(event: Event): Boolean {
         val now = System.currentTimeMillis()
-        return event.startTime?.toDate()?.time?.let { it > now } ?: false
+        return event.startTime?.toDate()?.time?.let { it > now } == true
     }
     
     // Добављање свих догађаја за извоз/увоз

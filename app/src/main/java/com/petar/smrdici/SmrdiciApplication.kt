@@ -13,7 +13,6 @@ import com.google.android.gms.common.GooglePlayServicesNotAvailableException
 import com.google.android.gms.common.GooglePlayServicesRepairableException
 import com.google.android.gms.security.ProviderInstaller
 import com.jakewharton.threetenabp.AndroidThreeTen
-import com.petar.smrdici.data.repository.AccountRepository
 import com.petar.smrdici.data.repository.RepositoryManager
 import com.petar.smrdici.notification.DailyWeatherScheduler
 import com.petar.smrdici.notification.NotificationManager
@@ -28,20 +27,20 @@ class SmrdiciApplication : Application(), Configuration.Provider {
     companion object {
         private const val TAG = "SmrdiciApplication"
         
-        // Singleton instance of NotificationManager
-        private lateinit var notificationManagerInstance: NotificationManager
-        
         // Application instance
         private lateinit var instance: SmrdiciApplication
-        
-        fun getNotificationManager(): NotificationManager {
-            return notificationManagerInstance
-        }
         
         fun getInstance(): SmrdiciApplication {
             return instance
         }
+        
+        fun getNotificationManager(): NotificationManager {
+            return instance.notificationManager
+        }
     }
+    
+    // NotificationManager moved to instance field to avoid static context reference
+    private lateinit var notificationManager: NotificationManager
     
     override fun onCreate() {
         super.onCreate()
@@ -121,7 +120,10 @@ class SmrdiciApplication : Application(), Configuration.Provider {
             }
         }
         
-        Log.i("SmrdiciApplication", "Logging inicijalizovan: detaljno logovanje = ${LogUtils.Config.ENABLE_DETAILED_LOGS}, nivo = ${LogUtils.Config.DETAIL_LEVEL}")
+        Log.i(TAG, "Logging inicijalizovan: detaljno logovanje = ${LogUtils.Config.ENABLE_DETAILED_LOGS}, nivo = ${LogUtils.Config.DETAIL_LEVEL}")
+        
+        // Set up exception handling
+        setupExceptionHandling()
     }
     
     /**
@@ -153,10 +155,9 @@ class SmrdiciApplication : Application(), Configuration.Provider {
     }
     
     /**
-     * Конфигурише начин на који се руководи логовима и изузецима
-     * како би се избегла непотребна упозорења у логовима
+     * Поставља руковање изузецима за целу апликацију
      */
-    private fun configureLogging() {
+    private fun setupExceptionHandling() {
         // Постављамо свој UncaughtExceptionHandler како бисмо филтрирали одређене грешке
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             // Филтрирамо грешке везане за наше познате проблеме
@@ -238,7 +239,7 @@ class SmrdiciApplication : Application(), Configuration.Provider {
     }
     
     private fun initializeRepositories() {
-        Log.d("SmrdiciApplication", "Inicijalizacija repozitorijuma")
+        Log.d(TAG, "Inicijalizacija repozitorijuma")
         
         // Dobavljamo instance repozitorijuma kroz RepositoryManager
         val expenseRepository = RepositoryManager.getExpenseRepositoryForFinance()
@@ -247,18 +248,18 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         
         // Međusobno povezivanje repozitorijuma (ako je potrebno)
         // Npr. ExpenseRepository zahteva AccountRepository za ažuriranje balansa računa
-        expenseRepository?.setAccountRepository(accountRepository ?: AccountRepository.getInstance())
-        incomeRepository?.setAccountRepository(accountRepository ?: AccountRepository.getInstance())
+        expenseRepository.setAccountRepository(accountRepository)
+        incomeRepository.setAccountRepository(accountRepository)
         
-        Log.d("SmrdiciApplication", "Repozitorijumi inicijalizovani")
+        Log.d(TAG, "Repozitorijumi inicijalizovani")
     }
     
     private fun initializeNotifications() {
         // Initialize the NotificationManager
-        notificationManagerInstance = NotificationManager(applicationContext)
+        notificationManager = NotificationManager(applicationContext)
         
         // Setup daily weather notification if weather-aware notifications are enabled
-        if (notificationManagerInstance.weatherAwareEnabled) {
+        if (notificationManager.weatherAwareEnabled) {
             DailyWeatherScheduler.scheduleDailyWeatherNotification(applicationContext)
         } else {
             // Cancel any existing scheduled weather notifications
@@ -271,6 +272,6 @@ class SmrdiciApplication : Application(), Configuration.Provider {
     // WorkManager configuration
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
-            .setMinimumLoggingLevel(android.util.Log.INFO)
+            .setMinimumLoggingLevel(Log.INFO)
             .build()
 }
