@@ -1,37 +1,33 @@
 package com.petar.smrdici.notification
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import com.petar.smrdici.R
-import com.petar.smrdici.ui.MainActivity
-import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
-import android.graphics.drawable.Icon
+import android.os.Build
 import android.util.Log
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
-import androidx.core.graphics.drawable.IconCompat
+import com.petar.smrdici.R
 import com.petar.smrdici.SmrdiciApplication
-import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
+import com.petar.smrdici.ui.MainActivity
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.Random
 import java.util.concurrent.ConcurrentHashMap
-import androidx.core.content.ContextCompat
 
 class NotificationService(private val context: Context) {
 
