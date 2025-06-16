@@ -7,14 +7,13 @@ import android.content.Intent
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.google.firebase.Timestamp
 import com.petar.smrdici.SmrdiciApplication
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.util.ApiKeys
 import java.util.Calendar
 import java.util.Date
-import kotlinx.coroutines.GlobalScope
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 class NotificationWorker(
@@ -27,41 +26,11 @@ class NotificationWorker(
         
         // Notification timing constants (in milliseconds)
         const val ONE_DAY_MILLIS = 24 * 60 * 60 * 1000L
-        
-        /**
-         * Translate common weather descriptions from English to Serbian Cyrillic
-         */
-        fun translateWeatherDescription(description: String): String {
-            return when {
-                description.contains("Sunny", ignoreCase = true) -> "Сунчано"
-                description.contains("Clear", ignoreCase = true) -> "Ведро"
-                description.contains("Partly cloudy", ignoreCase = true) -> "Делимично облачно"
-                description.contains("Cloudy", ignoreCase = true) -> "Облачно"
-                description.contains("Overcast", ignoreCase = true) -> "Тмурно"
-                description.contains("Mist", ignoreCase = true) -> "Измаглица"
-                description.contains("Fog", ignoreCase = true) -> "Магла"
-                description.contains("Light rain", ignoreCase = true) -> "Слаба киша"
-                description.contains("Rain", ignoreCase = true) -> "Киша"
-                description.contains("Heavy rain", ignoreCase = true) -> "Јака киша"
-                description.contains("Thunderstorm", ignoreCase = true) -> "Грмљавина"
-                description.contains("Thunder", ignoreCase = true) -> "Грмљавина"
-                description.contains("Snow", ignoreCase = true) -> "Снег"
-                description.contains("Light snow", ignoreCase = true) -> "Слаб снег"
-                description.contains("Heavy snow", ignoreCase = true) -> "Јак снег"
-                description.contains("Sleet", ignoreCase = true) -> "Суснежица"
-                description.contains("Freezing", ignoreCase = true) -> "Ледено"
-                description.contains("Drizzle", ignoreCase = true) -> "Росуља"
-                description.contains("Hail", ignoreCase = true) -> "Град"
-                description.contains("Shower", ignoreCase = true) -> "Пљусак"
-                else -> description // Return original if no translation found
-            }
-        }
     }
     
     override suspend fun doWork(): Result {
         val eventId = inputData.getString("EVENT_ID") ?: return Result.failure()
         val title = inputData.getString("EVENT_TITLE") ?: return Result.failure()
-        val description = inputData.getString("EVENT_DESCRIPTION") ?: ""
         val startTimeMillis = inputData.getLong("EVENT_START_TIME", 0)
         val assignee = inputData.getString("EVENT_ASSIGNEE") ?: EventAssignee.EVERYONE.name
         val location = inputData.getString("EVENT_LOCATION") ?: "Београд" // Default location
@@ -77,7 +46,7 @@ class NotificationWorker(
             fetchWeatherInfo(location)
         }
         
-        scheduleNotification(eventId, title, description, startTimeMillis, assignee)
+        scheduleNotification(eventId, title, startTimeMillis, assignee)
         
         return Result.success()
     }
@@ -108,15 +77,14 @@ class NotificationWorker(
             } else {
                 Log.e(TAG, "Failed to fetch weather info")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching weather info", e)
+        } catch (exception: Exception) {
+            Log.e(TAG, "Error fetching weather info", exception)
         }
     }
     
     private fun scheduleNotification(
         eventId: String,
         title: String,
-        description: String,
         startTimeMillis: Long,
         assignee: String
     ) {
@@ -130,7 +98,6 @@ class NotificationWorker(
                 alarmManager,
                 eventId,
                 title,
-                description,
                 startTimeMillis,
                 assignee
             )
@@ -141,7 +108,6 @@ class NotificationWorker(
                     alarmManager,
                     eventId,
                     title,
-                    description,
                     startTimeMillis - ONE_DAY_MILLIS,
                     assignee,
                     1
@@ -153,7 +119,6 @@ class NotificationWorker(
                     alarmManager,
                     eventId,
                     title,
-                    description,
                     startTimeMillis - (60 * 60 * 1000), // 1 hour before
                     assignee,
                     2
@@ -173,7 +138,6 @@ class NotificationWorker(
         alarmManager: AlarmManager,
         eventId: String,
         title: String,
-        description: String,
         startTimeMillis: Long,
         assignee: String
     ) {
@@ -215,7 +179,7 @@ class NotificationWorker(
                 // Create appropriate message
                 val assigneeName = try {
                     EventAssignee.valueOf(assignee).displayName
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     "Everyone"
                 }
                 
@@ -246,20 +210,13 @@ class NotificationWorker(
             Log.d(TAG, "Can schedule exact alarms: $canScheduleExact")
             
             try {
-                if (canScheduleExact && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                if (canScheduleExact) {
                     alarmManager.setExactAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP,
                         notificationTime.timeInMillis,
                         pendingIntent
                     )
                     Log.d(TAG, "Scheduled exact alarm for dynamic notification: ${Date(notificationTime.timeInMillis)}")
-                } else if (canScheduleExact) {
-                    alarmManager.setExact(
-                        AlarmManager.RTC_WAKEUP,
-                        notificationTime.timeInMillis,
-                        pendingIntent
-                    )
-                    Log.d(TAG, "Scheduled exact alarm (pre-M) for dynamic notification: ${Date(notificationTime.timeInMillis)}")
                 } else {
                     // Fallback to inexact alarm
                     alarmManager.setAndAllowWhileIdle(
@@ -271,8 +228,8 @@ class NotificationWorker(
                 }
                 
                 Log.d(TAG, "Successfully scheduled dynamic notification for ${Date(notificationTime.timeInMillis)}, event: $title")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error scheduling dynamic notification for event: $title", e)
+            } catch (exception: Exception) {
+                Log.e(TAG, "Error scheduling dynamic notification for event: $title", exception)
             }
         } else {
             Log.d(TAG, "Skipping dynamic notification for past time: ${Date(notificationTime.timeInMillis)}")
@@ -283,7 +240,6 @@ class NotificationWorker(
         alarmManager: AlarmManager,
         eventId: String,
         title: String,
-        description: String,
         triggerAtMillis: Long,
         assignee: String,
         requestCode: Int
@@ -304,7 +260,7 @@ class NotificationWorker(
                 // 1 day before
                 val assigneeName = try {
                     EventAssignee.valueOf(assignee).displayName
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     "Everyone"
                 }
                 
@@ -325,19 +281,11 @@ class NotificationWorker(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerAtMillis,
-                pendingIntent
-            )
-        } else {
-            alarmManager.setExact(
-                AlarmManager.RTC_WAKEUP,
-                triggerAtMillis,
-                pendingIntent
-            )
-        }
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            triggerAtMillis,
+            pendingIntent
+        )
         
         Log.d(TAG, "Alarm scheduled for ${Date(triggerAtMillis)}, event: $title")
     }
@@ -350,7 +298,7 @@ class NotificationWorker(
         val hour = calendar.get(Calendar.HOUR_OF_DAY)
         val minute = calendar.get(Calendar.MINUTE)
         
-        return String.format("%02d:%02d", hour, minute)
+        return String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
     }
     
     class Builder(private val context: Context) {
@@ -361,12 +309,11 @@ class NotificationWorker(
             }
             
             val notificationManager = SmrdiciApplication.getNotificationManager()
-            val startTimeMillis = event.startTime.toDate().time
             
             // Check if weather-aware notifications are enabled
             if (notificationManager.weatherAwareEnabled) {
-                // Fetch weather in a coroutine
-                GlobalScope.launch {
+                // Use the application scope instead of GlobalScope
+                SmrdiciApplication.getAppScope().launch {
                     try {
                         val weatherService = WeatherService(context)
                         val apiKey = ApiKeys.WEATHER_API_KEY
@@ -389,8 +336,8 @@ class NotificationWorker(
                             
                             Log.d(TAG, "Weather info fetched for event: ${event.title}, advice: $weatherAdvice")
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error fetching weather info for event: ${event.title}", e)
+                    } catch (exception: Exception) {
+                        Log.e(TAG, "Error fetching weather info for event: ${event.title}", exception)
                     }
                 }
             }
@@ -463,7 +410,7 @@ class NotificationWorker(
                     
                     val assigneeName = try {
                         EventAssignee.valueOf(event.assignee).displayName
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         "Everyone"
                     }
                     
@@ -489,20 +436,13 @@ class NotificationWorker(
                 )
                 
                 try {
-                    if (canScheduleExact && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    if (canScheduleExact) {
                         alarmManager.setExactAndAllowWhileIdle(
                             AlarmManager.RTC_WAKEUP,
                             notificationTime.timeInMillis,
                             pendingIntent
                         )
                         Log.d(TAG, "Scheduled exact alarm for dynamic notification: ${Date(notificationTime.timeInMillis)}")
-                    } else if (canScheduleExact) {
-                        alarmManager.setExact(
-                            AlarmManager.RTC_WAKEUP,
-                            notificationTime.timeInMillis,
-                            pendingIntent
-                        )
-                        Log.d(TAG, "Scheduled exact alarm (pre-M) for dynamic notification: ${Date(notificationTime.timeInMillis)}")
                     } else {
                         // Fallback to inexact alarm
                         alarmManager.setAndAllowWhileIdle(
@@ -514,8 +454,8 @@ class NotificationWorker(
                     }
                     
                     Log.d(TAG, "Successfully scheduled dynamic notification for ${Date(notificationTime.timeInMillis)}, event: ${event.title}")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error scheduling dynamic notification for event: ${event.title}", e)
+                } catch (exception: Exception) {
+                    Log.e(TAG, "Error scheduling dynamic notification for event: ${event.title}", exception)
                 }
             } else {
                 Log.d(TAG, "Skipping dynamic notification for past time: ${Date(notificationTime.timeInMillis)}")
@@ -538,7 +478,7 @@ class NotificationWorker(
                     
                     val assigneeName = try {
                         EventAssignee.valueOf(event.assignee).displayName
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         "Everyone"
                     }
                     
@@ -557,19 +497,11 @@ class NotificationWorker(
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        notificationTime,
-                        pendingIntent
-                    )
-                } else {
-                    alarmManager.setExact(
-                        AlarmManager.RTC_WAKEUP,
-                        notificationTime,
-                        pendingIntent
-                    )
-                }
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    notificationTime,
+                    pendingIntent
+                )
                 
                 Log.d(TAG, "Scheduled day-before notification for event: ${event.title} at ${Date(notificationTime)}")
             }
@@ -604,19 +536,11 @@ class NotificationWorker(
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        notificationTime,
-                        pendingIntent
-                    )
-                } else {
-                    alarmManager.setExact(
-                        AlarmManager.RTC_WAKEUP,
-                        notificationTime,
-                        pendingIntent
-                    )
-                }
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    notificationTime,
+                    pendingIntent
+                )
                 
                 Log.d(TAG, "Scheduled hour-before notification for event: ${event.title} at ${Date(notificationTime)}")
             }
@@ -658,8 +582,8 @@ class NotificationWorker(
                 alarmManager.cancel(pendingIntentDynamic)
                 
                 Log.d(TAG, "Cancelled notifications for event: $eventId")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error cancelling notification", e)
+            } catch (exception: Exception) {
+                Log.e(TAG, "Error cancelling notification", exception)
             }
         }
         
@@ -671,7 +595,7 @@ class NotificationWorker(
             val hour = calendar.get(Calendar.HOUR_OF_DAY)
             val minute = calendar.get(Calendar.MINUTE)
             
-            return String.format("%02d:%02d", hour, minute)
+            return String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
         }
     }
 } 

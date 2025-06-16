@@ -19,6 +19,9 @@ import com.petar.smrdici.notification.NotificationManager
 import com.petar.smrdici.util.TimeFormatUtil
 import com.petar.smrdici.utils.AppGlobals
 import com.petar.smrdici.utils.LogUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Glavna aplikacijska klasa koja se inicijalizuje pri pokretanju aplikacije.
@@ -37,10 +40,20 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         fun getNotificationManager(): NotificationManager {
             return instance.notificationManager
         }
+        
+        // Application-level CoroutineScope for long-running operations
+        // Uses SupervisorJob so that failure of one child doesn't cancel others
+        // This is a safer alternative to GlobalScope
+        fun getAppScope(): CoroutineScope {
+            return instance.applicationScope
+        }
     }
     
     // NotificationManager moved to instance field to avoid static context reference
     private lateinit var notificationManager: NotificationManager
+    
+    // Application-level CoroutineScope that lives for the entire app lifecycle
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     
     override fun onCreate() {
         super.onCreate()
