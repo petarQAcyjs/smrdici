@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Service for fetching weather information from WeatherStack API
  */
-class WeatherService(private val context: Context) {
+class WeatherService(context: Context) {
     
     companion object {
         private const val TAG = "WeatherService"

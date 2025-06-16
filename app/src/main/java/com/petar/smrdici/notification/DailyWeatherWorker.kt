@@ -11,7 +11,7 @@ import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.repository.EventRepository
 import com.petar.smrdici.util.ApiKeys
 import java.util.Calendar
-import java.util.Date
+import java.util.Locale
 
 /**
  * Worker that fetches weather data and displays a daily weather notification.
@@ -269,7 +269,7 @@ class DailyWeatherWorker(
             event.startTime?.toDate()?.let { date ->
                 val calendar = Calendar.getInstance()
                 calendar.time = date
-                String.format("%02d:%02d", calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE))
+                String.format(Locale.getDefault(), "%02d:%02d", calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE))
             } ?: "Непознато време"
         }
     }
