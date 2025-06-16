@@ -7,18 +7,21 @@ import android.os.Process
 import android.os.StrictMode
 import android.util.Log
 import androidx.work.Configuration
-import androidx.work.WorkManager
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException
 import com.google.android.gms.common.GooglePlayServicesRepairableException
 import com.google.android.gms.security.ProviderInstaller
 import com.jakewharton.threetenabp.AndroidThreeTen
-import com.petar.smrdici.data.repository.AccountRepository
 import com.petar.smrdici.data.repository.RepositoryManager
+import com.petar.smrdici.notification.DailyWeatherScheduler
 import com.petar.smrdici.notification.NotificationManager
+import com.petar.smrdici.util.TimeFormatUtil
 import com.petar.smrdici.utils.AppGlobals
 import com.petar.smrdici.utils.LogUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Glavna aplikacijska klasa koja se inicijalizuje pri pokretanju aplikacije.
@@ -27,16 +30,36 @@ class SmrdiciApplication : Application(), Configuration.Provider {
     companion object {
         private const val TAG = "SmrdiciApplication"
         
-        // Singleton instance of NotificationManager
-        private lateinit var notificationManagerInstance: NotificationManager
+        // Application instance
+        private lateinit var instance: SmrdiciApplication
+        
+        fun getInstance(): SmrdiciApplication {
+            return instance
+        }
         
         fun getNotificationManager(): NotificationManager {
-            return notificationManagerInstance
+            return instance.notificationManager
+        }
+        
+        // Application-level CoroutineScope for long-running operations
+        // Uses SupervisorJob so that failure of one child doesn't cancel others
+        // This is a safer alternative to GlobalScope
+        fun getAppScope(): CoroutineScope {
+            return instance.applicationScope
         }
     }
     
+    // NotificationManager moved to instance field to avoid static context reference
+    private lateinit var notificationManager: NotificationManager
+    
+    // Application-level CoroutineScope that lives for the entire app lifecycle
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    
     override fun onCreate() {
         super.onCreate()
+        
+        // Store instance
+        instance = this
         
         Log.d(TAG, "Inicijalizacija Smrdici aplikacije")
         
@@ -45,6 +68,9 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         
         // Inicijalizacija log sistema
         initLogging()
+        
+        // Force 24-hour time format
+        TimeFormatUtil.force24HourFormat(this)
         
         // Иницијализујемо Google Play сервисе правилно
         initGooglePlayServices()
@@ -107,7 +133,10 @@ class SmrdiciApplication : Application(), Configuration.Provider {
             }
         }
         
-        Log.i("SmrdiciApplication", "Logging inicijalizovan: detaljno logovanje = ${LogUtils.Config.ENABLE_DETAILED_LOGS}, nivo = ${LogUtils.Config.DETAIL_LEVEL}")
+        Log.i(TAG, "Logging inicijalizovan: detaljno logovanje = ${LogUtils.Config.ENABLE_DETAILED_LOGS}, nivo = ${LogUtils.Config.DETAIL_LEVEL}")
+        
+        // Set up exception handling
+        setupExceptionHandling()
     }
     
     /**
@@ -139,10 +168,9 @@ class SmrdiciApplication : Application(), Configuration.Provider {
     }
     
     /**
-     * Конфигурише начин на који се руководи логовима и изузецима
-     * како би се избегла непотребна упозорења у логовима
+     * Поставља руковање изузецима за целу апликацију
      */
-    private fun configureLogging() {
+    private fun setupExceptionHandling() {
         // Постављамо свој UncaughtExceptionHandler како бисмо филтрирали одређене грешке
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             // Филтрирамо грешке везане за наше познате проблеме
@@ -224,7 +252,7 @@ class SmrdiciApplication : Application(), Configuration.Provider {
     }
     
     private fun initializeRepositories() {
-        Log.d("SmrdiciApplication", "Inicijalizacija repozitorijuma")
+        Log.d(TAG, "Inicijalizacija repozitorijuma")
         
         // Dobavljamo instance repozitorijuma kroz RepositoryManager
         val expenseRepository = RepositoryManager.getExpenseRepositoryForFinance()
@@ -233,15 +261,23 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         
         // Međusobno povezivanje repozitorijuma (ako je potrebno)
         // Npr. ExpenseRepository zahteva AccountRepository za ažuriranje balansa računa
-        expenseRepository?.setAccountRepository(accountRepository ?: AccountRepository.getInstance())
-        incomeRepository?.setAccountRepository(accountRepository ?: AccountRepository.getInstance())
+        expenseRepository.setAccountRepository(accountRepository)
+        incomeRepository.setAccountRepository(accountRepository)
         
-        Log.d("SmrdiciApplication", "Repozitorijumi inicijalizovani")
+        Log.d(TAG, "Repozitorijumi inicijalizovani")
     }
     
     private fun initializeNotifications() {
         // Initialize the NotificationManager
-        notificationManagerInstance = NotificationManager(applicationContext)
+        notificationManager = NotificationManager(applicationContext)
+        
+        // Setup daily weather notification if weather-aware notifications are enabled
+        if (notificationManager.weatherAwareEnabled) {
+            DailyWeatherScheduler.scheduleDailyWeatherNotification(applicationContext)
+        } else {
+            // Cancel any existing scheduled weather notifications
+            DailyWeatherScheduler.cancelDailyWeatherNotification(applicationContext)
+        }
         
         Log.d(TAG, "Notification system initialized")
     }
@@ -249,6 +285,6 @@ class SmrdiciApplication : Application(), Configuration.Provider {
     // WorkManager configuration
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
-            .setMinimumLoggingLevel(android.util.Log.INFO)
+            .setMinimumLoggingLevel(Log.INFO)
             .build()
 }

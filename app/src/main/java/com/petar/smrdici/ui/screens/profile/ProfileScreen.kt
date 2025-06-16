@@ -241,18 +241,6 @@ fun ProfileScreen(
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                 )
 
-                                // Промена језика
-                                SettingsItem(
-                                    icon = Icons.Default.Edit,
-                                    title = "Језик",
-                                    trailingText = "Српски",
-                                    onClick = { /* Промена језика */ }
-                                )
-
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                )
-
                                 // Тема
                                 SettingsItem(
                                     icon = when (themeMode) {

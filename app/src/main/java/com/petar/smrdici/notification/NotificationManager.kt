@@ -14,6 +14,10 @@ class NotificationManager(private val context: Context) {
         private const val KEY_HOUR_BEFORE_NOTIFICATION = "hour_before_notification"
         private const val KEY_NOTIFICATION_SOUND = "notification_sound"
         private const val KEY_NOTIFICATION_VIBRATION = "notification_vibration"
+        private const val KEY_AVATAR_NOTIFICATIONS = "avatar_notifications"
+        private const val KEY_DYNAMIC_TIMING = "dynamic_timing"
+        private const val KEY_SMART_GROUPING = "smart_grouping"
+        private const val KEY_WEATHER_AWARE = "weather_aware"
         
         const val TAG = "NotificationManager"
     }
@@ -43,6 +47,34 @@ class NotificationManager(private val context: Context) {
     var notificationVibrationEnabled: Boolean
         get() = prefs.getBoolean(KEY_NOTIFICATION_VIBRATION, true)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_VIBRATION, value).apply()
+    
+    // New notification features
+    var avatarNotificationsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_AVATAR_NOTIFICATIONS, true)
+        set(value) = prefs.edit().putBoolean(KEY_AVATAR_NOTIFICATIONS, value).apply()
+    
+    var dynamicTimingEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DYNAMIC_TIMING, false)
+        set(value) = prefs.edit().putBoolean(KEY_DYNAMIC_TIMING, value).apply()
+    
+    var smartGroupingEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SMART_GROUPING, false)
+        set(value) = prefs.edit().putBoolean(KEY_SMART_GROUPING, value).apply()
+    
+    var weatherAwareEnabled: Boolean
+        get() = prefs.getBoolean(KEY_WEATHER_AWARE, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_WEATHER_AWARE, value).apply()
+            
+            // Schedule or cancel daily weather notifications based on the new setting
+            if (value) {
+                DailyWeatherScheduler.scheduleDailyWeatherNotification(context)
+                Log.d(TAG, "Weather-aware notifications enabled, daily weather notification scheduled")
+            } else {
+                DailyWeatherScheduler.cancelDailyWeatherNotification(context)
+                Log.d(TAG, "Weather-aware notifications disabled, daily weather notification cancelled")
+            }
+        }
     
     /**
      * Schedule notifications for an event based on current preferences
@@ -83,6 +115,10 @@ class NotificationManager(private val context: Context) {
             putBoolean(KEY_HOUR_BEFORE_NOTIFICATION, true)
             putBoolean(KEY_NOTIFICATION_SOUND, true)
             putBoolean(KEY_NOTIFICATION_VIBRATION, true)
+            putBoolean(KEY_AVATAR_NOTIFICATIONS, true)
+            putBoolean(KEY_DYNAMIC_TIMING, false)
+            putBoolean(KEY_SMART_GROUPING, false)
+            putBoolean(KEY_WEATHER_AWARE, false)
             apply()
         }
         Log.d(TAG, "Notification preferences reset to defaults")

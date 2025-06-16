@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.screens.calendar
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -10,6 +11,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.data.repository.EventRepository
+import com.petar.smrdici.notification.NotificationHelper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,10 +21,13 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import androidx.compose.ui.platform.LocalContext
+import com.petar.smrdici.SmrdiciApplication
 
 class CalendarViewModel @Inject constructor(
     private val eventRepository: EventRepository,
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    private val context: Context? = null
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<CalendarUiState>(CalendarUiState.Loading)
     val uiState: StateFlow<CalendarUiState> = _uiState
@@ -342,7 +347,7 @@ class CalendarViewModel @Inject constructor(
                 Log.d("CalendarViewModel", "Покушај додавања догађаја: ${event.title}, assignee: ${event.assignee}, color: ${event.color}")
                 
                 eventRepository.addEvent(event)
-                    .onSuccess {
+                    .onSuccess { eventId ->
                         // Ресетујемо форму али задржавамо изабрани датум и последњу особу
                         val currentDate = _selectedDate.value
                         val lastAssignee = form.assignee
@@ -355,6 +360,10 @@ class CalendarViewModel @Inject constructor(
                         )
                         
                         Log.d("CalendarViewModel", "Успешно додат догађај: ${event.title} за особу ${event.assignee}")
+                        
+                        // Schedule notifications for the new event with its ID
+                        val eventWithId = event.copy(id = eventId)
+                        scheduleNotifications(eventWithId)
                         
                         // Освежавамо листу догађаја за тренутни датум
                         loadEvents()
@@ -373,6 +382,9 @@ class CalendarViewModel @Inject constructor(
     // Функција за брисање догађаја
     fun deleteEvent(eventId: String) {
         viewModelScope.launch {
+            // Cancel notifications before deleting the event
+            cancelNotifications(eventId)
+            
             eventRepository.deleteEvent(eventId)
                 .onSuccess {
                     // Успешно обрисан догађај, али не модификујемо директно uiState
@@ -469,6 +481,13 @@ class CalendarViewModel @Inject constructor(
                 eventRepository.updateEvent(updatedEvent)
                     .onSuccess {
                         Log.d("CalendarViewModel", "Успешно ажуриран догађај у бази")
+                        
+                        // Cancel old notifications and schedule new ones
+                        currentEvent.id?.let { eventId ->
+                            cancelNotifications(eventId)
+                            scheduleNotifications(updatedEvent)
+                        }
+                        
                         _editingEvent.value = null
                         loadEventsForDate(selectedDate.value)
                     }
@@ -493,9 +512,12 @@ class CalendarViewModel @Inject constructor(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(CalendarViewModel::class.java)) {
+                val appContext = SmrdiciApplication.getInstance().applicationContext
+                
                 return CalendarViewModel(
                     EventRepository(FirebaseFirestore.getInstance(), FirebaseAuth.getInstance()),
-                    FirebaseAuth.getInstance()
+                    FirebaseAuth.getInstance(),
+                    appContext
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
@@ -564,6 +586,24 @@ class CalendarViewModel @Inject constructor(
         } catch (e: Exception) {
             Log.e("CalendarViewModel", "Грешка при синхроном добављању догађаја", e)
             emptyList()
+        }
+    }
+
+    // Function to schedule notifications for an event
+    private fun scheduleNotifications(event: Event) {
+        context?.let { ctx ->
+            if (event.id != null && event.startTime != null) {
+                NotificationHelper.scheduleNotificationsForEvent(ctx, event)
+                Log.d("CalendarViewModel", "Scheduled notifications for event: ${event.title}")
+            }
+        }
+    }
+
+    // Function to cancel notifications for an event
+    private fun cancelNotifications(eventId: String) {
+        context?.let { ctx ->
+            NotificationHelper.cancelNotificationsForEvent(ctx, eventId)
+            Log.d("CalendarViewModel", "Cancelled notifications for event ID: $eventId")
         }
     }
 }

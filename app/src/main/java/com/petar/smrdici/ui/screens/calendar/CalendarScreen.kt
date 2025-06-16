@@ -1,5 +1,10 @@
 package com.petar.smrdici.ui.screens.calendar
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,6 +74,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,18 +86,26 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.petar.smrdici.R
+import com.petar.smrdici.SmrdiciApplication
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
+import com.petar.smrdici.ui.components.TimePickerWrapper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.petar.smrdici.notification.NotificationHelper
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -107,6 +122,57 @@ fun CalendarScreen(
     val datesWithEvents by calendarViewModel.datesWithEvents.collectAsState()
     val authState by authViewModel.authState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Check and request notification permission
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Log.d("CalendarScreen", "Notification permission granted")
+        } else {
+            Log.d("CalendarScreen", "Notification permission denied")
+            // Show a message using global coroutine scope
+            CoroutineScope(Dispatchers.Main).launch {
+                snackbarHostState.showSnackbar("Потребна је дозвола за обавештења да бисте примали подсетнике.")
+            }
+        }
+    }
+    
+    // Check notification permission when the screen is first shown
+    LaunchedEffect(Unit) {
+        // Check for POST_NOTIFICATIONS permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val permissionStatus = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+            
+            if (permissionStatus != PackageManager.PERMISSION_GRANTED) {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        
+        // Check for SCHEDULE_EXACT_ALARM permission on Android 12+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (!NotificationHelper.canScheduleExactAlarms(context)) {
+                // Show message about exact alarms
+                CoroutineScope(Dispatchers.Main).launch {
+                    val result = snackbarHostState.showSnackbar(
+                        message = "Потребна је дозвола за тачне аларме да бисте примали тачна обавештења.",
+                        actionLabel = "Дозволи"
+                    )
+                    if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                        // Open system settings for exact alarms
+                        NotificationHelper.getExactAlarmSettingsIntent(context)?.let { intent ->
+                            context.startActivity(intent)
+                        }
+                    }
+                }
+            }
+        }
+    }
     
     var showAddEventDialog by remember { mutableStateOf(false) }
     var selectedEvent by remember { mutableStateOf<Event?>(null) }
@@ -123,9 +189,6 @@ fun CalendarScreen(
             showAddEventDialog = true
         }
     }
-    
-    // Додајемо корутински опсег за Compose компоненту
-    val coroutineScope = rememberCoroutineScope()
     
     // Стање освежавања
     var isRefreshing by remember { mutableStateOf(false) }
@@ -553,11 +616,22 @@ fun EventItem(
                     )
                     .border(1.dp, Color(event.color.toColorInt()), CircleShape)
             ) {
-                // Експлицитан тип String за Text
-                Text(
-                    text = assignee.initial,
-                    color = Color(event.color.toColorInt()),
-                    fontWeight = FontWeight.Bold
+                // Get avatar image resource based on assignee
+                val avatarRes = when(assignee) {
+                    EventAssignee.EVERYONE -> R.drawable.avatar_everyone
+                    EventAssignee.PETAR -> R.drawable.avatar_petar
+                    EventAssignee.NATASA -> R.drawable.avatar_natasa
+                    EventAssignee.MILICA -> R.drawable.avatar_milica
+                    EventAssignee.BOGDAN -> R.drawable.avatar_bogdan
+                }
+                
+                Image(
+                    painter = painterResource(id = avatarRes),
+                    contentDescription = assignee.displayName,
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
                 )
             }
             
@@ -823,13 +897,14 @@ fun AddEventDialog(
     if (showStartTimePicker) {
         val timePickerState = rememberTimePickerState(
             initialHour = eventFormState.startTime?.hour ?: 0,
-            initialMinute = eventFormState.startTime?.minute ?: 0
+            initialMinute = eventFormState.startTime?.minute ?: 0,
+            is24Hour = true
         )
 
         AlertDialog(
             onDismissRequest = { showStartTimePicker = false },
             title = { Text("Изаберите време") },
-            text = { TimePicker(state = timePickerState) },
+            text = { TimePickerWrapper(state = timePickerState) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -855,13 +930,14 @@ fun AddEventDialog(
     if (!eventFormState.allDay && showEndTimePicker) {
         val timePickerState = rememberTimePickerState(
             initialHour = eventFormState.endTime?.hour ?: (eventFormState.startTime?.hour?.plus(1) ?: 0),
-            initialMinute = eventFormState.endTime?.minute ?: eventFormState.startTime?.minute ?: 0
+            initialMinute = eventFormState.endTime?.minute ?: eventFormState.startTime?.minute ?: 0,
+            is24Hour = true
         )
 
         AlertDialog(
             onDismissRequest = { showEndTimePicker = false },
             title = { Text("Изаберите време") },
-            text = { TimePicker(state = timePickerState) },
+            text = { TimePickerWrapper(state = timePickerState) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -908,6 +984,15 @@ fun AssigneeAvatar(
     } else {
         MaterialTheme.colorScheme.onSurface
     }
+    
+    // Get avatar image resource based on assignee
+    val avatarRes = when(assignee) {
+        EventAssignee.EVERYONE -> R.drawable.avatar_everyone
+        EventAssignee.PETAR -> R.drawable.avatar_petar
+        EventAssignee.NATASA -> R.drawable.avatar_natasa
+        EventAssignee.MILICA -> R.drawable.avatar_milica
+        EventAssignee.BOGDAN -> R.drawable.avatar_bogdan
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -929,12 +1014,13 @@ fun AssigneeAvatar(
                 )
                 .clickable { onClick() }
         ) {
-            // Експлицитно додајемо типизацију за Text
-            Text(
-                text = assignee.initial,
-                color = Color(assignee.color.toColorInt()),
-                fontWeight = FontWeight.Bold,
-                fontSize = 20.sp
+            Image(
+                painter = painterResource(id = avatarRes),
+                contentDescription = assignee.displayName,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
@@ -999,10 +1085,22 @@ fun EventDetailsDialog(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = assignee.initial,
-                                color = Color(assignee.color.toColorInt()),
-                                style = MaterialTheme.typography.titleMedium
+                            // Get avatar image resource based on assignee
+                            val avatarRes = when(assignee) {
+                                EventAssignee.EVERYONE -> R.drawable.avatar_everyone
+                                EventAssignee.PETAR -> R.drawable.avatar_petar
+                                EventAssignee.NATASA -> R.drawable.avatar_natasa
+                                EventAssignee.MILICA -> R.drawable.avatar_milica
+                                EventAssignee.BOGDAN -> R.drawable.avatar_bogdan
+                            }
+                            
+                            Image(
+                                painter = painterResource(id = avatarRes),
+                                contentDescription = assignee.displayName,
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
                             )
                         }
                         

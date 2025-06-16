@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Уклањамо дозволе за календар -->
@@ -40,6 +41,14 @@
         
         <!-- Receiver for scheduled notifications -->
         <receiver android:name=".notification.NotificationReceiver" android:exported="false" />
+        
+        <!-- Receiver for rescheduling notifications after device restart -->
+        <receiver android:name=".notification.BootCompletedReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
         
         <!-- WorkManager provider for scheduling notifications -->
         <provider
