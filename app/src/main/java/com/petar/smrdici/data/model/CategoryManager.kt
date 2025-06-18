@@ -3,6 +3,7 @@ package com.petar.smrdici.data.model
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import androidx.compose.ui.graphics.Color
 import androidx.core.content.edit
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.CollectionReference
@@ -33,6 +34,94 @@ class CategoryManager private constructor(context: Context) {
     private val firestore = FirebaseFirestore.getInstance()
     private val expenseCategoriesRef: CollectionReference = firestore.collection("expenseCategories")
     private val incomeCategoriesRef: CollectionReference = firestore.collection("incomeCategories")
+    
+    // Storage for category colors
+    private fun getCategoryColorKey(categoryName: String, isExpense: Boolean): String {
+        val prefix = if (isExpense) "expense_color_" else "income_color_"
+        return prefix + categoryName
+    }
+    
+    fun saveCategoryColor(categoryName: String, colorValue: Long, isExpense: Boolean) {
+        val key = getCategoryColorKey(categoryName, isExpense)
+        prefs.edit {
+            putLong(key, colorValue)
+        }
+        Log.d(TAG, "Saved color for category: $categoryName, isExpense: $isExpense, color: $colorValue")
+    }
+    
+    fun getCategoryColor(categoryName: String, isExpense: Boolean): Long? {
+        val key = getCategoryColorKey(categoryName, isExpense)
+        if (!prefs.contains(key)) {
+            Log.d(TAG, "No saved color for category: $categoryName, isExpense: $isExpense")
+            return null
+        }
+        
+        val colorValue = prefs.getLong(key, 0)
+        Log.d(TAG, "Retrieved color for category: $categoryName, isExpense: $isExpense, color: $colorValue")
+        return colorValue
+    }
+    
+    fun updateCategoryColor(oldName: String, newName: String, isExpense: Boolean) {
+        val oldKey = getCategoryColorKey(oldName, isExpense)
+        if (prefs.contains(oldKey)) {
+            val colorValue = prefs.getLong(oldKey, 0)
+            val newKey = getCategoryColorKey(newName, isExpense)
+            prefs.edit {
+                putLong(newKey, colorValue)
+                remove(oldKey)
+            }
+            Log.d(TAG, "Updated color key from $oldName to $newName")
+        }
+    }
+    
+    // Storage for category icons
+    private fun getCategoryIconKey(categoryName: String, isExpense: Boolean): String {
+        val prefix = if (isExpense) "expense_icon_" else "income_icon_"
+        return prefix + categoryName
+    }
+    
+    fun saveCategoryIcon(categoryName: String, iconName: String, isExpense: Boolean) {
+        // Check if the icon name is an ImageVector reference
+        val cleanIconName = if (iconName.startsWith("ImageVector@")) {
+            // Use a default name instead
+            if (isExpense) "ShoppingCart" else "AttachMoney"
+        } else {
+            iconName
+        }
+        
+        val key = getCategoryIconKey(categoryName, isExpense)
+        prefs.edit {
+            putString(key, cleanIconName)
+        }
+        Log.d(TAG, "Saved icon for category: $categoryName, isExpense: $isExpense, icon: $cleanIconName")
+    }
+    
+    fun getCategoryIcon(categoryName: String, isExpense: Boolean): String? {
+        val key = getCategoryIconKey(categoryName, isExpense)
+        if (!prefs.contains(key)) {
+            Log.d(TAG, "No saved icon for category: $categoryName, isExpense: $isExpense")
+            return null
+        }
+        
+        val iconName = prefs.getString(key, null)
+        Log.d(TAG, "Retrieved icon for category: $categoryName, isExpense: $isExpense, icon: $iconName")
+        return iconName
+    }
+    
+    fun updateCategoryIcon(oldName: String, newName: String, isExpense: Boolean) {
+        val oldKey = getCategoryIconKey(oldName, isExpense)
+        if (prefs.contains(oldKey)) {
+            val iconName = prefs.getString(oldKey, null)
+            if (iconName != null) {
+                val newKey = getCategoryIconKey(newName, isExpense)
+                prefs.edit {
+                    putString(newKey, iconName)
+                    remove(oldKey)
+                }
+                Log.d(TAG, "Updated icon key from $oldName to $newName")
+            }
+        }
+    }
     
     /**
      * Dodaje novu kategoriju troškova
@@ -366,7 +455,37 @@ class CategoryManager private constructor(context: Context) {
         
         fun getInstance(context: Context): CategoryManager {
             return instance ?: synchronized(this) {
-                instance ?: CategoryManager(context.applicationContext).also { instance = it }
+                instance ?: CategoryManager(context.applicationContext).also { 
+                    instance = it
+                    it.cleanupInvalidIconReferences()
+                }
+            }
+        }
+    }
+    
+    /**
+     * Cleanup any invalid icon references that might be stored
+     */
+    private fun cleanupInvalidIconReferences() {
+        val allKeys = prefs.all.keys
+        val iconKeys = allKeys.filter { it.startsWith("expense_icon_") || it.startsWith("income_icon_") }
+        
+        for (key in iconKeys) {
+            val iconName = prefs.getString(key, null)
+            if (iconName?.startsWith("ImageVector@") == true) {
+                val isExpense = key.startsWith("expense_icon_")
+                val categoryName = if (isExpense) {
+                    key.removePrefix("expense_icon_")
+                } else {
+                    key.removePrefix("income_icon_")
+                }
+                
+                // Replace with default icon name
+                val defaultName = if (isExpense) "ShoppingCart" else "AttachMoney"
+                prefs.edit {
+                    putString(key, defaultName)
+                }
+                Log.d(TAG, "Fixed invalid icon reference for category: $categoryName, isExpense: $isExpense, from: $iconName to: $defaultName")
             }
         }
     }

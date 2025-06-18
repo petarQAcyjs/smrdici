@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.screens.settings
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -82,6 +83,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryManager
+import com.petar.smrdici.data.model.CategoryIcons
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -91,6 +93,34 @@ import kotlin.math.abs
 
 // Funkcija za generisanje boje na osnovu imena kategorije
 fun getIncomeCategoryColor(categoryName: String): Color {
+    val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
+    
+    // If context is available, check for saved color
+    if (context != null) {
+        val categoryManager = CategoryManager.getInstance(context)
+        
+        // First check if we have a saved color
+        val savedColor = categoryManager.getCategoryColor(categoryName, false)
+        Log.d("IncomeCategories", "Getting color for $categoryName: savedColor=$savedColor")
+        if (savedColor != null) {
+            try {
+                // Convert the long value to a Color
+                val alpha = (savedColor shr 24 and 0xFF).toInt()
+                val red = (savedColor shr 16 and 0xFF).toInt()
+                val green = (savedColor shr 8 and 0xFF).toInt()
+                val blue = (savedColor and 0xFF).toInt()
+                
+                val color = Color(red, green, blue, alpha)
+                Log.d("IncomeCategories", "Using saved color for $categoryName: ARGB($alpha,$red,$green,$blue)")
+                return color
+            } catch (e: Exception) {
+                Log.e("IncomeCategories", "Error converting color value: $savedColor", e)
+                // Fall through to default color
+            }
+        }
+    }
+    
+    // If no saved color, use the hash-based approach
     val colors = listOf(
         Color(0xFF4FC3F7), // Light Blue
         Color(0xFFFF8A65), // Orange
@@ -111,11 +141,47 @@ fun getIncomeCategoryColor(categoryName: String): Color {
     
     // Koristimo hash kod imena kategorije za odabir boje
     val index = abs(categoryName.hashCode()) % colors.size
-    return colors[index]
+    val defaultColor = colors[index]
+    Log.d("IncomeCategories", "Using default color for $categoryName: ${defaultColor.value}")
+    return defaultColor
 }
 
 // Funkcija za dobijanje odgovarajuće ikone za kategoriju prihoda
 fun getIncomeCategoryIcon(categoryName: String): ImageVector {
+    val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
+    
+    // If context is available, check for saved icon
+    if (context != null) {
+        val categoryManager = CategoryManager.getInstance(context)
+        
+        // First check if we have a saved icon
+        val savedIconName = categoryManager.getCategoryIcon(categoryName, false)
+        Log.d("IncomeCategories", "Getting icon for $categoryName: savedIconName=$savedIconName")
+        
+        if (savedIconName != null) {
+            // Try to find the icon by name
+            try {
+                Log.d("IncomeCategories", "Attempting to find icon with name: $savedIconName")
+                
+                // Use the shared icon finder
+                val foundIcon = CategoryIcons.findIconByName(savedIconName)
+                if (foundIcon != null) {
+                    Log.d("IncomeCategories", "Found icon for name: $savedIconName")
+                    return foundIcon
+                }
+                
+                Log.e("IncomeCategories", "Could not find icon with name: $savedIconName")
+            } catch (e: Exception) {
+                Log.e("IncomeCategories", "Error finding icon $savedIconName: ${e.message}")
+                // Fall through to default icon selection
+            }
+        }
+    }
+    
+    // If no saved icon or couldn't find it, use the default mapping
+    Log.d("IncomeCategories", "Using default icon mapping for $categoryName")
+    
+    // If no saved icon or couldn't find it, use the default mapping
     return when (categoryName.lowercase()) {
         "paycheck", "плата", "plata" -> Icons.Default.Payments
         "gift", "поклон", "poklon" -> Icons.Default.CardGiftcard

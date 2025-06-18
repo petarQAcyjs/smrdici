@@ -1,6 +1,7 @@
 package com.petar.smrdici.ui.screens.settings
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,9 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Celebration
@@ -32,28 +36,43 @@ import androidx.compose.material.icons.filled.Chair
 import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Commute
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Copyright
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.EventSeat
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Grass
+import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Handyman
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.House
+import androidx.compose.material.icons.filled.LocalAtm
 import androidx.compose.material.icons.filled.LocalBar
 import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.LocalGroceryStore
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.MoneyOff
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -64,6 +83,7 @@ import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -100,6 +120,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryManager
+import com.petar.smrdici.data.model.CategoryIcons
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -126,6 +147,34 @@ class CategoryMigrationViewModel(context: Context) : ViewModel() {
 
 // Funkcija za generisanje boje na osnovu imena kategorije
 fun getExpenseCategoryColor(categoryName: String): Color {
+    val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
+    
+    // If context is available, check for saved color
+    if (context != null) {
+        val categoryManager = CategoryManager.getInstance(context)
+        
+        // First check if we have a saved color
+        val savedColor = categoryManager.getCategoryColor(categoryName, true)
+        Log.d("ExpenseCategories", "Getting color for $categoryName: savedColor=$savedColor")
+        if (savedColor != null) {
+            try {
+                // Convert the long value to a Color
+                val alpha = (savedColor shr 24 and 0xFF).toInt()
+                val red = (savedColor shr 16 and 0xFF).toInt()
+                val green = (savedColor shr 8 and 0xFF).toInt()
+                val blue = (savedColor and 0xFF).toInt()
+                
+                val color = Color(red, green, blue, alpha)
+                Log.d("ExpenseCategories", "Using saved color for $categoryName: ARGB($alpha,$red,$green,$blue)")
+                return color
+            } catch (e: Exception) {
+                Log.e("ExpenseCategories", "Error converting color value: $savedColor", e)
+                // Fall through to default color
+            }
+        }
+    }
+    
+    // If no saved color, use the hash-based approach
     val colors = listOf(
         Color(0xFFE57373), // Red
         Color(0xFF64B5F6), // Blue
@@ -146,11 +195,47 @@ fun getExpenseCategoryColor(categoryName: String): Color {
     
     // Koristimo hash kod imena kategorije za odabir boje
     val index = abs(categoryName.hashCode()) % colors.size
-    return colors[index]
+    val defaultColor = colors[index]
+    Log.d("ExpenseCategories", "Using default color for $categoryName: ${defaultColor.value}")
+    return defaultColor
 }
 
 // Funkcija za dobijanje odgovarajuće ikone za kategoriju
 fun getCategoryIcon(categoryName: String): ImageVector {
+    val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
+    
+    // If context is available, check for saved icon
+    if (context != null) {
+        val categoryManager = CategoryManager.getInstance(context)
+        
+        // First check if we have a saved icon
+        val savedIconName = categoryManager.getCategoryIcon(categoryName, true)
+        Log.d("ExpenseCategories", "Getting icon for $categoryName: savedIconName=$savedIconName")
+        
+        if (savedIconName != null) {
+            // Try to find the icon by name
+            try {
+                Log.d("ExpenseCategories", "Attempting to find icon with name: $savedIconName")
+                
+                // Use the shared icon finder
+                val foundIcon = CategoryIcons.findIconByName(savedIconName)
+                if (foundIcon != null) {
+                    Log.d("ExpenseCategories", "Found icon for name: $savedIconName")
+                    return foundIcon
+                }
+                
+                Log.e("ExpenseCategories", "Could not find icon with name: $savedIconName")
+            } catch (e: Exception) {
+                Log.e("ExpenseCategories", "Error finding icon $savedIconName: ${e.message}")
+                // Fall through to default icon selection
+            }
+        }
+    }
+    
+    // If no saved icon or couldn't find it, use the default mapping
+    Log.d("ExpenseCategories", "Using default icon mapping for $categoryName")
+    
+    // If no saved icon, use the default mapping
     return when (categoryName.lowercase()) {
         "food", "храна", "hrana" -> Icons.Default.Fastfood
         "home", "кућа", "kuća" -> Icons.Default.Home
