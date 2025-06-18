@@ -271,15 +271,11 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         // Initialize the NotificationManager
         notificationManager = NotificationManager(applicationContext)
         
-        // Setup daily weather notification if weather-aware notifications are enabled
-        if (notificationManager.weatherAwareEnabled) {
-            DailyWeatherScheduler.scheduleDailyWeatherNotification(applicationContext)
-        } else {
-            // Cancel any existing scheduled weather notifications
-            DailyWeatherScheduler.cancelDailyWeatherNotification(applicationContext)
-        }
+        // Always enable and schedule daily weather notifications at 8:00 AM
+        notificationManager.weatherAwareEnabled = true
+        DailyWeatherScheduler.scheduleDailyWeatherNotification(applicationContext)
         
-        Log.d(TAG, "Notification system initialized")
+        Log.d(TAG, "Notification system initialized with daily weather notifications at 8:00 AM")
     }
     
     // WorkManager configuration
