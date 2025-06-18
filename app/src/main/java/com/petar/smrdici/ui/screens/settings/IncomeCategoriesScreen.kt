@@ -1,7 +1,5 @@
 package com.petar.smrdici.ui.screens.settings
 
-import android.content.Context
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,26 +19,40 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BusinessCenter
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Copyright
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Work
-import androidx.compose.material.icons.filled.MoneyOff
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.EventSeat
+import androidx.compose.material.icons.filled.FamilyRestroom
+import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.House
 import androidx.compose.material.icons.filled.LocalAtm
+import androidx.compose.material.icons.filled.MoneyOff
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -67,7 +79,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryManager
@@ -76,6 +87,7 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 // Funkcija za generisanje boje na osnovu imena kategorije
 fun getIncomeCategoryColor(categoryName: String): Color {
@@ -98,7 +110,7 @@ fun getIncomeCategoryColor(categoryName: String): Color {
     )
     
     // Koristimo hash kod imena kategorije za odabir boje
-    val index = Math.abs(categoryName.hashCode()) % colors.size
+    val index = abs(categoryName.hashCode()) % colors.size
     return colors[index]
 }
 
@@ -112,6 +124,24 @@ fun getIncomeCategoryIcon(categoryName: String): ImageVector {
         "salary", "зарада", "zarada" -> Icons.Default.Work
         "savings", "уштеђевина", "ušteđevina" -> Icons.Default.Savings
         "cash", "готовина", "gotovina" -> Icons.Default.LocalAtm
+        "bonus", "бонус" -> Icons.Default.EmojiEvents
+        "dividend", "дивиденда", "dividenda" -> Icons.Default.PieChart
+        "rental", "рентал" -> Icons.Default.House
+        "investment", "инвестиција", "investicija" -> Icons.AutoMirrored.Filled.TrendingUp
+        "freelance", "фриленс", "frilens" -> Icons.Default.Computer
+        "side hustle", "додатни посао", "dodatni posao" -> Icons.Default.BusinessCenter
+        "commission", "провизија", "provizija" -> Icons.Default.Handshake
+        "royalty", "ројалти", "rojalty" -> Icons.Default.Copyright
+        "pension", "пензија", "penzija" -> Icons.Default.EventSeat
+        "alimony", "алиментација", "alimentacija" -> Icons.Default.FamilyRestroom
+        "child support", "издржавање детета", "izdržavanje deteta" -> Icons.Default.ChildCare
+        "tax return", "повраћај пореза", "povraćaj poreza" -> Icons.Default.Receipt
+        "inheritance", "наследство", "nasledstvo" -> Icons.Default.AutoAwesome
+        "lottery", "лутрија", "lutrija" -> Icons.Default.Casino
+        "scholarship", "стипендија", "stipendija" -> Icons.Default.School
+        "grant", "грант" -> Icons.Default.Gavel
+        "social security", "социјална помоћ" -> Icons.Default.HealthAndSafety
+        "unemployment", "накнада за незапосленост" -> Icons.Default.PersonOff
         else -> Icons.Default.AttachMoney
     }
 }
@@ -157,7 +187,7 @@ fun IncomeCategoriesScreen(
     var selectedCategory by remember { mutableStateOf("") }
     
     val authState by authViewModel.authState.collectAsState()
-    val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
+    val user = (authState as? AuthState.Authenticated)?.user
     
     Scaffold(
         topBar = {
