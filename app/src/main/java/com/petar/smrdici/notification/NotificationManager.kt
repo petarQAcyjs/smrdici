@@ -118,7 +118,7 @@ class NotificationManager(private val context: Context) {
             putBoolean(KEY_AVATAR_NOTIFICATIONS, true)
             putBoolean(KEY_DYNAMIC_TIMING, false)
             putBoolean(KEY_SMART_GROUPING, false)
-            putBoolean(KEY_WEATHER_AWARE, false)
+            putBoolean(KEY_WEATHER_AWARE, true)
             apply()
         }
         Log.d(TAG, "Notification preferences reset to defaults")
