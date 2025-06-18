@@ -171,80 +171,37 @@ class WeatherService(context: Context) {
      * Get weather advice based on weather conditions
      */
     fun getWeatherAdvice(weatherInfo: WeatherInfo): String {
-        val advice = StringBuilder()
-        
-        // Primary weather condition advice
-        val primaryAdvice = when {
-            weatherInfo.description.contains("rain", ignoreCase = true) -> 
-                "🌧️ Не може Мика у парк. Рекоше падаће киша."
-            weatherInfo.description.contains("snow", ignoreCase = true) -> 
-                "❄️ Рекоше да ће снијег, нек се Смрдићи обуку топло."
-            weatherInfo.description.contains("thunderstorm", ignoreCase = true) || 
-            weatherInfo.description.contains("thunder", ignoreCase = true) -> 
-                "⛈️ Зачепите ђеци уши! Грми."
-            weatherInfo.description.contains("fog", ignoreCase = true) ||
-            weatherInfo.description.contains("mist", ignoreCase = true) ->
-                "🌫️ Закачите ђецу на поводац! Видљивост је смањена због магле."
-            weatherInfo.description.contains("cloud", ignoreCase = true) -> 
-                "☁️ Сенка рече биће облачно ал неће падат киша."
-            weatherInfo.description.contains("clear", ignoreCase = true) || 
-            weatherInfo.description.contains("sunny", ignoreCase = true) -> 
-                "☀️ Могу ђеца у парк ако стигне неко да их изведе."
-            else -> "🌤️ Тренутни услови: ${weatherInfo.description}"
-        }
-        
-        advice.append(primaryAdvice)
-        
-        // Temperature advice
-        val tempAdvice = when {
+        // Choose the most relevant advice based on temperature and other conditions
+        val advice = when {
             weatherInfo.temperature > 35 -> 
-                "\n🔥 Пали климу, напољу је пакао."
+                "🔥 Пали климу, напољу је пакао."
             weatherInfo.temperature > 30 -> 
-                "\n🌡️ Преко 30 су најавили, покуваћемо се."
-            weatherInfo.temperature > 25 -> 
-                "\n☀️ Најјаче вријеме ѕа Мику и Богија."
+                "🌡️ Преко 30 су најавили, покуваћемо се."
+            weatherInfo.temperature > 25 -> {
+                if (weatherInfo.humidity > 70) {
+                    "💦 Није што је вруће, него што је нека спарина."
+                } else {
+                    "☀️ Таман да изведете ђецу у парк."
+                }
+            }
             weatherInfo.temperature > 15 -> 
-                "\n🌤️ Ммммм, таман."
-            weatherInfo.temperature > 5 -> 
-                "\n🧥 Смрзнуће се шарена гузица."
+                "🌤️ Ммммм, таман."
+            weatherInfo.temperature > 5 -> {
+                if (weatherInfo.windSpeed > 10) {
+                    "💨 Ветровито је! Купите папирне марамице, Смрдићима ће нос да цури."
+                } else {
+                    "🧥 Смрзнуће се шарена гузица."
+                }
+            }
             weatherInfo.temperature > 0 -> 
-                "\n❄️ Хладно је! Само да не заслине."
+                "❄️ Хладно је! Само да не заслине."
             weatherInfo.temperature > -10 -> 
-                "\n🧤 Лол најавили минус."
+                "🧤 Лол најавили минус."
             else -> 
-                "\n🥶 Екстремно хладно! Избегавајте дуготрајно излагање хладноћи."
+                "🥶 Екстремно хладно! Избегавајте дуготрајно излагање хладноћи."
         }
         
-        advice.append(tempAdvice)
-        
-        // Wind advice
-        if (weatherInfo.windSpeed > 20) {
-            advice.append("\n💨 Јаки ветрови! Натрпај ђеци камење у џепове.")
-        } else if (weatherInfo.windSpeed > 10) {
-            advice.append("\n🌬️ Ветровито је! Купите папирне марамице, Смрдићима ће нос да цури.")
-        }
-        
-        // Humidity advice
-        if (weatherInfo.humidity > 80) {
-            advice.append("\n💧 Није што је вруће, него што је нека спарина.")
-        } else if (weatherInfo.humidity < 30) {
-            advice.append("\n🏜️ Ниска влажност. Побољшајте хидртацију коже.")
-        }
-        
-        // Additional comfort advice
-        val comfortAdvice = when {
-            weatherInfo.temperature > 25 && weatherInfo.humidity > 70 -> 
-                "\n💦 Није што је вруће, него што је нека спарина."
-            weatherInfo.temperature < 5 && weatherInfo.windSpeed > 10 -> 
-                "\n🥶 Хладно и ветровито. Обуците се веома топло!"
-            weatherInfo.temperature > 20 && weatherInfo.temperature < 25 && weatherInfo.humidity < 60 -> 
-                "\n😊 То је то! Изводимо ђецу напоље!"
-            else -> ""
-        }
-        
-        advice.append(comfortAdvice)
-        
-        return advice.toString()
+        return advice
     }
 }
 
