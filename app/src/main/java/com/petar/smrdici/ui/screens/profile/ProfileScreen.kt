@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountBalance
@@ -85,6 +87,9 @@ fun ProfileScreen(
     // Додајемо coroutineScope и snackbarHostState
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Add scroll state for scrollable content
+    val scrollState = rememberScrollState()
 
     // Функција за приказивање Snackbar-а
     fun showSnackbar(message: String) {
@@ -145,181 +150,178 @@ fun ProfileScreen(
         }
     ) { paddingValues ->
         // Садржај екрана...
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
             if (user != null) {
-                Box(
+                // Main scrollable content
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .padding(16.dp)
+                        .padding(bottom = 80.dp), // Extra padding for logout button
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Top
                 ) {
-                    Column(
+                    // Профилна слика
+                    Surface(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                            .padding(bottom = 80.dp), // Додајемо додатни padding на дну да направимо места за дугме
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Top
+                            .size(120.dp)
+                            .clip(CircleShape),
+                        color = MaterialTheme.colorScheme.primary
                     ) {
-                        // Профилна слика
-                        Surface(
-                            modifier = Modifier
-                                .size(120.dp)
-                                .clip(CircleShape),
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = user.displayName?.firstOrNull()?.toString() ?:
-                                    user.email?.firstOrNull()?.toString() ?: "?",
-                                    style = MaterialTheme.typography.headlineLarge,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Име корисника
-                        Text(
-                            text = user.displayName ?: "Корисник",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        // Имејл
-                        Text(
-                            text = user.email ?: "",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-
-                        Spacer(modifier = Modifier.height(32.dp))
-
-                        // Подешавања
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp)
-                            ) {
-                                Text(
-                                    text = "Подешавања",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(bottom = 16.dp)
-                                )
-
-                                // Дугме за синхронизацију
-                                SettingsItem(
-                                    icon = if (syncStatus is SyncStatus.Syncing) 
-                                        Icons.Default.Refresh 
-                                    else 
-                                        Icons.Default.Refresh,
-                                    title = "Синхронизуј податке",
-                                    subtitle = when (syncStatus) {
-                                        is SyncStatus.Syncing -> "Синхронизација у току..."
-                                        is SyncStatus.Success -> "Синхронизација успешна"
-                                        is SyncStatus.Error -> "Грешка: ${(syncStatus as SyncStatus.Error).message}"
-                                        else -> null
-                                    },
-                                    onClick = { 
-                                        Log.d("ProfileScreen", "Клик на дугме за синхронизацију")
-                                        homeViewModel.syncEvents() 
-                                    },
-                                    isLoading = syncStatus is SyncStatus.Syncing
-                                )
-
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                )
-
-                                // Тема
-                                SettingsItem(
-                                    icon = when (themeMode) {
-                                        ThemeMode.LIGHT -> Icons.Default.LightMode
-                                        ThemeMode.DARK -> Icons.Default.DarkMode
-                                        ThemeMode.SYSTEM -> Icons.Default.Settings
-                                    },
-                                    title = "Тема",
-                                    subtitle = when (themeMode) {
-                                        ThemeMode.LIGHT -> "Светла"
-                                        ThemeMode.DARK -> "Тамна"
-                                        ThemeMode.SYSTEM -> "Систем"
-                                    },
-                                    onClick = { showThemeDialog = true }
-                                )
-
-                                // За подешавања буџета
-                                SettingsItem(
-                                    icon = Icons.Default.AccountBalance,
-                                    title = "Подешавања финансија",
-                                    onClick = {
-                                        navController.navigate(Screen.FinanceSettings.route)
-                                    }
-                                )
-
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                )
-
-                                // За подешавања обавештења
-                                SettingsItem(
-                                    icon = Icons.Default.Notifications,
-                                    title = "Подешавања обавештења",
-                                    onClick = {
-                                        navController.navigate(Screen.NotificationSettings.route)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    
-                    // Дугме за одјаву у посебном Box-у који је увек на дну екрана
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 32.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                android.util.Log.d("ProfileScreen", "Клик на дугме за одјаву")
-                                try {
-                                    authViewModel.signOut()
-                                    android.util.Log.d("ProfileScreen", "Позив signOut() успешан")
-                                    
-                                    // Додајемо директну навигацију
-                                    navController.navigate(Screen.Login.route) {
-                                        popUpTo(Screen.Home.route) { inclusive = true }
-                                    }
-                                    android.util.Log.d("ProfileScreen", "Директна навигација на Login екран")
-                                } catch (e: Exception) {
-                                    android.util.Log.e("ProfileScreen", "Грешка при одјави: ${e.message}", e)
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp), // Фиксна висина дугмета
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error
-                            )
+                        Box(
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Одјави се",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(vertical = 8.dp)
+                                text = user.displayName?.firstOrNull()?.toString() ?:
+                                user.email?.firstOrNull()?.toString() ?: "?",
+                                style = MaterialTheme.typography.headlineLarge,
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Име корисника
+                    Text(
+                        text = user.displayName ?: "Корисник",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    // Имејл
+                    Text(
+                        text = user.email ?: "",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // Подешавања
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(
+                                text = "Подешавања",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+
+                            // Дугме за синхронизацију
+                            SettingsItem(
+                                icon = if (syncStatus is SyncStatus.Syncing) 
+                                    Icons.Default.Refresh 
+                                else 
+                                    Icons.Default.Refresh,
+                                title = "Синхронизуј податке",
+                                subtitle = when (syncStatus) {
+                                    is SyncStatus.Syncing -> "Синхронизација у току..."
+                                    is SyncStatus.Success -> "Синхронизација успешна"
+                                    is SyncStatus.Error -> "Грешка: ${(syncStatus as SyncStatus.Error).message}"
+                                    else -> null
+                                },
+                                onClick = { 
+                                    Log.d("ProfileScreen", "Клик на дугме за синхронизацију")
+                                    homeViewModel.syncEvents() 
+                                },
+                                isLoading = syncStatus is SyncStatus.Syncing
+                            )
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+
+                            // Тема
+                            SettingsItem(
+                                icon = when (themeMode) {
+                                    ThemeMode.LIGHT -> Icons.Default.LightMode
+                                    ThemeMode.DARK -> Icons.Default.DarkMode
+                                    ThemeMode.SYSTEM -> Icons.Default.Settings
+                                },
+                                title = "Тема",
+                                subtitle = when (themeMode) {
+                                    ThemeMode.LIGHT -> "Светла"
+                                    ThemeMode.DARK -> "Тамна"
+                                    ThemeMode.SYSTEM -> "Систем"
+                                },
+                                onClick = { showThemeDialog = true }
+                            )
+
+                            // За подешавања буџета
+                            SettingsItem(
+                                icon = Icons.Default.AccountBalance,
+                                title = "Подешавања финансија",
+                                onClick = {
+                                    navController.navigate(Screen.FinanceSettings.route)
+                                }
+                            )
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+
+                            // За подешавања обавештења
+                            SettingsItem(
+                                icon = Icons.Default.Notifications,
+                                title = "Подешавања обавештења",
+                                onClick = {
+                                    navController.navigate(Screen.NotificationSettings.route)
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                // Дугме за одјаву у посебном Box-у који је увек на дну екрана
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 16.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            android.util.Log.d("ProfileScreen", "Клик на дугме за одјаву")
+                            try {
+                                authViewModel.signOut()
+                                android.util.Log.d("ProfileScreen", "Позив signOut() успешан")
+                                
+                                // Додајемо директну навигацију
+                                navController.navigate(Screen.Login.route) {
+                                    popUpTo(Screen.Home.route) { inclusive = true }
+                                }
+                                android.util.Log.d("ProfileScreen", "Директна навигација на Login екран")
+                            } catch (e: Exception) {
+                                android.util.Log.e("ProfileScreen", "Грешка при одјави: ${e.message}", e)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp), // Фиксна висина дугмета
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text(
+                            text = "Одјави се",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
                     }
                 }
             } else {
