@@ -443,6 +443,9 @@ class NotificationService(private val context: Context) {
         val notificationId = 2000
         
         with(NotificationManagerCompat.from(context)) {
+            // Cancel any existing weather notifications first
+            cancel(notificationId)
+            
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 if (ActivityCompat.checkSelfPermission(
                         context,
