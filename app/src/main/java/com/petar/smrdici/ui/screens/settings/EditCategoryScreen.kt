@@ -19,31 +19,67 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Commute
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Copyright
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.EventSeat
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.Grass
+import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.filled.Handyman
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.House
 import androidx.compose.material.icons.filled.LocalAtm
+import androidx.compose.material.icons.filled.LocalBar
 import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.LocalGroceryStore
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MoneyOff
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.SmokingRooms
+import androidx.compose.material.icons.filled.SportsBasketball
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Subscriptions
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +95,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,6 +111,9 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryManager
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import kotlinx.coroutines.launch
 
 enum class CategoryType {
@@ -85,7 +125,8 @@ enum class CategoryType {
 fun EditCategoryScreen(
     navController: NavController,
     categoryName: String,
-    categoryType: CategoryType
+    categoryType: CategoryType,
+    authViewModel: AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val context = LocalContext.current
     val categoryManager = remember { CategoryManager.getInstance(context) }
@@ -96,6 +137,9 @@ fun EditCategoryScreen(
     var isNewCategory by remember { mutableStateOf(categoryName.isEmpty()) }
     var selectedIcon by remember { mutableStateOf<ImageVector?>(null) }
     var selectedColor by remember { mutableStateOf<Color?>(null) }
+    
+    // Search state for icons
+    var iconSearchQuery by remember { mutableStateOf("") }
     
     // Initialize with existing category data if editing
     LaunchedEffect(categoryName) {
@@ -117,19 +161,16 @@ fun EditCategoryScreen(
         }
     }
     
+    val authState by authViewModel.authState.collectAsState()
+    val user = (authState as? AuthState.Authenticated)?.user
+    
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(if (isNewCategory) "Add Category" else "Edit Category") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            AppHeader(
+                title = if (isNewCategory) "Додај категорију" else "Измени категорију",
+                navController = navController,
+                showBackButton = true,
+                user = user
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -163,6 +204,31 @@ fun EditCategoryScreen(
                 modifier = Modifier.padding(start = 4.dp)
             )
             
+            // Icon search field
+            OutlinedTextField(
+                value = iconSearchQuery,
+                onValueChange = { iconSearchQuery = it },
+                label = { Text("Search Icons") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search"
+                    )
+                },
+                trailingIcon = {
+                    if (iconSearchQuery.isNotEmpty()) {
+                        IconButton(onClick = { iconSearchQuery = "" }) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear"
+                            )
+                        }
+                    }
+                }
+            )
+            
             // Icon selection section
             Text(
                 text = "Icons",
@@ -181,7 +247,23 @@ fun EditCategoryScreen(
                     incomeIcons
                 }
                 
-                items(icons) { icon ->
+                // Filter icons based on search query
+                val filteredIcons = if (iconSearchQuery.isEmpty()) {
+                    icons
+                } else {
+                    // Filter icons based on their name representation
+                    icons.filter { icon ->
+                        // Extract icon name from the icon's toString() representation
+                        val iconName = icon.toString()
+                            .substringAfterLast('.')
+                            .replace("_", " ")
+                            .lowercase()
+                        
+                        iconSearchQuery.lowercase() in iconName
+                    }
+                }
+                
+                items(filteredIcons) { icon ->
                     IconSelectionItem(
                         icon = icon,
                         isSelected = selectedIcon == icon,
@@ -367,7 +449,28 @@ val expenseIcons = listOf(
     Icons.Default.CreditCard,
     Icons.Default.Celebration,
     Icons.Default.SportsEsports,
-    Icons.Default.CardGiftcard
+    Icons.Default.CardGiftcard,
+    // Add many more icons for a comprehensive selection
+    Icons.Default.Apartment,
+    Icons.Default.Checkroom,
+    Icons.Default.Commute,
+    Icons.Default.Face,
+    Icons.Default.Favorite,
+    Icons.Default.FitnessCenter,
+    Icons.Default.Flight,
+    Icons.Default.Grass,
+    Icons.Default.Handyman,
+    Icons.Default.LocalBar,
+    Icons.Default.Movie,
+    Icons.Default.MusicNote,
+    Icons.Default.Security,
+    Icons.Default.Smartphone,
+    Icons.Default.SportsBasketball,
+    Icons.Default.Subscriptions,
+    Icons.Default.WaterDrop,
+    Icons.Default.Wifi,
+    Icons.AutoMirrored.Filled.MenuBook,
+    Icons.AutoMirrored.Filled.TrendingUp
 )
 
 // Icons for income categories
@@ -379,5 +482,23 @@ val incomeIcons = listOf(
     Icons.Default.Work,
     Icons.Default.Savings,
     Icons.Default.LocalAtm,
-    Icons.Default.CardGiftcard
+    Icons.Default.CardGiftcard,
+    // Add many more icons for a comprehensive selection
+    Icons.Default.BusinessCenter,
+    Icons.Default.Casino,
+    Icons.Default.Copyright,
+    Icons.Default.EmojiEvents,
+    Icons.Default.EventSeat,
+    Icons.Default.FamilyRestroom,
+    Icons.Default.Gavel,
+    Icons.Default.Handshake,
+    Icons.Default.HealthAndSafety,
+    Icons.Default.House,
+    Icons.Default.PersonOff,
+    Icons.Default.PieChart,
+    Icons.Default.Receipt,
+    Icons.Default.School,
+    Icons.AutoMirrored.Filled.TrendingUp,
+    Icons.Default.Computer,
+    Icons.Default.AutoAwesome
 ) 
