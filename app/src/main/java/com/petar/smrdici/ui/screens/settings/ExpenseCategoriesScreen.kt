@@ -20,33 +20,55 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material.icons.filled.Chair
+import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Commute
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.Grass
+import androidx.compose.material.icons.filled.Handyman
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalBar
 import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.LocalGroceryStore
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.SmokingRooms
+import androidx.compose.material.icons.filled.SportsBasketball
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Subscriptions
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -71,6 +93,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -82,6 +105,7 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 class CategoryMigrationViewModel(context: Context) : ViewModel() {
     private val categoryManager = CategoryManager.getInstance(context)
@@ -92,7 +116,9 @@ class CategoryMigrationViewModel(context: Context) : ViewModel() {
         if (!migrated) {
             viewModelScope.launch {
                 categoryManager.migrateEnumCategoriesToFirestore()
-                prefs.edit().putBoolean("categories_migrated", true).apply()
+                prefs.edit {
+                    putBoolean("categories_migrated", true)
+                }
             }
         }
     }
@@ -119,7 +145,7 @@ fun getExpenseCategoryColor(categoryName: String): Color {
     )
     
     // Koristimo hash kod imena kategorije za odabir boje
-    val index = Math.abs(categoryName.hashCode()) % colors.size
+    val index = abs(categoryName.hashCode()) % colors.size
     return colors[index]
 }
 
@@ -135,13 +161,38 @@ fun getCategoryIcon(categoryName: String): ImageVector {
         "gifts", "поклони", "pokloni" -> Icons.Default.CardGiftcard
         "cafe", "кафа", "kafa" -> Icons.Default.LocalCafe
         "electronics", "електроника", "elektronika" -> Icons.Default.Devices
-        "entertainment", "забава", "zabava" -> Icons.Default.SportsEsports
-        "pets", "љубимци", "ljubimci" -> Icons.Default.Pets
-        "restaurant", "ресторан", "restoran" -> Icons.Default.Restaurant
-        "cigarettes", "цигарете", "cigarete" -> Icons.Default.SmokingRooms
-        "groceries", "намирнице", "namirnice" -> Icons.Default.LocalGroceryStore
-        "debt", "дуг", "dug" -> Icons.Default.CreditCard
-        "celebration", "прослава", "proslava" -> Icons.Default.Celebration
+        "entertainment", "забава", "zabava" -> Icons.Filled.SportsEsports
+        "pets", "љубимци", "ljubimci" -> Icons.Filled.Pets
+        "restaurant", "ресторан", "restoran" -> Icons.Filled.Restaurant
+        "cigarettes", "цигарете", "cigarete" -> Icons.Filled.SmokingRooms
+        "groceries", "намирнице", "namirnice" -> Icons.Filled.LocalGroceryStore
+        "debt", "дуг", "dug" -> Icons.Filled.CreditCard
+        "celebration", "прослава", "proslava" -> Icons.Filled.Celebration
+        "bills", "рачуни", "računi" -> Icons.Filled.Receipt
+        "clothing", "одећа", "odeća" -> Icons.Filled.Checkroom
+        "travel", "путовање", "putovanje" -> Icons.Filled.Flight
+        "sports", "спорт", "sport" -> Icons.Filled.SportsBasketball
+        "fitness", "фитнес", "fitnes" -> Icons.Filled.FitnessCenter
+        "beauty", "лепота", "lepota" -> Icons.Filled.Face
+        "transport", "превоз", "prevoz" -> Icons.Filled.Commute
+        "books", "књиге", "knjige" -> Icons.AutoMirrored.Filled.MenuBook
+        "games", "игре", "igre" -> Icons.Filled.Casino
+        "music", "музика", "muzika" -> Icons.Filled.MusicNote
+        "movies", "филмови", "filmovi" -> Icons.Filled.Movie
+        "subscriptions", "претплате", "pretplate" -> Icons.Filled.Subscriptions
+        "insurance", "осигурање", "osiguranje" -> Icons.Filled.Security
+        "taxes", "порези", "porezi" -> Icons.Filled.Receipt
+        "maintenance", "одржавање", "održavanje" -> Icons.Filled.Handyman
+        "internet", "интернет" -> Icons.Filled.Wifi
+        "phone", "телефон", "telefon" -> Icons.Filled.Smartphone
+        "utilities", "комуналије", "komunalije" -> Icons.Filled.WaterDrop
+        "rent", "кирија", "kirija" -> Icons.Filled.Apartment
+        "mortgage", "хипотека", "hipoteka" -> Icons.Filled.AccountBalance
+        "investments", "инвестиције", "investicije" -> Icons.AutoMirrored.Filled.TrendingUp
+        "charity", "добротворно", "dobrotvorno" -> Icons.Filled.Favorite
+        "furniture", "намештај", "nameštaj" -> Icons.Filled.Chair
+        "garden", "башта", "bašta" -> Icons.Filled.Grass
+        "alcohol", "алкохол", "alkohol" -> Icons.Filled.LocalBar
         else -> Icons.Default.ShoppingCart
     }
 }
@@ -187,7 +238,7 @@ fun ExpenseCategoriesScreen(
     var selectedCategory by remember { mutableStateOf("") }
     
     val authState by authViewModel.authState.collectAsState()
-    val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
+    val user = (authState as? AuthState.Authenticated)?.user
     
     Scaffold(
         topBar = {
