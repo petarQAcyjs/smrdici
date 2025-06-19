@@ -12,9 +12,10 @@ import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException
 import com.google.android.gms.common.GooglePlayServicesRepairableException
 import com.google.android.gms.security.ProviderInstaller
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.petar.smrdici.data.repository.RepositoryManager
-import com.petar.smrdici.notification.DailyWeatherScheduler
 import com.petar.smrdici.notification.NotificationManager
 import com.petar.smrdici.util.TimeFormatUtil
 import com.petar.smrdici.utils.AppGlobals
@@ -54,6 +55,9 @@ class SmrdiciApplication : Application(), Configuration.Provider {
     
     // Application-level CoroutineScope that lives for the entire app lifecycle
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // Firebase Auth instance - moved from constructor to a lateinit property
+    private lateinit var firebaseAuth: FirebaseAuth
     
     override fun onCreate() {
         super.onCreate()
@@ -68,6 +72,9 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         
         // Inicijalizacija log sistema
         initLogging()
+        
+        // Initialize Firebase
+        initializeFirebase()
         
         // Force 24-hour time format
         TimeFormatUtil.force24HourFormat(this)
@@ -86,6 +93,31 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         
         // Офлајн подршка је подразумевано укључена у новијим верзијама Firebase-а
         // Нема потребе за додатном конфигурацијом
+    }
+    
+    /**
+     * Initialize Firebase services
+     */
+    private fun initializeFirebase() {
+        try {
+            // Initialize Firebase first
+            FirebaseApp.initializeApp(this)
+            
+            // Then get Firebase Auth instance
+            firebaseAuth = FirebaseAuth.getInstance()
+            
+            Log.d(TAG, "Firebase успешно иницијализован")
+        } catch (e: Exception) {
+            Log.e(TAG, "Грешка при иницијализацији Firebase-а", e)
+            // Fallback: Still try to initialize FirebaseAuth directly, though it may fail
+            try {
+                firebaseAuth = FirebaseAuth.getInstance()
+            } catch (e2: Exception) {
+                Log.e(TAG, "Не може се иницијализовати FirebaseAuth", e2)
+                // Create a placeholder to prevent NPEs
+                firebaseAuth = FirebaseAuth.getInstance()
+            }
+        }
     }
     
     private fun initLogging() {
@@ -271,11 +303,10 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         // Initialize the NotificationManager
         notificationManager = NotificationManager(applicationContext)
         
-        // Always enable and schedule daily weather notifications at 8:00 AM
-        notificationManager.weatherAwareEnabled = true
-        DailyWeatherScheduler.scheduleDailyWeatherNotification(applicationContext)
+        // Initialize all daily notifications
+        notificationManager.initializeDailyNotifications()
         
-        Log.d(TAG, "Notification system initialized with daily weather notifications at 8:00 AM")
+        Log.d(TAG, "Notification system initialized with daily notifications at 8:00 AM")
     }
     
     // WorkManager configuration
@@ -283,4 +314,19 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setMinimumLoggingLevel(Log.INFO)
             .build()
+
+    /**
+     * Get current Firebase user ID if available
+     */
+    fun getCurrentUserId(): String {
+        val currentUser = firebaseAuth.currentUser
+        return currentUser?.uid ?: ""
+    }
+    
+    /**
+     * Get the EventRepository instance
+     */
+    fun getEventsRepository(): com.petar.smrdici.data.repository.EventRepository {
+        return com.petar.smrdici.data.repository.EventRepository.getInstance(applicationContext)
+    }
 }

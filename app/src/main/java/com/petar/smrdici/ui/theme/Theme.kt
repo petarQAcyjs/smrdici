@@ -72,15 +72,17 @@ fun SmrdiciTheme(
         SideEffect {
             val window = (view.context as Activity).window
             
-            // Update the status bar color
-            window.statusBarColor = colorScheme.primary.toArgb()
-            
-            // Update the navigation bar color to match the theme background
-            window.navigationBarColor = if (darkTheme) {
+            // Set colors (these are not deprecated)
+            val statusBarColor = colorScheme.primary.toArgb()
+            val navigationBarColor = if (darkTheme) {
                 colorScheme.surfaceVariant.toArgb()
             } else {
                 colorScheme.background.toArgb()
             }
+            
+            // Using setStatusBarColor and setNavigationBarColor methods is not deprecated
+            window.statusBarColor = statusBarColor
+            window.navigationBarColor = navigationBarColor
             
             // Set the appearance of the system bars
             WindowCompat.getInsetsController(window, view).apply {

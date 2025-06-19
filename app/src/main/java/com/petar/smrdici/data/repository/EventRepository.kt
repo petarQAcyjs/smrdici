@@ -6,7 +6,9 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.petar.smrdici.SmrdiciApplication
 import com.petar.smrdici.data.model.Event
+import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.notification.NotificationHelper
 import com.petar.smrdici.notification.NotificationManager
 import kotlinx.coroutines.tasks.await
@@ -14,6 +16,7 @@ import java.util.Date
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import java.util.Calendar
 
 // Класа је измењена да прима зависности кроз конструктор уместо да их креира интерно
 class EventRepository(
@@ -199,7 +202,8 @@ class EventRepository(
         // Only schedule notifications for future events
         if (isEventInFuture(event) && event.id != null) {
             context?.let { ctx ->
-                NotificationHelper.scheduleNotificationsForEvent(ctx, event)
+                val notificationHelper = NotificationHelper.getInstance(ctx)
+                notificationHelper.scheduleNotificationsForEvent(event)
                 Log.d("EventRepository", "Scheduled notifications for event: ${event.title}")
             } ?: Log.e("EventRepository", "Context is null, cannot schedule notifications")
         } else {
@@ -455,7 +459,65 @@ class EventRepository(
         }
     }
     
+    /**
+     * Schedule a daily morning notification for events using a hybrid approach
+     * - Uses local notifications if the app is running
+     * - Uses FCM for background notifications when the app is closed
+     */
+    fun scheduleEventMorningNotification(event: Event) {
+        Log.d(TAG, "Scheduling morning notification for event: ${event.title}")
+        
+        // First, schedule local notification with AlarmManager
+        context?.let { ctx ->
+            val notificationHelper = NotificationHelper.getInstance(ctx)
+            notificationHelper.scheduleEventMorningNotification(event)
+            
+            // Then, also schedule FCM notification via Firestore
+            if (event.startTime != null) {
+                val userId = SmrdiciApplication.getInstance().getCurrentUserId()
+                
+                if (userId.isNotEmpty()) {
+                    val morningTime = Calendar.getInstance().apply {
+                        time = event.startTime.toDate()
+                        set(Calendar.HOUR_OF_DAY, 8)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                        
+                        // If the event is today but it's already past 8 AM, don't schedule
+                        if (timeInMillis < System.currentTimeMillis()) {
+                            return@scheduleEventMorningNotification
+                        }
+                    }
+                    
+                    val notification = hashMapOf(
+                        "title" to "Dnevni podsetnik",
+                        "message" to "Danas imate događaj: ${event.title}",
+                        "eventId" to event.id,
+                        "recipients" to listOf(userId),
+                        "status" to "scheduled",
+                        "scheduledFor" to com.google.firebase.Timestamp(Date(morningTime.timeInMillis)),
+                        "createdAt" to com.google.firebase.Timestamp.now()
+                    )
+                    
+                    // Add to Firestore notifications collection
+                    FirebaseFirestore.getInstance()
+                        .collection("notifications")
+                        .add(notification)
+                        .addOnSuccessListener {
+                            Log.d(TAG, "FCM notification scheduled for event: ${event.id}")
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "Failed to schedule FCM notification", e)
+                        }
+                }
+            }
+        } ?: Log.e(TAG, "Cannot schedule notifications: context is null")
+    }
+    
     companion object {
+        private const val TAG = "EventRepository"
+        
         @Volatile
         private var instance: EventRepository? = null
         

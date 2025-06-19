@@ -35,4 +35,7 @@ sealed class Screen(val route: String) {
     object EditIncome : Screen("edit_income/{incomeId}")
     
     object NotificationSettings : Screen("notification_settings")
+    
+    // FCM notification testing screen
+    object FcmTest : Screen("fcm_test")
 } 

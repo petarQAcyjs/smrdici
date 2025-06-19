@@ -593,7 +593,13 @@ class CalendarViewModel @Inject constructor(
     private fun scheduleNotifications(event: Event) {
         context?.let { ctx ->
             if (event.id != null && event.startTime != null) {
-                NotificationHelper.scheduleNotificationsForEvent(ctx, event)
+                // Schedule regular notifications with AlarmManager
+                val notificationHelper = NotificationHelper.getInstance(ctx)
+                notificationHelper.scheduleNotificationsForEvent(event)
+                
+                // Schedule hybrid morning notification (local + FCM)
+                eventRepository.scheduleEventMorningNotification(event)
+                
                 Log.d("CalendarViewModel", "Scheduled notifications for event: ${event.title}")
             }
         }
@@ -602,8 +608,18 @@ class CalendarViewModel @Inject constructor(
     // Function to cancel notifications for an event
     private fun cancelNotifications(eventId: String) {
         context?.let { ctx ->
-            NotificationHelper.cancelNotificationsForEvent(ctx, eventId)
+            NotificationHelper.getInstance(ctx).cancelNotificationsForEvent(eventId)
             Log.d("CalendarViewModel", "Cancelled notifications for event ID: $eventId")
+        }
+    }
+
+    // Function to schedule morning notification for an event
+    fun scheduleEventMorningNotification(event: Event) {
+        context?.let { ctx ->
+            if (event.id != null && event.startTime != null) {
+                eventRepository.scheduleEventMorningNotification(event)
+                Log.d("CalendarViewModel", "Scheduled morning notification for event: ${event.title}")
+            }
         }
     }
 }
