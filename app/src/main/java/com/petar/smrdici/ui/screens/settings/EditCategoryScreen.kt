@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,7 +25,9 @@ import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,6 +37,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -80,6 +84,9 @@ fun EditCategoryScreen(
     var selectedIcon by remember { mutableStateOf<ImageVector?>(null) }
     var selectedColor by remember { mutableStateOf<Color?>(null) }
     
+    // Dialog state for delete confirmation
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    
     // Search state for icons
     var iconSearchQuery by remember { mutableStateOf("") }
     
@@ -111,6 +118,39 @@ fun EditCategoryScreen(
     
     val authState by authViewModel.authState.collectAsState()
     val user = (authState as? AuthState.Authenticated)?.user
+    
+    // Delete confirmation dialog
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Обриши категорију") },
+            text = { Text("Да ли сте сигурни да желите да обришете категорију '$categoryName'?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        try {
+                            if (categoryType == CategoryType.EXPENSE) {
+                                categoryManager.deleteExpenseCategoryBoth(categoryName)
+                            } else {
+                                categoryManager.deleteIncomeCategoryBoth(categoryName)
+                            }
+                            showDeleteDialog = false
+                            navController.popBackStack()
+                        } catch (e: Exception) {
+                            snackbarHostState.showSnackbar("Error: ${e.message}")
+                        }
+                    }
+                }) {
+                    Text("Обриши")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Откажи")
+                }
+            }
+        )
+    }
     
     Scaffold(
         topBar = {
@@ -243,185 +283,202 @@ fun EditCategoryScreen(
             
             Spacer(modifier = Modifier.weight(1f))
             
-            // Save button
-            Button(
-                onClick = {
-                    if (currentCategoryName.isBlank()) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Category name cannot be empty")
-                        }
-                        return@Button
-                    }
-                    
-                    scope.launch {
-                        try {
-                            // Save the selected color
-                            selectedColor?.let { color ->
-                                // Convert Color to ARGB long value
-                                val alpha = (color.alpha * 255).toInt()
-                                val red = (color.red * 255).toInt()
-                                val green = (color.green * 255).toInt()
-                                val blue = (color.blue * 255).toInt()
-                                
-                                val colorValue = (alpha.toLong() shl 24) or
-                                                (red.toLong() shl 16) or
-                                                (green.toLong() shl 8) or
-                                                blue.toLong()
-                                
-                                val isExpense = categoryType == CategoryType.EXPENSE
-                                
-                                Log.d("EditCategoryScreen", "Saving color: ARGB($alpha,$red,$green,$blue) = $colorValue for category: $currentCategoryName, isExpense: $isExpense")
-                                
-                                // For new category, save with new name
-                                if (isNewCategory) {
-                                    categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
-                                } else if (currentCategoryName != categoryName) {
-                                    // For renamed category, update the color key
-                                    categoryManager.updateCategoryColor(categoryName, currentCategoryName, isExpense)
-                                    // Also save the color for the new name
-                                    categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
-                                } else {
-                                    // For existing category without name change, just save the color
-                                    categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
-                                }
-                            } ?: Log.e("EditCategoryScreen", "No color selected!")
-                            
-                            // Save the selected icon
-                            selectedIcon?.let { icon ->
-                                // Extract icon name from the icon
-                                val iconFullName = icon.toString()
-                                Log.d("EditCategoryScreen", "Icon full name: $iconFullName")
-                                
-                                // Extract the simple class name of the icon
-                                val iconName = try {
-                                    // Use reflection to get the actual field name
-                                    var foundName: String? = null
-                                    
-                                    // Try Icons.Default
-                                    val defaultFields = Icons.Default::class.java.declaredFields
-                                    for (field in defaultFields) {
-                                        field.isAccessible = true
-                                        if (field.get(Icons.Default) == icon) {
-                                            foundName = field.name
-                                            Log.d("EditCategoryScreen", "Found icon in Icons.Default: $foundName")
-                                            break
-                                        }
-                                    }
-                                    
-                                    // Try Icons.AutoMirrored.Filled if not found in Default
-                                    if (foundName == null) {
-                                        val autoMirroredFields = Icons.AutoMirrored.Filled::class.java.declaredFields
-                                        for (field in autoMirroredFields) {
-                                            field.isAccessible = true
-                                            if (field.get(Icons.AutoMirrored.Filled) == icon) {
-                                                foundName = field.name
-                                                Log.d("EditCategoryScreen", "Found icon in Icons.AutoMirrored.Filled: $foundName")
-                                                break
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Try Icons.Filled if not found yet
-                                    if (foundName == null) {
-                                        val filledFields = Icons.Filled::class.java.declaredFields
-                                        for (field in filledFields) {
-                                            field.isAccessible = true
-                                            if (field.get(Icons.Filled) == icon) {
-                                                foundName = field.name
-                                                Log.d("EditCategoryScreen", "Found icon in Icons.Filled: $foundName")
-                                                break
-                                            }
-                                        }
-                                    }
-                                    
-                                    // If still null, try fallback methods
-                                    foundName ?: run {
-                                        // Fallback to using index in our predefined lists
-                                        val isExpense = categoryType == CategoryType.EXPENSE
-                                        val icons = if (isExpense) CategoryIcons.expenseIcons else CategoryIcons.incomeIcons
-                                        
-                                        val index = icons.indexOf(icon)
-                                        if (index != -1) {
-                                            if (isExpense) {
-                                                "ExpenseIcon_$index"
-                                            } else {
-                                                "IncomeIcon_$index"
-                                            }
-                                        } else {
-                                            // Last resort - use a default icon name based on category type
-                                            if (isExpense) "ShoppingCart" else "AttachMoney"
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e("EditCategoryScreen", "Error extracting icon name: ${e.message}")
-                                    // Fallback
-                                    if (categoryType == CategoryType.EXPENSE) "ShoppingCart" else "AttachMoney"
-                                }
-                                
-                                val isExpense = categoryType == CategoryType.EXPENSE
-                                
-                                Log.d("EditCategoryScreen", "Saving icon: $iconName for category: $currentCategoryName, isExpense: $isExpense (from $iconFullName)")
-                                
-                                // For new category, save with new name
-                                if (isNewCategory) {
-                                    categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
-                                } else if (currentCategoryName != categoryName) {
-                                    // For renamed category, update the icon key
-                                    categoryManager.updateCategoryIcon(categoryName, currentCategoryName, isExpense)
-                                    // Also save the icon for the new name
-                                    categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
-                                } else {
-                                    // For existing category without name change, just save the icon
-                                    categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
-                                }
-                            } ?: Log.e("EditCategoryScreen", "No icon selected!")
-                            
-                            if (isNewCategory) {
-                                // Add new category
-                                if (categoryType == CategoryType.EXPENSE) {
-                                    if (!categoryManager.hasExpenseCategory(currentCategoryName)) {
-                                        categoryManager.addExpenseCategoryBoth(currentCategoryName)
-                                    } else {
-                                        snackbarHostState.showSnackbar("Category already exists")
-                                        return@launch
-                                    }
-                                } else {
-                                    if (!categoryManager.hasIncomeCategory(currentCategoryName)) {
-                                        categoryManager.addIncomeCategoryBoth(currentCategoryName)
-                                    } else {
-                                        snackbarHostState.showSnackbar("Category already exists")
-                                        return@launch
-                                    }
-                                }
-                            } else {
-                                // Update existing category
-                                if (categoryType == CategoryType.EXPENSE) {
-                                    if (!categoryManager.hasExpenseCategory(currentCategoryName) || currentCategoryName == categoryName) {
-                                        categoryManager.updateExpenseCategoryBoth(categoryName, currentCategoryName)
-                                    } else {
-                                        snackbarHostState.showSnackbar("Category already exists")
-                                        return@launch
-                                    }
-                                } else {
-                                    if (!categoryManager.hasIncomeCategory(currentCategoryName) || currentCategoryName == categoryName) {
-                                        categoryManager.updateIncomeCategoryBoth(categoryName, currentCategoryName)
-                                    } else {
-                                        snackbarHostState.showSnackbar("Category already exists")
-                                        return@launch
-                                    }
-                                }
-                            }
-                            
-                            // Navigate back after saving
-                            navController.popBackStack()
-                        } catch (e: Exception) {
-                            snackbarHostState.showSnackbar("Error: ${e.message}")
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
+            // Button row for Save and Delete
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(text = "Save")
+                // Save button
+                Button(
+                    onClick = {
+                        if (currentCategoryName.isBlank()) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Category name cannot be empty")
+                            }
+                            return@Button
+                        }
+                        
+                        scope.launch {
+                            try {
+                                // Save the selected color
+                                selectedColor?.let { color ->
+                                    // Convert Color to ARGB long value
+                                    val alpha = (color.alpha * 255).toInt()
+                                    val red = (color.red * 255).toInt()
+                                    val green = (color.green * 255).toInt()
+                                    val blue = (color.blue * 255).toInt()
+                                    
+                                    val colorValue = (alpha.toLong() shl 24) or
+                                                    (red.toLong() shl 16) or
+                                                    (green.toLong() shl 8) or
+                                                    blue.toLong()
+                                    
+                                    val isExpense = categoryType == CategoryType.EXPENSE
+                                    
+                                    Log.d("EditCategoryScreen", "Saving color: ARGB($alpha,$red,$green,$blue) = $colorValue for category: $currentCategoryName, isExpense: $isExpense")
+                                    
+                                    // For new category, save with new name
+                                    if (isNewCategory) {
+                                        categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
+                                    } else if (currentCategoryName != categoryName) {
+                                        // For renamed category, update the color key
+                                        categoryManager.updateCategoryColor(categoryName, currentCategoryName, isExpense)
+                                        // Also save the color for the new name
+                                        categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
+                                    } else {
+                                        // For existing category without name change, just save the color
+                                        categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
+                                    }
+                                } ?: Log.e("EditCategoryScreen", "No color selected!")
+                                
+                                // Save the selected icon
+                                selectedIcon?.let { icon ->
+                                    // Extract icon name from the icon
+                                    val iconFullName = icon.toString()
+                                    Log.d("EditCategoryScreen", "Icon full name: $iconFullName")
+                                    
+                                    // Extract the simple class name of the icon
+                                    val iconName = try {
+                                        // Use reflection to get the actual field name
+                                        var foundName: String? = null
+                                        
+                                        // Try Icons.Default
+                                        val defaultFields = Icons.Default::class.java.declaredFields
+                                        for (field in defaultFields) {
+                                            field.isAccessible = true
+                                            if (field.get(Icons.Default) == icon) {
+                                                foundName = field.name
+                                                Log.d("EditCategoryScreen", "Found icon in Icons.Default: $foundName")
+                                                break
+                                            }
+                                        }
+                                        
+                                        // Try Icons.AutoMirrored.Filled if not found in Default
+                                        if (foundName == null) {
+                                            val autoMirroredFields = Icons.AutoMirrored.Filled::class.java.declaredFields
+                                            for (field in autoMirroredFields) {
+                                                field.isAccessible = true
+                                                if (field.get(Icons.AutoMirrored.Filled) == icon) {
+                                                    foundName = field.name
+                                                    Log.d("EditCategoryScreen", "Found icon in Icons.AutoMirrored.Filled: $foundName")
+                                                    break
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Try Icons.Filled if not found yet
+                                        if (foundName == null) {
+                                            val filledFields = Icons.Filled::class.java.declaredFields
+                                            for (field in filledFields) {
+                                                field.isAccessible = true
+                                                if (field.get(Icons.Filled) == icon) {
+                                                    foundName = field.name
+                                                    Log.d("EditCategoryScreen", "Found icon in Icons.Filled: $foundName")
+                                                    break
+                                                }
+                                            }
+                                        }
+                                        
+                                        // If still null, try fallback methods
+                                        foundName ?: run {
+                                            // Fallback to using index in our predefined lists
+                                            val isExpense = categoryType == CategoryType.EXPENSE
+                                            val icons = if (isExpense) CategoryIcons.expenseIcons else CategoryIcons.incomeIcons
+                                            
+                                            val index = icons.indexOf(icon)
+                                            if (index != -1) {
+                                                if (isExpense) {
+                                                    "ExpenseIcon_$index"
+                                                } else {
+                                                    "IncomeIcon_$index"
+                                                }
+                                            } else {
+                                                // Last resort - use a default icon name based on category type
+                                                if (isExpense) "ShoppingCart" else "AttachMoney"
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("EditCategoryScreen", "Error extracting icon name: ${e.message}")
+                                        // Fallback
+                                        if (categoryType == CategoryType.EXPENSE) "ShoppingCart" else "AttachMoney"
+                                    }
+                                    
+                                    val isExpense = categoryType == CategoryType.EXPENSE
+                                    
+                                    Log.d("EditCategoryScreen", "Saving icon: $iconName for category: $currentCategoryName, isExpense: $isExpense (from $iconFullName)")
+                                    
+                                    // For new category, save with new name
+                                    if (isNewCategory) {
+                                        categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
+                                    } else if (currentCategoryName != categoryName) {
+                                        // For renamed category, update the icon key
+                                        categoryManager.updateCategoryIcon(categoryName, currentCategoryName, isExpense)
+                                        // Also save the icon for the new name
+                                        categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
+                                    } else {
+                                        // For existing category without name change, just save the icon
+                                        categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
+                                    }
+                                } ?: Log.e("EditCategoryScreen", "No icon selected!")
+                                
+                                if (isNewCategory) {
+                                    // Add new category
+                                    if (categoryType == CategoryType.EXPENSE) {
+                                        if (!categoryManager.hasExpenseCategory(currentCategoryName)) {
+                                            categoryManager.addExpenseCategoryBoth(currentCategoryName)
+                                        } else {
+                                            snackbarHostState.showSnackbar("Category already exists")
+                                            return@launch
+                                        }
+                                    } else {
+                                        if (!categoryManager.hasIncomeCategory(currentCategoryName)) {
+                                            categoryManager.addIncomeCategoryBoth(currentCategoryName)
+                                        } else {
+                                            snackbarHostState.showSnackbar("Category already exists")
+                                            return@launch
+                                        }
+                                    }
+                                } else {
+                                    // Update existing category
+                                    if (categoryType == CategoryType.EXPENSE) {
+                                        if (!categoryManager.hasExpenseCategory(currentCategoryName) || currentCategoryName == categoryName) {
+                                            categoryManager.updateExpenseCategoryBoth(categoryName, currentCategoryName)
+                                        } else {
+                                            snackbarHostState.showSnackbar("Category already exists")
+                                            return@launch
+                                        }
+                                    } else {
+                                        if (!categoryManager.hasIncomeCategory(currentCategoryName) || currentCategoryName == categoryName) {
+                                            categoryManager.updateIncomeCategoryBoth(categoryName, currentCategoryName)
+                                        } else {
+                                            snackbarHostState.showSnackbar("Category already exists")
+                                            return@launch
+                                        }
+                                    }
+                                }
+                                
+                                // Navigate back after saving
+                                navController.popBackStack()
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("Error: ${e.message}")
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = "Save")
+                }
+                
+                // Delete button - only show for existing categories
+                if (!isNewCategory) {
+                    Button(
+                        onClick = { showDeleteDialog = true },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(text = "Delete")
+                    }
+                }
             }
         }
     }
