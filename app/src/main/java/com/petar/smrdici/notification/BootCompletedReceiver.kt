@@ -50,16 +50,10 @@ class BootCompletedReceiver : BroadcastReceiver() {
                     // Reschedule notifications for each future event
                     futureEvents.forEach { event ->
                         if (event.id != null) {
-                            NotificationHelper.scheduleNotificationsForEvent(context, event)
+                            val notificationHelper = NotificationHelper.getInstance(context)
+                            notificationHelper.scheduleNotificationsForEvent(event)
                             Log.d(TAG, "Rescheduled notifications for event: ${event.title}")
                         }
-                    }
-                    
-                    // Also restore daily weather notification if enabled
-                    val notificationManager = SmrdiciApplication.getNotificationManager()
-                    if (notificationManager.weatherAwareEnabled) {
-                        DailyWeatherScheduler.scheduleDailyWeatherNotification(context)
-                        Log.d(TAG, "Restored daily weather notification")
                     }
                     
                     Log.d(TAG, "Completed rescheduling notifications after boot")
