@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.theme
 
+import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -9,8 +10,12 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 enum class ThemeMode {
     LIGHT,
@@ -59,6 +64,30 @@ fun SmrdiciTheme(
         }
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
+    }
+
+    // Set system bars colors
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            
+            // Update the status bar color
+            window.statusBarColor = colorScheme.primary.toArgb()
+            
+            // Update the navigation bar color to match the theme background
+            window.navigationBarColor = if (darkTheme) {
+                colorScheme.surfaceVariant.toArgb()
+            } else {
+                colorScheme.background.toArgb()
+            }
+            
+            // Set the appearance of the system bars
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
+        }
     }
 
     // Искључујемо инспекцијски мод

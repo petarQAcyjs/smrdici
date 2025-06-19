@@ -79,23 +79,19 @@ class DailyWeatherWorker(
                 
                 // Create detailed notification content
                 val notificationContent = buildString {
-                    append("📊 Тренутни услови:\n")
-                    append("🌡️ Температура: ${weatherInfo.temperature}°C\n")
-                    append("💨 Ветар: ${weatherInfo.windSpeed} km/h\n")
-                    append("💧 Влажност: ${weatherInfo.humidity}%\n")
-                    append("☁️ Стање: $translatedDescription\n\n")
+                    append("🌡️ ${weatherInfo.temperature}°C | 💨 ${weatherInfo.windSpeed} km/h | 💧 ${weatherInfo.humidity}% | ☁️ $translatedDescription\n\n")
                     append(weatherAdvice)
                     
                     // Add today's events if any
                     val todayEvents = getTodayEvents()
                     if (todayEvents.isNotEmpty()) {
-                        append("\n📅 Данашњи догађаји:\n")
+                        append("\n\n📅 Данашњи догађаји:")
                         todayEvents.forEach { event ->
                             val time = formatEventTime(event)
-                            append("• $time - ${event.title}\n")
+                            append("\n• $time - ${event.title}")
                         }
                     } else {
-                        append("\n📅 Данас нема заказаних догађаја")
+                        append("\n\n📅 Данас нема заказаних догађаја")
                     }
                 }
                 
@@ -112,14 +108,14 @@ class DailyWeatherWorker(
                 val todayEvents = getTodayEvents()
                 val eventsContent = if (todayEvents.isNotEmpty()) {
                     buildString {
-                        append("\n📅 Данашњи догађаји:\n")
+                        append("\n\n📅 Данашњи догађаји:")
                         todayEvents.forEach { event ->
                             val time = formatEventTime(event)
-                            append("• $time - ${event.title}\n")
+                            append("\n• $time - ${event.title}")
                         }
                     }
                 } else {
-                    "\n📅 Данас нема заказаних догађаја"
+                    "\n\n📅 Данас нема заказаних догађаја"
                 }
                 
                 notificationService.showDailyWeatherNotification(
@@ -146,14 +142,14 @@ class DailyWeatherWorker(
             val todayEvents = getTodayEvents()
             val eventsContent = if (todayEvents.isNotEmpty()) {
                 buildString {
-                    append("\n📅 Данашњи догађаји:\n")
+                    append("\n\n📅 Данашњи догађаји:")
                     todayEvents.forEach { event ->
                         val time = formatEventTime(event)
-                        append("• $time - ${event.title}\n")
+                        append("\n• $time - ${event.title}")
                     }
                 }
             } else {
-                "\n📅 Данас нема заказаних догађаја"
+                "\n\n📅 Данас нема заказаних догађаја"
             }
             
             notificationService.showDailyWeatherNotification(

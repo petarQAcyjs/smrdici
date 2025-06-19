@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.screens.settings
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,32 +20,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Celebration
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Fastfood
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LocalAtm
-import androidx.compose.material.icons.filled.LocalCafe
-import androidx.compose.material.icons.filled.LocalGroceryStore
-import androidx.compose.material.icons.filled.LocalHospital
-import androidx.compose.material.icons.filled.MoneyOff
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.Pets
-import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.SmokingRooms
-import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -55,10 +34,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,7 +51,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.petar.smrdici.data.model.CategoryIcons
 import com.petar.smrdici.data.model.CategoryManager
+import com.petar.smrdici.ui.auth.AuthState
+import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.ui.components.AppHeader
 import kotlinx.coroutines.launch
 
 enum class CategoryType {
@@ -85,7 +67,8 @@ enum class CategoryType {
 fun EditCategoryScreen(
     navController: NavController,
     categoryName: String,
-    categoryType: CategoryType
+    categoryType: CategoryType,
+    authViewModel: AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val context = LocalContext.current
     val categoryManager = remember { CategoryManager.getInstance(context) }
@@ -97,6 +80,9 @@ fun EditCategoryScreen(
     var selectedIcon by remember { mutableStateOf<ImageVector?>(null) }
     var selectedColor by remember { mutableStateOf<Color?>(null) }
     
+    // Search state for icons
+    var iconSearchQuery by remember { mutableStateOf("") }
+    
     // Initialize with existing category data if editing
     LaunchedEffect(categoryName) {
         if (!isNewCategory) {
@@ -105,31 +91,34 @@ fun EditCategoryScreen(
                 CategoryType.INCOME -> getIncomeCategoryIcon(categoryName)
             }
             
+            Log.d("EditCategoryScreen", "Initialized with icon: ${selectedIcon?.toString() ?: "null"} for category: $categoryName")
+            
             selectedColor = when (categoryType) {
                 CategoryType.EXPENSE -> getExpenseCategoryColor(categoryName)
                 CategoryType.INCOME -> getIncomeCategoryColor(categoryName)
             }
+            
+            Log.d("EditCategoryScreen", "Initialized with color: ${selectedColor?.toString() ?: "null"} for category: $categoryName")
         } else {
             // Default selections for new category
             selectedIcon = if (categoryType == CategoryType.EXPENSE) 
                 Icons.Default.ShoppingCart else Icons.Default.AttachMoney
             selectedColor = predefinedColors[0]
+            
+            Log.d("EditCategoryScreen", "New category initialized with default icon: ${selectedIcon?.toString() ?: "null"} and color: ${selectedColor?.toString() ?: "null"}")
         }
     }
     
+    val authState by authViewModel.authState.collectAsState()
+    val user = (authState as? AuthState.Authenticated)?.user
+    
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(if (isNewCategory) "Add Category" else "Edit Category") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            AppHeader(
+                title = if (isNewCategory) "Додај категорију" else "Измени категорију",
+                navController = navController,
+                showBackButton = true,
+                user = user
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -163,6 +152,31 @@ fun EditCategoryScreen(
                 modifier = Modifier.padding(start = 4.dp)
             )
             
+            // Icon search field
+            OutlinedTextField(
+                value = iconSearchQuery,
+                onValueChange = { iconSearchQuery = it },
+                label = { Text("Search Icons") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search"
+                    )
+                },
+                trailingIcon = {
+                    if (iconSearchQuery.isNotEmpty()) {
+                        IconButton(onClick = { iconSearchQuery = "" }) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear"
+                            )
+                        }
+                    }
+                }
+            )
+            
             // Icon selection section
             Text(
                 text = "Icons",
@@ -176,12 +190,28 @@ fun EditCategoryScreen(
                 modifier = Modifier.height(240.dp)
             ) {
                 val icons = if (categoryType == CategoryType.EXPENSE) {
-                    expenseIcons
+                    CategoryIcons.expenseIcons
                 } else {
-                    incomeIcons
+                    CategoryIcons.incomeIcons
                 }
                 
-                items(icons) { icon ->
+                // Filter icons based on search query
+                val filteredIcons = if (iconSearchQuery.isEmpty()) {
+                    icons
+                } else {
+                    // Filter icons based on their name representation
+                    icons.filter { icon ->
+                        // Extract icon name from the icon's toString() representation
+                        val iconName = icon.toString()
+                            .substringAfterLast('.')
+                            .replace("_", " ")
+                            .lowercase()
+                        
+                        iconSearchQuery.lowercase() in iconName
+                    }
+                }
+                
+                items(filteredIcons) { icon ->
                     IconSelectionItem(
                         icon = icon,
                         isSelected = selectedIcon == icon,
@@ -225,6 +255,127 @@ fun EditCategoryScreen(
                     
                     scope.launch {
                         try {
+                            // Save the selected color
+                            selectedColor?.let { color ->
+                                // Convert Color to ARGB long value
+                                val alpha = (color.alpha * 255).toInt()
+                                val red = (color.red * 255).toInt()
+                                val green = (color.green * 255).toInt()
+                                val blue = (color.blue * 255).toInt()
+                                
+                                val colorValue = (alpha.toLong() shl 24) or
+                                                (red.toLong() shl 16) or
+                                                (green.toLong() shl 8) or
+                                                blue.toLong()
+                                
+                                val isExpense = categoryType == CategoryType.EXPENSE
+                                
+                                Log.d("EditCategoryScreen", "Saving color: ARGB($alpha,$red,$green,$blue) = $colorValue for category: $currentCategoryName, isExpense: $isExpense")
+                                
+                                // For new category, save with new name
+                                if (isNewCategory) {
+                                    categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
+                                } else if (currentCategoryName != categoryName) {
+                                    // For renamed category, update the color key
+                                    categoryManager.updateCategoryColor(categoryName, currentCategoryName, isExpense)
+                                    // Also save the color for the new name
+                                    categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
+                                } else {
+                                    // For existing category without name change, just save the color
+                                    categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
+                                }
+                            } ?: Log.e("EditCategoryScreen", "No color selected!")
+                            
+                            // Save the selected icon
+                            selectedIcon?.let { icon ->
+                                // Extract icon name from the icon
+                                val iconFullName = icon.toString()
+                                Log.d("EditCategoryScreen", "Icon full name: $iconFullName")
+                                
+                                // Extract the simple class name of the icon
+                                val iconName = try {
+                                    // Use reflection to get the actual field name
+                                    var foundName: String? = null
+                                    
+                                    // Try Icons.Default
+                                    val defaultFields = Icons.Default::class.java.declaredFields
+                                    for (field in defaultFields) {
+                                        field.isAccessible = true
+                                        if (field.get(Icons.Default) == icon) {
+                                            foundName = field.name
+                                            Log.d("EditCategoryScreen", "Found icon in Icons.Default: $foundName")
+                                            break
+                                        }
+                                    }
+                                    
+                                    // Try Icons.AutoMirrored.Filled if not found in Default
+                                    if (foundName == null) {
+                                        val autoMirroredFields = Icons.AutoMirrored.Filled::class.java.declaredFields
+                                        for (field in autoMirroredFields) {
+                                            field.isAccessible = true
+                                            if (field.get(Icons.AutoMirrored.Filled) == icon) {
+                                                foundName = field.name
+                                                Log.d("EditCategoryScreen", "Found icon in Icons.AutoMirrored.Filled: $foundName")
+                                                break
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Try Icons.Filled if not found yet
+                                    if (foundName == null) {
+                                        val filledFields = Icons.Filled::class.java.declaredFields
+                                        for (field in filledFields) {
+                                            field.isAccessible = true
+                                            if (field.get(Icons.Filled) == icon) {
+                                                foundName = field.name
+                                                Log.d("EditCategoryScreen", "Found icon in Icons.Filled: $foundName")
+                                                break
+                                            }
+                                        }
+                                    }
+                                    
+                                    // If still null, try fallback methods
+                                    foundName ?: run {
+                                        // Fallback to using index in our predefined lists
+                                        val isExpense = categoryType == CategoryType.EXPENSE
+                                        val icons = if (isExpense) CategoryIcons.expenseIcons else CategoryIcons.incomeIcons
+                                        
+                                        val index = icons.indexOf(icon)
+                                        if (index != -1) {
+                                            if (isExpense) {
+                                                "ExpenseIcon_$index"
+                                            } else {
+                                                "IncomeIcon_$index"
+                                            }
+                                        } else {
+                                            // Last resort - use a default icon name based on category type
+                                            if (isExpense) "ShoppingCart" else "AttachMoney"
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("EditCategoryScreen", "Error extracting icon name: ${e.message}")
+                                    // Fallback
+                                    if (categoryType == CategoryType.EXPENSE) "ShoppingCart" else "AttachMoney"
+                                }
+                                
+                                val isExpense = categoryType == CategoryType.EXPENSE
+                                
+                                Log.d("EditCategoryScreen", "Saving icon: $iconName for category: $currentCategoryName, isExpense: $isExpense (from $iconFullName)")
+                                
+                                // For new category, save with new name
+                                if (isNewCategory) {
+                                    categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
+                                } else if (currentCategoryName != categoryName) {
+                                    // For renamed category, update the icon key
+                                    categoryManager.updateCategoryIcon(categoryName, currentCategoryName, isExpense)
+                                    // Also save the icon for the new name
+                                    categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
+                                } else {
+                                    // For existing category without name change, just save the icon
+                                    categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
+                                }
+                            } ?: Log.e("EditCategoryScreen", "No icon selected!")
+                            
                             if (isNewCategory) {
                                 // Add new category
                                 if (categoryType == CategoryType.EXPENSE) {
@@ -346,38 +497,4 @@ val predefinedColors = listOf(
     Color(0xFF90A4AE), // Blue Grey
     Color(0xFFFFB74D), // Amber
     Color(0xFFAED581)  // Light Green
-)
-
-// Icons for expense categories
-val expenseIcons = listOf(
-    Icons.Default.Receipt,
-    Icons.Default.DirectionsCar,
-    Icons.Default.ShoppingCart,
-    Icons.Default.Pets,
-    Icons.Default.Home,
-    Icons.Default.LocalHospital,
-    Icons.Default.Restaurant,
-    Icons.Default.School,
-    Icons.Default.Devices,
-    Icons.Default.Fastfood,
-    Icons.Default.ChildCare,
-    Icons.Default.LocalCafe,
-    Icons.Default.SmokingRooms,
-    Icons.Default.LocalGroceryStore,
-    Icons.Default.CreditCard,
-    Icons.Default.Celebration,
-    Icons.Default.SportsEsports,
-    Icons.Default.CardGiftcard
-)
-
-// Icons for income categories
-val incomeIcons = listOf(
-    Icons.Default.AttachMoney,
-    Icons.Default.Payments,
-    Icons.Default.AccountBalance,
-    Icons.Default.MoneyOff,
-    Icons.Default.Work,
-    Icons.Default.Savings,
-    Icons.Default.LocalAtm,
-    Icons.Default.CardGiftcard
 ) 

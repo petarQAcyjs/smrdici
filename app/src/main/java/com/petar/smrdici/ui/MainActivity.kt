@@ -15,6 +15,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
 import com.petar.smrdici.SmrdiciApplication
@@ -43,6 +44,9 @@ class MainActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Configure window to handle system bars properly
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         
         // Искључујемо потенцијално упозорење за неважећи ресурс ID
         handleInvalidResourceId()

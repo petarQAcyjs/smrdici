@@ -1,6 +1,5 @@
 package com.petar.smrdici.ui.screens.settings
 
-import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,26 +20,40 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BusinessCenter
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Copyright
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Work
-import androidx.compose.material.icons.filled.MoneyOff
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.EventSeat
+import androidx.compose.material.icons.filled.FamilyRestroom
+import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.House
 import androidx.compose.material.icons.filled.LocalAtm
+import androidx.compose.material.icons.filled.MoneyOff
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -67,18 +80,47 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryManager
+import com.petar.smrdici.data.model.CategoryIcons
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 // Funkcija za generisanje boje na osnovu imena kategorije
 fun getIncomeCategoryColor(categoryName: String): Color {
+    val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
+    
+    // If context is available, check for saved color
+    if (context != null) {
+        val categoryManager = CategoryManager.getInstance(context)
+        
+        // First check if we have a saved color
+        val savedColor = categoryManager.getCategoryColor(categoryName, false)
+        Log.d("IncomeCategories", "Getting color for $categoryName: savedColor=$savedColor")
+        if (savedColor != null) {
+            try {
+                // Convert the long value to a Color
+                val alpha = (savedColor shr 24 and 0xFF).toInt()
+                val red = (savedColor shr 16 and 0xFF).toInt()
+                val green = (savedColor shr 8 and 0xFF).toInt()
+                val blue = (savedColor and 0xFF).toInt()
+                
+                val color = Color(red, green, blue, alpha)
+                Log.d("IncomeCategories", "Using saved color for $categoryName: ARGB($alpha,$red,$green,$blue)")
+                return color
+            } catch (e: Exception) {
+                Log.e("IncomeCategories", "Error converting color value: $savedColor", e)
+                // Fall through to default color
+            }
+        }
+    }
+    
+    // If no saved color, use the hash-based approach
     val colors = listOf(
         Color(0xFF4FC3F7), // Light Blue
         Color(0xFFFF8A65), // Orange
@@ -98,12 +140,48 @@ fun getIncomeCategoryColor(categoryName: String): Color {
     )
     
     // Koristimo hash kod imena kategorije za odabir boje
-    val index = Math.abs(categoryName.hashCode()) % colors.size
-    return colors[index]
+    val index = abs(categoryName.hashCode()) % colors.size
+    val defaultColor = colors[index]
+    Log.d("IncomeCategories", "Using default color for $categoryName: ${defaultColor.value}")
+    return defaultColor
 }
 
 // Funkcija za dobijanje odgovarajuće ikone za kategoriju prihoda
 fun getIncomeCategoryIcon(categoryName: String): ImageVector {
+    val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
+    
+    // If context is available, check for saved icon
+    if (context != null) {
+        val categoryManager = CategoryManager.getInstance(context)
+        
+        // First check if we have a saved icon
+        val savedIconName = categoryManager.getCategoryIcon(categoryName, false)
+        Log.d("IncomeCategories", "Getting icon for $categoryName: savedIconName=$savedIconName")
+        
+        if (savedIconName != null) {
+            // Try to find the icon by name
+            try {
+                Log.d("IncomeCategories", "Attempting to find icon with name: $savedIconName")
+                
+                // Use the shared icon finder
+                val foundIcon = CategoryIcons.findIconByName(savedIconName)
+                if (foundIcon != null) {
+                    Log.d("IncomeCategories", "Found icon for name: $savedIconName")
+                    return foundIcon
+                }
+                
+                Log.e("IncomeCategories", "Could not find icon with name: $savedIconName")
+            } catch (e: Exception) {
+                Log.e("IncomeCategories", "Error finding icon $savedIconName: ${e.message}")
+                // Fall through to default icon selection
+            }
+        }
+    }
+    
+    // If no saved icon or couldn't find it, use the default mapping
+    Log.d("IncomeCategories", "Using default icon mapping for $categoryName")
+    
+    // If no saved icon or couldn't find it, use the default mapping
     return when (categoryName.lowercase()) {
         "paycheck", "плата", "plata" -> Icons.Default.Payments
         "gift", "поклон", "poklon" -> Icons.Default.CardGiftcard
@@ -112,6 +190,24 @@ fun getIncomeCategoryIcon(categoryName: String): ImageVector {
         "salary", "зарада", "zarada" -> Icons.Default.Work
         "savings", "уштеђевина", "ušteđevina" -> Icons.Default.Savings
         "cash", "готовина", "gotovina" -> Icons.Default.LocalAtm
+        "bonus", "бонус" -> Icons.Default.EmojiEvents
+        "dividend", "дивиденда", "dividenda" -> Icons.Default.PieChart
+        "rental", "рентал" -> Icons.Default.House
+        "investment", "инвестиција", "investicija" -> Icons.AutoMirrored.Filled.TrendingUp
+        "freelance", "фриленс", "frilens" -> Icons.Default.Computer
+        "side hustle", "додатни посао", "dodatni posao" -> Icons.Default.BusinessCenter
+        "commission", "провизија", "provizija" -> Icons.Default.Handshake
+        "royalty", "ројалти", "rojalty" -> Icons.Default.Copyright
+        "pension", "пензија", "penzija" -> Icons.Default.EventSeat
+        "alimony", "алиментација", "alimentacija" -> Icons.Default.FamilyRestroom
+        "child support", "издржавање детета", "izdržavanje deteta" -> Icons.Default.ChildCare
+        "tax return", "повраћај пореза", "povraćaj poreza" -> Icons.Default.Receipt
+        "inheritance", "наследство", "nasledstvo" -> Icons.Default.AutoAwesome
+        "lottery", "лутрија", "lutrija" -> Icons.Default.Casino
+        "scholarship", "стипендија", "stipendija" -> Icons.Default.School
+        "grant", "грант" -> Icons.Default.Gavel
+        "social security", "социјална помоћ" -> Icons.Default.HealthAndSafety
+        "unemployment", "накнада за незапосленост" -> Icons.Default.PersonOff
         else -> Icons.Default.AttachMoney
     }
 }
@@ -157,7 +253,7 @@ fun IncomeCategoriesScreen(
     var selectedCategory by remember { mutableStateOf("") }
     
     val authState by authViewModel.authState.collectAsState()
-    val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
+    val user = (authState as? AuthState.Authenticated)?.user
     
     Scaffold(
         topBar = {
