@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
@@ -52,8 +51,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.data.model.CategoryIcons
+import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -299,22 +298,20 @@ fun EditCategoryScreen(
                                     var foundName: String? = null
                                     
                                     // Try Icons.Default
-                                    if (foundName == null) {
-                                        val fields = Icons.Default::class.java.declaredFields
-                                        for (field in fields) {
-                                            field.isAccessible = true
-                                            if (field.get(Icons.Default) == icon) {
-                                                foundName = field.name
-                                                Log.d("EditCategoryScreen", "Found icon in Icons.Default: $foundName")
-                                                break
-                                            }
+                                    val defaultFields = Icons.Default::class.java.declaredFields
+                                    for (field in defaultFields) {
+                                        field.isAccessible = true
+                                        if (field.get(Icons.Default) == icon) {
+                                            foundName = field.name
+                                            Log.d("EditCategoryScreen", "Found icon in Icons.Default: $foundName")
+                                            break
                                         }
                                     }
                                     
-                                    // Try Icons.AutoMirrored.Filled
+                                    // Try Icons.AutoMirrored.Filled if not found in Default
                                     if (foundName == null) {
-                                        val fields = Icons.AutoMirrored.Filled::class.java.declaredFields
-                                        for (field in fields) {
+                                        val autoMirroredFields = Icons.AutoMirrored.Filled::class.java.declaredFields
+                                        for (field in autoMirroredFields) {
                                             field.isAccessible = true
                                             if (field.get(Icons.AutoMirrored.Filled) == icon) {
                                                 foundName = field.name
@@ -324,10 +321,10 @@ fun EditCategoryScreen(
                                         }
                                     }
                                     
-                                    // Try Icons.Filled
+                                    // Try Icons.Filled if not found yet
                                     if (foundName == null) {
-                                        val fields = Icons.Filled::class.java.declaredFields
-                                        for (field in fields) {
+                                        val filledFields = Icons.Filled::class.java.declaredFields
+                                        for (field in filledFields) {
                                             field.isAccessible = true
                                             if (field.get(Icons.Filled) == icon) {
                                                 foundName = field.name
@@ -337,6 +334,7 @@ fun EditCategoryScreen(
                                         }
                                     }
                                     
+                                    // If still null, try fallback methods
                                     foundName ?: run {
                                         // Fallback to using index in our predefined lists
                                         val isExpense = categoryType == CategoryType.EXPENSE
