@@ -11,11 +11,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
@@ -56,11 +60,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.petar.smrdici.ui.screens.finance.CategorySummaryCard
+import com.petar.smrdici.ui.screens.finance.CategoryDetailsDialog
+import com.petar.smrdici.data.model.CategoryIcons
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -358,6 +369,39 @@ fun FinanceScreen(
                         }
                     }
                 }
+                
+                // Category Summary Cards
+                if (state.categorySummaries.isNotEmpty()) {
+                    Text(
+                        text = "Категорије",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.categorySummaries.take(5)) { category ->
+                            // Find the icon for this category
+                            val icon = CategoryIcons.findIconByName(category.iconName)
+                            
+                            if (icon != null) {
+                                CategorySummaryCard(
+                                    icon = icon,
+                                    backgroundColor = category.color,
+                                    categoryName = category.categoryName,
+                                    percentage = "${String.format("%.1f", category.percentage)}%",
+                                    amount = numberFormat.format(category.amount),
+                                    onClick = { viewModel.selectCategory(category) },
+                                    modifier = Modifier.width(280.dp)
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 // Account Selection Dialog
                 if (showAccountSelector) {
@@ -425,6 +469,23 @@ fun FinanceScreen(
                     )
                 }
 
+                // Category Details Dialog
+                state.selectedCategory?.let { category ->
+                    val icon = CategoryIcons.findIconByName(category.iconName)
+                    if (icon != null) {
+                        CategoryDetailsDialog(
+                            categoryName = category.categoryName,
+                            icon = icon,
+                            backgroundColor = category.color,
+                            transactions = state.categoryTransactions,
+                            totalAmount = category.amount,
+                            percentage = category.percentage,
+                            numberFormat = numberFormat,
+                            onDismiss = { viewModel.clearSelectedCategory() }
+                        )
+                    }
+                }
+
                 // Transactions List
                 if (state.isLoading) {
                     LogUtils.d("FinanceScreen", "Loading transactions...", "ui")
@@ -449,11 +510,127 @@ fun FinanceScreen(
                     }
                 } else {
                     LogUtils.d("FinanceScreen", "Displaying ${state.transactions.size} transactions from unified collection", "ui")
+                    
+                    // Group transactions by category
+                    val transactionsByCategory = remember(state.transactions) {
+                        state.transactions.groupBy { transaction ->
+                            when (transaction) {
+                                is IncomeTransaction -> transaction.income.category ?: "Uncategorized"
+                                is ExpenseTransaction -> transaction.expense.category ?: "Uncategorized"
+                            }
+                        }
+                    }
+                    
+                    // Calculate total amount
+                    val totalAmount = remember(state.transactions) {
+                        state.transactions.sumOf { it.amount }
+                    }
+                    
+                    // Create category cards
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        // Header
+                        item {
+                            Text(
+                                text = "Категорије трансакција",
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+                        
+                        // Category grid - 2 columns
+                        val categories = transactionsByCategory.keys.toList()
+                        val itemsPerRow = 2
+                        
+                        val rows = categories.chunked(itemsPerRow)
+                        items(rows.size) { rowIndex ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                val rowItems = rows[rowIndex]
+                                rowItems.forEach { category ->
+                                    val transactions = transactionsByCategory[category] ?: emptyList()
+                                    val categoryAmount = transactions.sumOf { it.amount }
+                                    val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+                                    
+                                    // Find icon for this category
+                                    val isExpense = transactions.firstOrNull() is ExpenseTransaction
+                                    // Use a default icon based on transaction type
+                                    val iconName = when {
+                                        isExpense -> "ShoppingCart" // Default expense icon
+                                        else -> "AttachMoney" // Default income icon
+                                    }
+                                    
+                                    val icon = CategoryIcons.findIconByName(iconName)
+                                    
+                                    // Use a color based on category hash code for consistency
+                                    val colorIndex = Math.abs(category.hashCode() % 13) // Use the same color logic as in ViewModel
+                                    val color = when (colorIndex) {
+                                        0 -> Color(0xFFFF5252)  // Red
+                                        1 -> Color(0xFFFF9800)  // Orange
+                                        2 -> Color(0xFFFFEB3B)  // Yellow
+                                        3 -> Color(0xFF4CAF50)  // Green
+                                        4 -> Color(0xFF2196F3)  // Blue
+                                        5 -> Color(0xFF673AB7)  // Purple
+                                        6 -> Color(0xFFE91E63)  // Pink
+                                        7 -> Color(0xFF009688)  // Teal
+                                        8 -> Color(0xFF795548)  // Brown
+                                        9 -> Color(0xFF607D8B)  // Blue Grey
+                                        10 -> Color(0xFFFFA000) // Amber
+                                        11 -> Color(0xFF00BCD4) // Cyan
+                                        else -> Color(0xFF3F51B5) // Indigo
+                                    }
+                                    
+                                    if (icon != null) {
+                                        CategoryCard(
+                                            icon = icon,
+                                            backgroundColor = color,
+                                            categoryName = category,
+                                            percentage = String.format("%.1f%%", percentage),
+                                            amount = numberFormat.format(categoryAmount),
+                                            count = transactions.size,
+                                            onClick = {
+                                                // Create a category summary object and select it
+                                                val categorySummary = CategorySummary(
+                                                    categoryName = category,
+                                                    iconName = iconName,
+                                                    color = color,
+                                                    amount = categoryAmount,
+                                                    percentage = percentage
+                                                )
+                                                viewModel.selectCategory(categorySummary)
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    } else {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                                
+                                // Add spacers for incomplete rows
+                                repeat(itemsPerRow - rowItems.size) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                        
+                        // Individual transactions header
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            HorizontalDivider()
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Све трансакције",
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+                        
+                        // Individual transactions
                         items(state.transactions) { transaction ->
                             TransactionItem(
                                 transaction = transaction,
@@ -780,4 +957,79 @@ fun TransactionItem(
             }
         }
     }
-} 
+}
+
+
+@Composable
+fun CategoryCard(
+    icon: ImageVector,
+    backgroundColor: Color,
+    categoryName: String,
+    percentage: String,
+    amount: String,
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .heightIn(min = 160.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(backgroundColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = categoryName,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Text(
+                text = percentage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            Text(
+                text = amount,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            
+            Text(
+                text = "$count трансакција",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}

@@ -69,6 +69,7 @@ google-services.*.json
 secrets.properties
 apikey.properties
 keystore.properties
+debug.keystore
 
 # OS-specific files
 .DS_Store
@@ -86,6 +87,14 @@ Thumbs.db
 firebase.json
 .firebaserc
 firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+firebase-export-*
+firestore.rules
+firestore.indexes.json
+database.rules.json
+storage.rules
+firebase-adminsdk-*.json
 
 # Crashlytics
 crashlytics.properties
@@ -122,3 +131,20 @@ cursor.rules
 # Gradle wrapper
 !gradle/wrapper/gradle-wrapper.jar
 !gradle/wrapper/gradle-wrapper.properties
+
+# Private keys and certificates
+*.der
+*.csr
+*.crt
+*.cert
+
+# SSH keys
+id_rsa
+id_dsa
+*.pub
+smrdici
+smrdici.pub
+
+# User-specific files
+*.swp
+*.swo
