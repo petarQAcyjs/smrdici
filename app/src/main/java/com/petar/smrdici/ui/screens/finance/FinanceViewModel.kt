@@ -1,10 +1,13 @@
 package com.petar.smrdici.ui.screens.finance
 
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.petar.smrdici.data.model.Account
+import com.petar.smrdici.data.model.CategoryIcons
 import com.petar.smrdici.data.model.Expense
+import com.petar.smrdici.data.model.ExpenseCategory
 import com.petar.smrdici.data.model.Income
 import com.petar.smrdici.data.model.Transaction
 import com.petar.smrdici.data.repository.ExpenseRepository
@@ -31,6 +34,8 @@ import org.threeten.bp.YearMonth
 import org.threeten.bp.format.DateTimeFormatter
 import org.threeten.bp.temporal.ChronoUnit
 import java.util.*
+import kotlin.random.Random
+import kotlin.math.abs
 
 enum class PeriodType {
     YEAR, MONTH, WEEK, DAY, CUSTOM
@@ -127,7 +132,10 @@ data class FinanceScreenState(
     val accountBalances: Map<String, AccountBalance> = emptyMap(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val accounts: List<Account> = emptyList()
+    val accounts: List<Account> = emptyList(),
+    val categorySummaries: List<CategorySummary> = emptyList(),
+    val selectedCategory: CategorySummary? = null,
+    val categoryTransactions: List<UITransaction> = emptyList()
 )
 
 data class AccountBalance(
@@ -138,12 +146,77 @@ data class AccountBalance(
     val currentBalance: Double
 )
 
+data class CategorySummary(
+    val categoryName: String,
+    val iconName: String,
+    val color: Color,
+    val amount: Double,
+    val percentage: Double
+)
+
 class FinanceViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
     private val _state = MutableStateFlow(FinanceScreenState())
     val state: StateFlow<FinanceScreenState> = _state.asStateFlow()
 
     private val transactionRepository: TransactionRepository by lazy { TransactionRepository.getInstance() }
     private val accountRepository: AccountRepository by lazy { AccountRepository.getInstance() }
+
+    // Predefined colors for category cards
+    private val categoryColors = listOf(
+        Color(0xFFFF5252),  // Red
+        Color(0xFFFF9800),  // Orange
+        Color(0xFFFFEB3B),  // Yellow
+        Color(0xFF4CAF50),  // Green
+        Color(0xFF2196F3),  // Blue
+        Color(0xFF673AB7),  // Purple
+        Color(0xFFE91E63),  // Pink
+        Color(0xFF009688),  // Teal
+        Color(0xFF795548),  // Brown
+        Color(0xFF607D8B),  // Blue Grey
+        Color(0xFFFFA000),  // Amber
+        Color(0xFF00BCD4),  // Cyan
+        Color(0xFF3F51B5)   // Indigo
+    )
+
+    // Category icon mapping
+    private val categoryIconMapping = mapOf(
+        "GROCERIES" to "LocalGroceryStore",
+        "UTILITIES" to "Receipt",
+        "RENT" to "Home",
+        "TRANSPORTATION" to "DirectionsCar",
+        "ENTERTAINMENT" to "SportsEsports",
+        "HEALTH" to "LocalHospital",
+        "EDUCATION" to "School",
+        "CLOTHING" to "Checkroom",
+        "TRAVEL" to "Flight",
+        "FOOD" to "Restaurant",
+        "COFFEE" to "LocalCafe",
+        "ALCOHOL" to "LocalBar",
+        "CIGARETTES" to "SmokingRooms",
+        "GIFTS" to "CardGiftcard",
+        "SUBSCRIPTIONS" to "Subscriptions",
+        "ELECTRONICS" to "Devices",
+        "HOME" to "Home",
+        "BEAUTY" to "Face",
+        "PETS" to "Pets",
+        "SPORTS" to "FitnessCenter",
+        "INVESTMENTS" to "TrendingUp",
+        "DEBT" to "CreditCard",
+        "INSURANCE" to "Security",
+        "TAXES" to "Receipt",
+        "CHARITY" to "Favorite",
+        "BUSINESS" to "BusinessCenter",
+        "CHILDREN" to "ChildCare",
+        "PERSONAL_CARE" to "Face",
+        "SHOPPING" to "ShoppingCart",
+        "MAINTENANCE" to "Handyman",
+        "SERVICES" to "Receipt",
+        "SAVINGS" to "Savings",
+        "LOAN" to "CreditCard",
+        "RAMPA" to "DirectionsCar",
+        "PARKING" to "DirectionsCar",
+        "OTHER" to "Receipt"
+    )
 
     init {
         initializeState()
@@ -303,6 +376,31 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         refreshData()
     }
 
+    // Category selection
+    fun selectCategory(category: CategorySummary) {
+        LogUtils.i("FinanceViewModel", "Selected category: ${category.categoryName}", category = "finance")
+        
+        // Filter transactions for this category
+        val categoryTransactions = _state.value.transactions.filter { transaction ->
+            when (transaction) {
+                is ExpenseTransaction -> transaction.expense.category == category.categoryName
+                is IncomeTransaction -> transaction.income.category == category.categoryName
+            }
+        }
+        
+        _state.value = _state.value.copy(
+            selectedCategory = category,
+            categoryTransactions = categoryTransactions
+        )
+    }
+    
+    fun clearSelectedCategory() {
+        _state.value = _state.value.copy(
+            selectedCategory = null,
+            categoryTransactions = emptyList()
+        )
+    }
+
     // Data refresh
     private fun refreshData() {
         viewModelScope.launch {
@@ -424,12 +522,16 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                         currentBalance = currentBalance
                     )
                 }
+                
+                // Calculate category summaries
+                val categorySummaries = calculateCategorySummaries(transactions)
 
                 LogUtils.i("FinanceViewModel", 
                     "Updated state:" +
                     "\nTotal transactions: ${transactions.size}" +
                     "\nTotal amount in EUR: $totalEurAmount" +
-                    "\nAccounts with transactions: ${accountBalances.size}", 
+                    "\nAccounts with transactions: ${accountBalances.size}" +
+                    "\nCategory summaries: ${categorySummaries.size}", 
                     category = "finance")
 
                 _state.value = _state.value.copy(
@@ -442,6 +544,7 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                     },
                     totalAmountInEur = totalEurAmount,
                     accountBalances = accountBalances,
+                    categorySummaries = categorySummaries,
                     isLoading = false
                 )
             } catch (e: Exception) {
@@ -452,6 +555,55 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                 )
             }
         }
+    }
+    
+    private fun calculateCategorySummaries(transactions: List<UITransaction>): List<CategorySummary> {
+        if (transactions.isEmpty()) return emptyList()
+        
+        // Group transactions by category
+        val categoryGroups = transactions.groupBy { transaction ->
+            when (transaction) {
+                is ExpenseTransaction -> transaction.expense.category
+                is IncomeTransaction -> transaction.income.category
+            }
+        }
+        
+        // Calculate total amount for all transactions
+        val totalAmount = transactions.sumOf { it.amount }
+        
+        // Create category summaries
+        val summaries = categoryGroups.map { (category, categoryTransactions) ->
+            val categoryAmount = categoryTransactions.sumOf { it.amount }
+            val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+            
+            // Get a consistent color for this category
+            val colorIndex = abs(category.hashCode()) % categoryColors.size
+            val color = categoryColors[colorIndex]
+            
+            // Get icon name for this category
+            val iconName = categoryIconMapping[category] ?: "Receipt"
+            
+            // Get display name for the category
+            val displayName = try {
+                if (_state.value.selectedTransactionType is TransactionType.Expense) {
+                    ExpenseCategory.valueOf(category).getDisplayName()
+                } else {
+                    category // For income categories
+                }
+            } catch (e: Exception) {
+                category // Fallback to raw category name
+            }
+            
+            CategorySummary(
+                categoryName = displayName,
+                iconName = iconName,
+                color = color,
+                amount = categoryAmount,
+                percentage = percentage
+            )
+        }.sortedByDescending { it.amount }
+        
+        return summaries
     }
 
     // Delete functions
