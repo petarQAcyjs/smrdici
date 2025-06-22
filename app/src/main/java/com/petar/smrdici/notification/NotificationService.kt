@@ -465,7 +465,7 @@ class NotificationService(private val context: Context) {
      */
     fun showDailyMorningNotification(title: String, message: String) {
         // Log detailed information about this notification
-        val currentTime = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        val currentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         val source = if (message.contains("[Source:")) {
             message.substringAfter("[Source:").substringBefore("]").trim()
         } else if (message.contains("[Test:")) {

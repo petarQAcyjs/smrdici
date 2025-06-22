@@ -141,7 +141,8 @@ fun FinanceScreen(
                     title = "Финансије",
                     user = user,
                     navController = navController,
-                    showBackButton = true
+                    showBackButton = true,
+                    showProfileIcon = false
                 )
             },
             floatingActionButton = {
