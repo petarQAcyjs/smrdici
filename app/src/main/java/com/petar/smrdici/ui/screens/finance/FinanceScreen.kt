@@ -69,8 +69,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.petar.smrdici.ui.screens.finance.CategorySummaryCard
-import com.petar.smrdici.ui.screens.finance.CategoryDetailsDialog
 import com.petar.smrdici.data.model.CategoryIcons
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
