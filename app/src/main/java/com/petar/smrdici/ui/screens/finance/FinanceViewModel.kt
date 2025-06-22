@@ -227,8 +227,25 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
     // Add this method to force refresh data when returning to the screen
     fun refreshOnResume() {
         LogUtils.i("FinanceViewModel", "Refreshing data on resume", category = "finance")
-        loadAccounts()
-        refreshData()
+        
+        // Clear any selected category
+        _state.value = _state.value.copy(
+            selectedCategory = null,
+            categoryTransactions = emptyList()
+        )
+        
+        // Reload accounts and transactions
+        viewModelScope.launch {
+            try {
+                // Force reload from remote
+                syncWithRemote()
+            } catch (e: Exception) {
+                LogUtils.e("FinanceViewModel", "Error during refresh on resume", e, category = "finance")
+                // If remote sync fails, still try to refresh local data
+                loadAccounts()
+                refreshData()
+            }
+        }
     }
 
     private fun initializeState() {

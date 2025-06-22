@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryIcons
+import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -82,6 +83,26 @@ import org.threeten.bp.format.DateTimeFormatter
 import org.threeten.bp.temporal.ChronoUnit
 import java.text.NumberFormat
 import java.util.Locale
+import androidx.compose.ui.platform.LocalContext
+import kotlin.math.abs
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.runtime.DisposableEffect
+
+// Define predefined colors for categories
+private val predefinedColors = listOf(
+    Color(0xFFE57373), // Red
+    Color(0xFFFFB74D), // Orange
+    Color(0xFFFFF176), // Yellow
+    Color(0xFFAED581), // Light Green
+    Color(0xFF4DD0E1), // Cyan
+    Color(0xFF9575CD), // Purple
+    Color(0xFFF06292), // Pink
+    Color(0xFF7986CB), // Indigo
+    Color(0xFF4DB6AC), // Teal
+    Color(0xFFFF8A65)  // Deep Orange
+)
 
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -112,6 +133,21 @@ fun FinanceScreen(
     LaunchedEffect(Unit) {
         LogUtils.i("FinanceScreen", "Screen entered - using unified transactions collection", "ui")
         viewModel.refreshOnResume()
+    }
+
+    // Add a navigation observer to refresh data when returning from other screens
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                LogUtils.d("FinanceScreen", "Resumed - refreshing data", "ui")
+                viewModel.refreshOnResume()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     val numberFormat = remember { 
@@ -371,12 +407,6 @@ fun FinanceScreen(
                 
                 // Category Summary Cards
                 if (state.categorySummaries.isNotEmpty()) {
-                    Text(
-                        text = "Категорије",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                    
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -566,22 +596,17 @@ fun FinanceScreen(
                                     
                                     val icon = CategoryIcons.findIconByName(iconName)
                                     
-                                    // Use a color based on category hash code for consistency
-                                    val colorIndex = Math.abs(category.hashCode() % 13) // Use the same color logic as in ViewModel
-                                    val color = when (colorIndex) {
-                                        0 -> Color(0xFFFF5252)  // Red
-                                        1 -> Color(0xFFFF9800)  // Orange
-                                        2 -> Color(0xFFFFEB3B)  // Yellow
-                                        3 -> Color(0xFF4CAF50)  // Green
-                                        4 -> Color(0xFF2196F3)  // Blue
-                                        5 -> Color(0xFF673AB7)  // Purple
-                                        6 -> Color(0xFFE91E63)  // Pink
-                                        7 -> Color(0xFF009688)  // Teal
-                                        8 -> Color(0xFF795548)  // Brown
-                                        9 -> Color(0xFF607D8B)  // Blue Grey
-                                        10 -> Color(0xFFFFA000) // Amber
-                                        11 -> Color(0xFF00BCD4) // Cyan
-                                        else -> Color(0xFF3F51B5) // Indigo
+                                    // Get the saved color from CategoryManager if available
+                                    val categoryManager = CategoryManager.getInstance(LocalContext.current)
+                                    val savedColorValue = categoryManager.getCategoryColor(category, isExpense)
+                                    
+                                    // Use the saved color or fall back to a color based on category hash code
+                                    val color = if (savedColorValue != null) {
+                                        Color(savedColorValue)
+                                    } else {
+                                        // Use a color based on category hash code for consistency
+                                        val colorIndex = abs(category.hashCode() % predefinedColors.size)
+                                        predefinedColors[colorIndex]
                                     }
                                     
                                     if (icon != null) {
@@ -885,6 +910,28 @@ fun TransactionItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
+    val categoryManager = CategoryManager.getInstance(context)
+    
+    // Get category name and whether it's an expense
+    val categoryName = when (transaction) {
+        is IncomeTransaction -> transaction.income.category ?: "Uncategorized"
+        is ExpenseTransaction -> transaction.expense.category ?: "Uncategorized"
+    }
+    val isExpense = transaction is ExpenseTransaction
+    
+    // Get the saved color from CategoryManager if available
+    val savedColorValue = categoryManager.getCategoryColor(categoryName, isExpense)
+    val categoryColor = if (savedColorValue != null) {
+        Color(savedColorValue)
+    } else {
+        // Use default colors if no custom color is set
+        when (isExpense) {
+            true -> MaterialTheme.colorScheme.error
+            false -> MaterialTheme.colorScheme.primary
+        }
+    }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -910,6 +957,13 @@ fun TransactionItem(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (transaction.income.category != null) {
+                            Text(
+                                text = transaction.income.category,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = categoryColor
+                            )
+                        }
                     }
                     is ExpenseTransaction -> {
                         Text(
@@ -921,6 +975,13 @@ fun TransactionItem(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (transaction.expense.category != null) {
+                            Text(
+                                text = transaction.expense.category,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = categoryColor
+                            )
+                        }
                     }
                 }
             }
@@ -932,10 +993,7 @@ fun TransactionItem(
                 Text(
                     text = numberFormat.format(transaction.amount),
                     style = MaterialTheme.typography.titleMedium,
-                    color = when (transaction) {
-                        is IncomeTransaction -> MaterialTheme.colorScheme.primary
-                        is ExpenseTransaction -> MaterialTheme.colorScheme.error
-                    }
+                    color = categoryColor
                 )
                 
                 IconButton(onClick = onEdit) {
@@ -957,7 +1015,6 @@ fun TransactionItem(
         }
     }
 }
-
 
 @Composable
 fun CategoryCard(

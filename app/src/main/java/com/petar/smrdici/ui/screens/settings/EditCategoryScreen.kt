@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -60,6 +61,7 @@ import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.utils.LogUtils
 import kotlinx.coroutines.launch
 
 enum class CategoryType {
@@ -98,21 +100,21 @@ fun EditCategoryScreen(
                 CategoryType.INCOME -> getIncomeCategoryIcon(categoryName)
             }
             
-            Log.d("EditCategoryScreen", "Initialized with icon: ${selectedIcon?.toString() ?: "null"} for category: $categoryName")
+            LogUtils.d("EditCategoryScreen", "Initialized with icon: ${selectedIcon?.toString() ?: "null"} for category: $categoryName")
             
             selectedColor = when (categoryType) {
                 CategoryType.EXPENSE -> getExpenseCategoryColor(categoryName)
                 CategoryType.INCOME -> getIncomeCategoryColor(categoryName)
             }
             
-            Log.d("EditCategoryScreen", "Initialized with color: ${selectedColor?.toString() ?: "null"} for category: $categoryName")
+            LogUtils.d("EditCategoryScreen", "Initialized with color: ${selectedColor?.toString() ?: "null"} for category: $categoryName")
         } else {
             // Default selections for new category
             selectedIcon = if (categoryType == CategoryType.EXPENSE) 
                 Icons.Default.ShoppingCart else Icons.Default.AttachMoney
             selectedColor = predefinedColors[0]
             
-            Log.d("EditCategoryScreen", "New category initialized with default icon: ${selectedIcon?.toString() ?: "null"} and color: ${selectedColor?.toString() ?: "null"}")
+            LogUtils.d("EditCategoryScreen", "New category initialized with default icon: ${selectedIcon?.toString() ?: "null"} and color: ${selectedColor?.toString() ?: "null"}")
         }
     }
     
@@ -129,14 +131,17 @@ fun EditCategoryScreen(
                 TextButton(onClick = {
                     scope.launch {
                         try {
+                            LogUtils.i("EditCategoryScreen", "Deleting category: $categoryName, type: $categoryType")
                             if (categoryType == CategoryType.EXPENSE) {
                                 categoryManager.deleteExpenseCategoryBoth(categoryName)
                             } else {
                                 categoryManager.deleteIncomeCategoryBoth(categoryName)
                             }
+                            LogUtils.i("EditCategoryScreen", "Successfully deleted category: $categoryName")
                             showDeleteDialog = false
                             navController.popBackStack()
                         } catch (e: Exception) {
+                            LogUtils.e("EditCategoryScreen", "Failed to delete category: $categoryName", e)
                             snackbarHostState.showSnackbar("Error: ${e.message}")
                         }
                     }
@@ -158,7 +163,216 @@ fun EditCategoryScreen(
                 title = if (isNewCategory) "Додај категорију" else "Измени категорију",
                 navController = navController,
                 showBackButton = true,
-                user = user
+                user = user,
+                showProfileIcon = false,
+                actions = {
+                    // Add save button to the app bar
+                    IconButton(onClick = {
+                        if (currentCategoryName.isBlank()) {
+                            scope.launch {
+                                LogUtils.w("EditCategoryScreen", "Attempted to save with empty category name")
+                                snackbarHostState.showSnackbar("Category name cannot be empty")
+                            }
+                            return@IconButton
+                        }
+                        
+                        scope.launch {
+                            try {
+                                LogUtils.i("EditCategoryScreen", "Saving category: $currentCategoryName, type: $categoryType, isNew: $isNewCategory")
+                                
+                                // Save the selected color
+                                selectedColor?.let { color ->
+                                    // Convert Color to ARGB long value
+                                    val alpha = (color.alpha * 255).toInt()
+                                    val red = (color.red * 255).toInt()
+                                    val green = (color.green * 255).toInt()
+                                    val blue = (color.blue * 255).toInt()
+                                    
+                                    val colorValue = (alpha.toLong() shl 24) or
+                                                    (red.toLong() shl 16) or
+                                                    (green.toLong() shl 8) or
+                                                    blue.toLong()
+                                    
+                                    val isExpense = categoryType == CategoryType.EXPENSE
+                                    
+                                    LogUtils.d("EditCategoryScreen", "Saving color: ARGB($alpha,$red,$green,$blue) = $colorValue for category: $currentCategoryName, isExpense: $isExpense")
+                                    
+                                    // For new category, save with new name
+                                    if (isNewCategory) {
+                                        categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
+                                    } else if (currentCategoryName != categoryName) {
+                                        // For renamed category, update the color key
+                                        categoryManager.updateCategoryColor(categoryName, currentCategoryName, isExpense)
+                                        // Also save the color for the new name
+                                        categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
+                                    } else {
+                                        // For existing category without name change, just save the color
+                                        categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
+                                    }
+                                } ?: LogUtils.e("EditCategoryScreen", "No color selected!")
+                                
+                                // Save the selected icon
+                                selectedIcon?.let { icon ->
+                                    // Extract icon name from the icon
+                                    val iconFullName = icon.toString()
+                                    LogUtils.d("EditCategoryScreen", "Icon full name: $iconFullName")
+                                    
+                                    // Extract the simple class name of the icon
+                                    val iconName = try {
+                                        // Use reflection to get the actual field name
+                                        var foundName: String? = null
+                                        
+                                        // Try Icons.Default
+                                        val defaultFields = Icons.Default::class.java.declaredFields
+                                        for (field in defaultFields) {
+                                            field.isAccessible = true
+                                            if (field.get(Icons.Default) == icon) {
+                                                foundName = field.name
+                                                LogUtils.d("EditCategoryScreen", "Found icon in Icons.Default: $foundName")
+                                                break
+                                            }
+                                        }
+                                        
+                                        // Try Icons.AutoMirrored.Filled if not found in Default
+                                        if (foundName == null) {
+                                            val autoMirroredFields = Icons.AutoMirrored.Filled::class.java.declaredFields
+                                            for (field in autoMirroredFields) {
+                                                field.isAccessible = true
+                                                if (field.get(Icons.AutoMirrored.Filled) == icon) {
+                                                    foundName = field.name
+                                                    LogUtils.d("EditCategoryScreen", "Found icon in Icons.AutoMirrored.Filled: $foundName")
+                                                    break
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Try Icons.Filled if not found yet
+                                        if (foundName == null) {
+                                            val filledFields = Icons.Filled::class.java.declaredFields
+                                            for (field in filledFields) {
+                                                field.isAccessible = true
+                                                if (field.get(Icons.Filled) == icon) {
+                                                    foundName = field.name
+                                                    LogUtils.d("EditCategoryScreen", "Found icon in Icons.Filled: $foundName")
+                                                    break
+                                                }
+                                            }
+                                        }
+                                        
+                                        // If still null, try fallback methods
+                                        foundName ?: run {
+                                            // Fallback to using index in our predefined lists
+                                            val isExpense = categoryType == CategoryType.EXPENSE
+                                            val icons = if (isExpense) CategoryIcons.expenseIcons else CategoryIcons.incomeIcons
+                                            
+                                            val index = icons.indexOf(icon)
+                                            if (index != -1) {
+                                                if (isExpense) {
+                                                    "ExpenseIcon_$index"
+                                                } else {
+                                                    "IncomeIcon_$index"
+                                                }
+                                            } else {
+                                                // Last resort - use a default icon name based on category type
+                                                if (isExpense) "ShoppingCart" else "AttachMoney"
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        LogUtils.e("EditCategoryScreen", "Error extracting icon name", e)
+                                        // Fallback
+                                        if (categoryType == CategoryType.EXPENSE) "ShoppingCart" else "AttachMoney"
+                                    }
+                                    
+                                    val isExpense = categoryType == CategoryType.EXPENSE
+                                    
+                                    LogUtils.d("EditCategoryScreen", "Saving icon: $iconName for category: $currentCategoryName, isExpense: $isExpense (from $iconFullName)")
+                                    
+                                    // For new category, save with new name
+                                    if (isNewCategory) {
+                                        categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
+                                    } else if (currentCategoryName != categoryName) {
+                                        // For renamed category, update the icon key
+                                        categoryManager.updateCategoryIcon(categoryName, currentCategoryName, isExpense)
+                                        // Also save the icon for the new name
+                                        categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
+                                    } else {
+                                        // For existing category without name change, just save the icon
+                                        categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
+                                    }
+                                } ?: LogUtils.e("EditCategoryScreen", "No icon selected!")
+                                
+                                if (isNewCategory) {
+                                    // Add new category
+                                    if (categoryType == CategoryType.EXPENSE) {
+                                        if (!categoryManager.hasExpenseCategory(currentCategoryName)) {
+                                            LogUtils.i("EditCategoryScreen", "Adding new expense category: $currentCategoryName")
+                                            categoryManager.addExpenseCategoryBoth(currentCategoryName)
+                                            LogUtils.i("EditCategoryScreen", "Successfully added expense category: $currentCategoryName")
+                                            navController.popBackStack()
+                                        } else {
+                                            LogUtils.w("EditCategoryScreen", "Category already exists: $currentCategoryName")
+                                            snackbarHostState.showSnackbar("Category already exists")
+                                        }
+                                    } else {
+                                        if (!categoryManager.hasIncomeCategory(currentCategoryName)) {
+                                            LogUtils.i("EditCategoryScreen", "Adding new income category: $currentCategoryName")
+                                            categoryManager.addIncomeCategoryBoth(currentCategoryName)
+                                            LogUtils.i("EditCategoryScreen", "Successfully added income category: $currentCategoryName")
+                                            navController.popBackStack()
+                                        } else {
+                                            LogUtils.w("EditCategoryScreen", "Category already exists: $currentCategoryName")
+                                            snackbarHostState.showSnackbar("Category already exists")
+                                        }
+                                    }
+                                } else {
+                                    // Update existing category
+                                    if (categoryType == CategoryType.EXPENSE) {
+                                        if (!categoryManager.hasExpenseCategory(currentCategoryName) || currentCategoryName == categoryName) {
+                                            try {
+                                                LogUtils.i("EditCategoryScreen", "Updating expense category from $categoryName to $currentCategoryName")
+                                                categoryManager.updateExpenseCategoryBoth(categoryName, currentCategoryName)
+                                                LogUtils.i("EditCategoryScreen", "Successfully updated expense category to: $currentCategoryName")
+                                                // Navigate back after saving
+                                                navController.popBackStack()
+                                            } catch (e: Exception) {
+                                                LogUtils.e("EditCategoryScreen", "Error updating expense category", e)
+                                                snackbarHostState.showSnackbar("Error updating category: ${e.message ?: "Unknown error"}")
+                                            }
+                                        } else {
+                                            LogUtils.w("EditCategoryScreen", "Category already exists: $currentCategoryName")
+                                            snackbarHostState.showSnackbar("Category already exists")
+                                        }
+                                    } else {
+                                        if (!categoryManager.hasIncomeCategory(currentCategoryName) || currentCategoryName == categoryName) {
+                                            try {
+                                                LogUtils.i("EditCategoryScreen", "Updating income category from $categoryName to $currentCategoryName")
+                                                categoryManager.updateIncomeCategoryBoth(categoryName, currentCategoryName)
+                                                LogUtils.i("EditCategoryScreen", "Successfully updated income category to: $currentCategoryName")
+                                                // Navigate back after saving
+                                                navController.popBackStack()
+                                            } catch (e: Exception) {
+                                                LogUtils.e("EditCategoryScreen", "Error updating income category", e)
+                                                snackbarHostState.showSnackbar("Error updating category: ${e.message ?: "Unknown error"}")
+                                            }
+                                        } else {
+                                            LogUtils.w("EditCategoryScreen", "Category already exists: $currentCategoryName")
+                                            snackbarHostState.showSnackbar("Category already exists")
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                LogUtils.e("EditCategoryScreen", "Error saving category", e)
+                                snackbarHostState.showSnackbar("Error: ${e.message}")
+                            }
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Сачувај",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -283,201 +497,14 @@ fun EditCategoryScreen(
             
             Spacer(modifier = Modifier.weight(1f))
             
-            // Button row for Save and Delete
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Save button
+            // Delete button - only show for existing categories
+            if (!isNewCategory) {
                 Button(
-                    onClick = {
-                        if (currentCategoryName.isBlank()) {
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Category name cannot be empty")
-                            }
-                            return@Button
-                        }
-                        
-                        scope.launch {
-                            try {
-                                // Save the selected color
-                                selectedColor?.let { color ->
-                                    // Convert Color to ARGB long value
-                                    val alpha = (color.alpha * 255).toInt()
-                                    val red = (color.red * 255).toInt()
-                                    val green = (color.green * 255).toInt()
-                                    val blue = (color.blue * 255).toInt()
-                                    
-                                    val colorValue = (alpha.toLong() shl 24) or
-                                                    (red.toLong() shl 16) or
-                                                    (green.toLong() shl 8) or
-                                                    blue.toLong()
-                                    
-                                    val isExpense = categoryType == CategoryType.EXPENSE
-                                    
-                                    Log.d("EditCategoryScreen", "Saving color: ARGB($alpha,$red,$green,$blue) = $colorValue for category: $currentCategoryName, isExpense: $isExpense")
-                                    
-                                    // For new category, save with new name
-                                    if (isNewCategory) {
-                                        categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
-                                    } else if (currentCategoryName != categoryName) {
-                                        // For renamed category, update the color key
-                                        categoryManager.updateCategoryColor(categoryName, currentCategoryName, isExpense)
-                                        // Also save the color for the new name
-                                        categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
-                                    } else {
-                                        // For existing category without name change, just save the color
-                                        categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
-                                    }
-                                } ?: Log.e("EditCategoryScreen", "No color selected!")
-                                
-                                // Save the selected icon
-                                selectedIcon?.let { icon ->
-                                    // Extract icon name from the icon
-                                    val iconFullName = icon.toString()
-                                    Log.d("EditCategoryScreen", "Icon full name: $iconFullName")
-                                    
-                                    // Extract the simple class name of the icon
-                                    val iconName = try {
-                                        // Use reflection to get the actual field name
-                                        var foundName: String? = null
-                                        
-                                        // Try Icons.Default
-                                        val defaultFields = Icons.Default::class.java.declaredFields
-                                        for (field in defaultFields) {
-                                            field.isAccessible = true
-                                            if (field.get(Icons.Default) == icon) {
-                                                foundName = field.name
-                                                Log.d("EditCategoryScreen", "Found icon in Icons.Default: $foundName")
-                                                break
-                                            }
-                                        }
-                                        
-                                        // Try Icons.AutoMirrored.Filled if not found in Default
-                                        if (foundName == null) {
-                                            val autoMirroredFields = Icons.AutoMirrored.Filled::class.java.declaredFields
-                                            for (field in autoMirroredFields) {
-                                                field.isAccessible = true
-                                                if (field.get(Icons.AutoMirrored.Filled) == icon) {
-                                                    foundName = field.name
-                                                    Log.d("EditCategoryScreen", "Found icon in Icons.AutoMirrored.Filled: $foundName")
-                                                    break
-                                                }
-                                            }
-                                        }
-                                        
-                                        // Try Icons.Filled if not found yet
-                                        if (foundName == null) {
-                                            val filledFields = Icons.Filled::class.java.declaredFields
-                                            for (field in filledFields) {
-                                                field.isAccessible = true
-                                                if (field.get(Icons.Filled) == icon) {
-                                                    foundName = field.name
-                                                    Log.d("EditCategoryScreen", "Found icon in Icons.Filled: $foundName")
-                                                    break
-                                                }
-                                            }
-                                        }
-                                        
-                                        // If still null, try fallback methods
-                                        foundName ?: run {
-                                            // Fallback to using index in our predefined lists
-                                            val isExpense = categoryType == CategoryType.EXPENSE
-                                            val icons = if (isExpense) CategoryIcons.expenseIcons else CategoryIcons.incomeIcons
-                                            
-                                            val index = icons.indexOf(icon)
-                                            if (index != -1) {
-                                                if (isExpense) {
-                                                    "ExpenseIcon_$index"
-                                                } else {
-                                                    "IncomeIcon_$index"
-                                                }
-                                            } else {
-                                                // Last resort - use a default icon name based on category type
-                                                if (isExpense) "ShoppingCart" else "AttachMoney"
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e("EditCategoryScreen", "Error extracting icon name: ${e.message}")
-                                        // Fallback
-                                        if (categoryType == CategoryType.EXPENSE) "ShoppingCart" else "AttachMoney"
-                                    }
-                                    
-                                    val isExpense = categoryType == CategoryType.EXPENSE
-                                    
-                                    Log.d("EditCategoryScreen", "Saving icon: $iconName for category: $currentCategoryName, isExpense: $isExpense (from $iconFullName)")
-                                    
-                                    // For new category, save with new name
-                                    if (isNewCategory) {
-                                        categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
-                                    } else if (currentCategoryName != categoryName) {
-                                        // For renamed category, update the icon key
-                                        categoryManager.updateCategoryIcon(categoryName, currentCategoryName, isExpense)
-                                        // Also save the icon for the new name
-                                        categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
-                                    } else {
-                                        // For existing category without name change, just save the icon
-                                        categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
-                                    }
-                                } ?: Log.e("EditCategoryScreen", "No icon selected!")
-                                
-                                if (isNewCategory) {
-                                    // Add new category
-                                    if (categoryType == CategoryType.EXPENSE) {
-                                        if (!categoryManager.hasExpenseCategory(currentCategoryName)) {
-                                            categoryManager.addExpenseCategoryBoth(currentCategoryName)
-                                        } else {
-                                            snackbarHostState.showSnackbar("Category already exists")
-                                            return@launch
-                                        }
-                                    } else {
-                                        if (!categoryManager.hasIncomeCategory(currentCategoryName)) {
-                                            categoryManager.addIncomeCategoryBoth(currentCategoryName)
-                                        } else {
-                                            snackbarHostState.showSnackbar("Category already exists")
-                                            return@launch
-                                        }
-                                    }
-                                } else {
-                                    // Update existing category
-                                    if (categoryType == CategoryType.EXPENSE) {
-                                        if (!categoryManager.hasExpenseCategory(currentCategoryName) || currentCategoryName == categoryName) {
-                                            categoryManager.updateExpenseCategoryBoth(categoryName, currentCategoryName)
-                                        } else {
-                                            snackbarHostState.showSnackbar("Category already exists")
-                                            return@launch
-                                        }
-                                    } else {
-                                        if (!categoryManager.hasIncomeCategory(currentCategoryName) || currentCategoryName == categoryName) {
-                                            categoryManager.updateIncomeCategoryBoth(categoryName, currentCategoryName)
-                                        } else {
-                                            snackbarHostState.showSnackbar("Category already exists")
-                                            return@launch
-                                        }
-                                    }
-                                }
-                                
-                                // Navigate back after saving
-                                navController.popBackStack()
-                            } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Error: ${e.message}")
-                            }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
+                    onClick = { showDeleteDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text(text = "Save")
-                }
-                
-                // Delete button - only show for existing categories
-                if (!isNewCategory) {
-                    Button(
-                        onClick = { showDeleteDialog = true },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text(text = "Delete")
-                    }
+                    Text(text = "Delete")
                 }
             }
         }

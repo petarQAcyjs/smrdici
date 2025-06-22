@@ -1,71 +1,18 @@
 package com.petar.smrdici.data.model
 
+import android.util.Log
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.Apartment
-import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.BusinessCenter
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Casino
-import androidx.compose.material.icons.filled.Celebration
-import androidx.compose.material.icons.filled.Checkroom
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.Commute
-import androidx.compose.material.icons.filled.Computer
-import androidx.compose.material.icons.filled.Copyright
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.EventSeat
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.FamilyRestroom
-import androidx.compose.material.icons.filled.Fastfood
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Flight
-import androidx.compose.material.icons.filled.Gavel
-import androidx.compose.material.icons.filled.Grass
-import androidx.compose.material.icons.filled.Handshake
-import androidx.compose.material.icons.filled.Handyman
-import androidx.compose.material.icons.filled.HealthAndSafety
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.House
-import androidx.compose.material.icons.filled.LocalAtm
-import androidx.compose.material.icons.filled.LocalBar
-import androidx.compose.material.icons.filled.LocalCafe
-import androidx.compose.material.icons.filled.LocalGroceryStore
-import androidx.compose.material.icons.filled.LocalHospital
-import androidx.compose.material.icons.filled.MoneyOff
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.PersonOff
-import androidx.compose.material.icons.filled.Pets
-import androidx.compose.material.icons.filled.PieChart
-import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.SmokingRooms
-import androidx.compose.material.icons.filled.SportsBasketball
-import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.Subscriptions
-import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.Work
+import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
  * Shared icon collections for expense and income categories
  */
 object CategoryIcons {
+    private const val TAG = "CategoryIcons"
+
     // Icons for expense categories
     val expenseIcons = listOf(
         Icons.Default.Receipt,
@@ -105,7 +52,64 @@ object CategoryIcons {
         Icons.Default.WaterDrop,
         Icons.Default.Wifi,
         Icons.AutoMirrored.Filled.MenuBook,
-        Icons.AutoMirrored.Filled.TrendingUp
+        Icons.AutoMirrored.Filled.TrendingUp,
+        // New icons - only include ones that are definitely available
+        Icons.Default.LocalMall,
+        Icons.Default.ShoppingBag,
+        Icons.Default.LocalDining,
+        Icons.Default.LocalPizza,
+        Icons.Default.RiceBowl,
+        Icons.Default.FoodBank,
+        Icons.Default.Cookie,
+        Icons.Default.Cake,
+        Icons.Default.LocalPharmacy,
+        Icons.Default.MedicalServices,
+        Icons.Default.Medication,
+        Icons.Default.Vaccines,
+        Icons.Default.Bolt,
+        Icons.Default.WaterDrop,
+        Icons.Default.Lightbulb,
+        Icons.Default.House,
+        Icons.Default.BedroomParent,
+        Icons.Default.Kitchen,
+        Icons.Default.Chair,
+        Icons.Default.Bathtub,
+        Icons.Default.Iron,
+        Icons.Default.CleaningServices,
+        Icons.Default.Microwave,
+        Icons.Default.Tv,
+        Icons.Default.Laptop,
+        Icons.Default.Computer,
+        Icons.Default.Call,
+        Icons.Default.CameraAlt,
+        Icons.Default.Train,
+        Icons.Default.Luggage,
+        Icons.Default.FlightTakeoff,
+        Icons.Default.AirplanemodeActive,
+        Icons.Default.LocalShipping,
+        Icons.Default.Garage,
+        Icons.Default.SportsSoccer,
+        Icons.Default.SportsBar,
+        Icons.Default.Pool,
+        Icons.Default.Spa,
+        Icons.Default.SelfImprovement,
+        Icons.Default.Brush,
+        Icons.Default.Palette,
+        Icons.Default.Nightlife,
+        Icons.Default.Park,
+        Icons.Default.Deck,
+        Icons.Default.Yard,
+        Icons.Default.Forest,
+        Icons.Default.Toys,
+        Icons.Default.ChildFriendly,
+        Icons.Default.Backpack,
+        Icons.Default.Build,
+        Icons.Default.Construction,
+        Icons.Default.Hardware,
+        Icons.Default.Umbrella,
+        Icons.Default.Dry,
+        Icons.Default.CalendarMonth,
+        Icons.Default.Cloud
     )
 
     // Icons for income categories
@@ -134,7 +138,20 @@ object CategoryIcons {
         Icons.Default.School,
         Icons.AutoMirrored.Filled.TrendingUp,
         Icons.Default.Computer,
-        Icons.Default.AutoAwesome
+        Icons.Default.AutoAwesome,
+        // New icons
+        Icons.Default.AccountBalanceWallet,
+        Icons.Default.Wallet,
+        Icons.Default.CreditScore,
+        Icons.Default.Calculate,
+        Icons.Default.ReceiptLong,
+        Icons.Default.Insights,
+        Icons.Default.Diamond,
+        Icons.Default.Agriculture,
+        Icons.Default.Science,
+        Icons.Default.Biotech,
+        Icons.Default.Psychology,
+        Icons.Default.Flood
     )
     
     /**

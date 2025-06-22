@@ -11,6 +11,8 @@ import com.google.firebase.firestore.ktx.toObject
 import kotlinx.coroutines.tasks.await
 import com.petar.smrdici.data.model.ExpenseCategory
 import com.petar.smrdici.data.model.IncomeCategory
+import com.petar.smrdici.data.repository.TransactionRepository
+import com.petar.smrdici.utils.LogUtils
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
@@ -21,6 +23,7 @@ import kotlinx.coroutines.launch
 class CategoryManager private constructor(context: Context) {
     
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val transactionRepository = TransactionRepository.getInstance()
     
     // Set za praćenje svih dodatnih kategorija troškova
     private val customExpenseCategories: MutableSet<String>
@@ -291,6 +294,12 @@ class CategoryManager private constructor(context: Context) {
         }
     }
     
+    // Helper method to sanitize document IDs for Firestore
+    private fun sanitizeDocumentId(id: String): String {
+        // Replace forward slashes with underscores or another safe character
+        return id.replace("/", "_")
+    }
+
     // Firestore: Fetch all expense categories
     suspend fun fetchAllExpenseCategoriesFromFirestore(): List<String> {
         val snapshot = expenseCategoriesRef.get().await()
@@ -305,51 +314,122 @@ class CategoryManager private constructor(context: Context) {
 
     // Firestore: Add expense category
     suspend fun addExpenseCategoryToFirestore(categoryName: String) {
-        expenseCategoriesRef.document(categoryName).set(FirestoreCategory(name = categoryName)).await()
+        val safeDocId = sanitizeDocumentId(categoryName)
+        expenseCategoriesRef.document(safeDocId).set(FirestoreCategory(name = categoryName)).await()
     }
 
     // Firestore: Add income category
     suspend fun addIncomeCategoryToFirestore(categoryName: String) {
-        incomeCategoriesRef.document(categoryName).set(FirestoreCategory(name = categoryName)).await()
+        val safeDocId = sanitizeDocumentId(categoryName)
+        incomeCategoriesRef.document(safeDocId).set(FirestoreCategory(name = categoryName)).await()
     }
 
     // Firestore: Update expense category
     suspend fun updateExpenseCategoryInFirestore(oldName: String, newName: String) {
-        // Delete old, add new
-        expenseCategoriesRef.document(oldName).delete().await()
-        expenseCategoriesRef.document(newName).set(FirestoreCategory(name = newName)).await()
+        try {
+            // Use a transaction to ensure atomicity
+            firestore.runTransaction { transaction ->
+                // Check if the old document exists
+                val oldDocRef = expenseCategoriesRef.document(sanitizeDocumentId(oldName))
+                val oldDocSnapshot = transaction.get(oldDocRef)
+                
+                // Create the new document first
+                val newDocRef = expenseCategoriesRef.document(sanitizeDocumentId(newName))
+                transaction.set(newDocRef, FirestoreCategory(name = newName))
+                
+                // Delete the old document only if it exists
+                if (oldDocSnapshot.exists()) {
+                    transaction.delete(oldDocRef)
+                }
+            }.await()
+            
+            Log.d(TAG, "Successfully updated expense category from $oldName to $newName")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating expense category: ${e.message}", e)
+            throw e
+        }
     }
 
     // Firestore: Update income category
     suspend fun updateIncomeCategoryInFirestore(oldName: String, newName: String) {
-        incomeCategoriesRef.document(oldName).delete().await()
-        incomeCategoriesRef.document(newName).set(FirestoreCategory(name = newName)).await()
+        try {
+            // Use a transaction to ensure atomicity
+            firestore.runTransaction { transaction ->
+                // Check if the old document exists
+                val oldDocRef = incomeCategoriesRef.document(sanitizeDocumentId(oldName))
+                val oldDocSnapshot = transaction.get(oldDocRef)
+                
+                // Create the new document first
+                val newDocRef = incomeCategoriesRef.document(sanitizeDocumentId(newName))
+                transaction.set(newDocRef, FirestoreCategory(name = newName))
+                
+                // Delete the old document only if it exists
+                if (oldDocSnapshot.exists()) {
+                    transaction.delete(oldDocRef)
+                }
+            }.await()
+            
+            Log.d(TAG, "Successfully updated income category from $oldName to $newName")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating income category: ${e.message}", e)
+            throw e
+        }
     }
 
     // Firestore: Delete expense category
     suspend fun deleteExpenseCategoryFromFirestore(categoryName: String) {
-        expenseCategoriesRef.document(categoryName).delete().await()
+        try {
+            // Check if document exists before attempting to delete
+            val docRef = expenseCategoriesRef.document(sanitizeDocumentId(categoryName))
+            val docSnapshot = docRef.get().await()
+            
+            if (docSnapshot.exists()) {
+                docRef.delete().await()
+                Log.d(TAG, "Successfully deleted expense category: $categoryName")
+            } else {
+                Log.w(TAG, "Expense category not found in Firestore: $categoryName")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting expense category: ${e.message}", e)
+            throw e
+        }
     }
 
     // Firestore: Delete income category
     suspend fun deleteIncomeCategoryFromFirestore(categoryName: String) {
-        incomeCategoriesRef.document(categoryName).delete().await()
+        try {
+            // Check if document exists before attempting to delete
+            val docRef = incomeCategoriesRef.document(sanitizeDocumentId(categoryName))
+            val docSnapshot = docRef.get().await()
+            
+            if (docSnapshot.exists()) {
+                docRef.delete().await()
+                Log.d(TAG, "Successfully deleted income category: $categoryName")
+            } else {
+                Log.w(TAG, "Income category not found in Firestore: $categoryName")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting income category: ${e.message}", e)
+            throw e
+        }
     }
     
     // Firestore: Migrate all enum categories to Firestore
     suspend fun migrateEnumCategoriesToFirestore() {
         // Expense categories
         for (category in ExpenseCategory.entries) {
-            val doc = expenseCategoriesRef.document(category.name).get().await()
+            val safeDocId = sanitizeDocumentId(category.name)
+            val doc = expenseCategoriesRef.document(safeDocId).get().await()
             if (!doc.exists()) {
-                expenseCategoriesRef.document(category.name).set(FirestoreCategory(name = category.name)).await()
+                expenseCategoriesRef.document(safeDocId).set(FirestoreCategory(name = category.name)).await()
             }
         }
         // Income categories
         for (category in IncomeCategory.entries) {
-            val doc = incomeCategoriesRef.document(category.name).get().await()
+            val safeDocId = sanitizeDocumentId(category.name)
+            val doc = incomeCategoriesRef.document(safeDocId).get().await()
             if (!doc.exists()) {
-                incomeCategoriesRef.document(category.name).set(FirestoreCategory(name = category.name)).await()
+                incomeCategoriesRef.document(safeDocId).set(FirestoreCategory(name = category.name)).await()
             }
         }
     }
@@ -404,11 +484,17 @@ class CategoryManager private constructor(context: Context) {
         updateExpenseCategoryInFirestore(oldName, newName)
         val updated = getExpenseCategoriesWithFallback()
         saveExpenseCategoriesToLocal(updated)
+        
+        // Update all transactions with this category
+        transactionRepository.updateTransactionCategory(oldName, newName, true)
     }
     suspend fun updateIncomeCategoryBoth(oldName: String, newName: String) {
         updateIncomeCategoryInFirestore(oldName, newName)
         val updated = getIncomeCategoriesWithFallback()
         saveIncomeCategoriesToLocal(updated)
+        
+        // Update all transactions with this category
+        transactionRepository.updateTransactionCategory(oldName, newName, false)
     }
     // Delete category (updates both Firestore and local)
     suspend fun deleteExpenseCategoryBoth(categoryName: String) {
@@ -430,16 +516,16 @@ class CategoryManager private constructor(context: Context) {
     suspend fun ensureEnumCategoriesInFirestore() {
         // Expense categories
         for (category in ExpenseCategory.entries) {
-            val doc = expenseCategoriesRef.document(category.name).get().await()
+            val doc = expenseCategoriesRef.document(sanitizeDocumentId(category.name)).get().await()
             if (!doc.exists()) {
-                expenseCategoriesRef.document(category.name).set(FirestoreCategory(name = category.name)).await()
+                expenseCategoriesRef.document(sanitizeDocumentId(category.name)).set(FirestoreCategory(name = category.name)).await()
             }
         }
         // Income categories
         for (category in IncomeCategory.entries) {
-            val doc = incomeCategoriesRef.document(category.name).get().await()
+            val doc = incomeCategoriesRef.document(sanitizeDocumentId(category.name)).get().await()
             if (!doc.exists()) {
-                incomeCategoriesRef.document(category.name).set(FirestoreCategory(name = category.name)).await()
+                incomeCategoriesRef.document(sanitizeDocumentId(category.name)).set(FirestoreCategory(name = category.name)).await()
             }
         }
     }
@@ -458,8 +544,94 @@ class CategoryManager private constructor(context: Context) {
                 instance ?: CategoryManager(context.applicationContext).also { 
                     instance = it
                     it.cleanupInvalidIconReferences()
+                    // Launch a coroutine to migrate problematic document IDs
+                    GlobalScope.launch {
+                        try {
+                            it.migrateProblematicDocumentIds()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error migrating problematic document IDs", e)
+                        }
+                    }
                 }
             }
+        }
+    }
+    
+    /**
+     * Migrate any problematic document IDs in Firestore (containing slashes)
+     */
+    private suspend fun migrateProblematicDocumentIds() {
+        try {
+            Log.d(TAG, "Starting migration of problematic document IDs")
+            
+            // Get all expense categories directly from Firestore collection
+            val expenseSnapshot = firestore.collection("expenseCategories").get().await()
+            for (document in expenseSnapshot.documents) {
+                val docId = document.id
+                if (docId.contains("/")) {
+                    Log.d(TAG, "Found problematic expense category ID: $docId")
+                    
+                    // Get the category data
+                    val category = document.toObject(FirestoreCategory::class.java)
+                    if (category != null) {
+                        // Create a new document with sanitized ID
+                        val safeDocId = sanitizeDocumentId(docId)
+                        Log.d(TAG, "Creating new document with safe ID: $safeDocId")
+                        
+                        // Create the new document first
+                        firestore.collection("expenseCategories").document(safeDocId)
+                            .set(category).await()
+                        
+                        // Then delete the old document
+                        try {
+                            // We can't use the normal document reference with slashes, so we need to use a different approach
+                            // This is a workaround to delete documents with invalid IDs
+                            firestore.runTransaction { transaction ->
+                                transaction.delete(document.reference)
+                            }.await()
+                            Log.d(TAG, "Successfully migrated expense category: $docId -> $safeDocId")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Could not delete original document with ID $docId: ${e.message}")
+                        }
+                    }
+                }
+            }
+            
+            // Get all income categories directly from Firestore collection
+            val incomeSnapshot = firestore.collection("incomeCategories").get().await()
+            for (document in incomeSnapshot.documents) {
+                val docId = document.id
+                if (docId.contains("/")) {
+                    Log.d(TAG, "Found problematic income category ID: $docId")
+                    
+                    // Get the category data
+                    val category = document.toObject(FirestoreCategory::class.java)
+                    if (category != null) {
+                        // Create a new document with sanitized ID
+                        val safeDocId = sanitizeDocumentId(docId)
+                        Log.d(TAG, "Creating new document with safe ID: $safeDocId")
+                        
+                        // Create the new document first
+                        firestore.collection("incomeCategories").document(safeDocId)
+                            .set(category).await()
+                        
+                        // Then delete the old document
+                        try {
+                            // We can't use the normal document reference with slashes, so we need to use a different approach
+                            firestore.runTransaction { transaction ->
+                                transaction.delete(document.reference)
+                            }.await()
+                            Log.d(TAG, "Successfully migrated income category: $docId -> $safeDocId")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Could not delete original document with ID $docId: ${e.message}")
+                        }
+                    }
+                }
+            }
+            
+            Log.d(TAG, "Completed migration of problematic document IDs")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during document ID migration: ${e.message}", e)
         }
     }
     
