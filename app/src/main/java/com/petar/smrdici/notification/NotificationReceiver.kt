@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import com.petar.smrdici.SmrdiciApplication
 import com.petar.smrdici.data.model.EventAssignee
+import com.petar.smrdici.util.ApiKeys
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -18,6 +19,9 @@ class NotificationReceiver : BroadcastReceiver() {
         private const val TAG = "NotificationReceiver"
         private const val NOTIFICATION_TYPE_DAILY_SUMMARY = "DAILY_SUMMARY"
         private const val NOTIFICATION_TYPE_EVENT = "EVENT"
+        
+        // Default location for weather
+        private const val DEFAULT_LOCATION = "Belgrade"
     }
     
     override fun onReceive(context: Context, intent: Intent) {
@@ -102,26 +106,57 @@ class NotificationReceiver : BroadcastReceiver() {
                 "Данашњи догађаји:\n$eventsList$suffix"
             }
             
-            // Add weather information - similar to the weather notification
-            val enhancedMessage = "$message\n\n" +
-                "🌡️ 22°C | 💨 5 km/h | 💧 60% | ☁️ Делимично облачно\n\n" +
-                "Данас је добар дан за шетњу. Понесите лагану јакну!"
+            // Get real weather data using WeatherService
+            val weatherService = WeatherService(context)
+            val weatherInfo = weatherService.getWeatherInfo(DEFAULT_LOCATION, ApiKeys.WEATHER_API_KEY)
+            
+            // Create weather message with real data or fallback to default if API call fails
+            val weatherMessage = if (weatherInfo != null) {
+                // Format weather data with proper emojis and Serbian format
+                "🌡️ ${weatherInfo.temperature.toInt()}°C | 💨 ${weatherInfo.windSpeed.toInt()} km/h | " +
+                "💧 ${weatherInfo.humidity}% | ☁️ ${weatherInfo.description}\n\n" +
+                "${weatherService.getWeatherAdvice(weatherInfo)}"
+            } else {
+                // Fallback to a generic message if weather data couldn't be retrieved
+                "🌡️ Временска прогноза тренутно није доступна."
+            }
+            
+            // Combine event info with weather info
+            val enhancedMessage = "$message\n\n$weatherMessage"
             
             // Show the notification
             val notificationService = NotificationService(context)
             notificationService.showDailyMorningNotification(title, enhancedMessage)
             
-            Log.d(TAG, "Morning notification shown with ${events.size} events")
+            Log.d(TAG, "Morning notification shown with ${events.size} events and weather data")
         } catch (e: Exception) {
             Log.e(TAG, "Error creating morning notification with events", e)
             
-            // Fallback to simple notification with weather info
-            val weatherMessage = "$defaultMessage\n\n" +
-                "🌡️ 22°C | 💨 5 km/h | 💧 60% | ☁️ Делимично облачно\n\n" +
-                "Данас је добар дан за шетњу. Понесите лагану јакну!"
-            
-            val notificationService = NotificationService(context)
-            notificationService.showDailyMorningNotification(title, weatherMessage)
+            // Try to get weather even if events failed
+            try {
+                val weatherService = WeatherService(context)
+                val weatherInfo = weatherService.getWeatherInfo(DEFAULT_LOCATION, ApiKeys.WEATHER_API_KEY)
+                
+                // Create weather message with real data or fallback
+                val weatherMessage = if (weatherInfo != null) {
+                    "$defaultMessage\n\n" +
+                    "🌡️ ${weatherInfo.temperature.toInt()}°C | 💨 ${weatherInfo.windSpeed.toInt()} km/h | " +
+                    "💧 ${weatherInfo.humidity}% | ☁️ ${weatherInfo.description}\n\n" +
+                    "${weatherService.getWeatherAdvice(weatherInfo)}"
+                } else {
+                    // Fallback to a simple message with default text
+                    "$defaultMessage\n\n" +
+                    "🌡️ Временска прогноза тренутно није доступна."
+                }
+                
+                val notificationService = NotificationService(context)
+                notificationService.showDailyMorningNotification(title, weatherMessage)
+            } catch (weatherEx: Exception) {
+                // If everything fails, show the default message
+                Log.e(TAG, "Error getting weather data", weatherEx)
+                val notificationService = NotificationService(context)
+                notificationService.showDailyMorningNotification(title, defaultMessage)
+            }
         }
     }
     
