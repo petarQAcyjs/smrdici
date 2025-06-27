@@ -38,6 +38,36 @@ class CategoryManager private constructor(context: Context) {
     private val expenseCategoriesRef: CollectionReference = firestore.collection("expenseCategories")
     private val incomeCategoriesRef: CollectionReference = firestore.collection("incomeCategories")
     
+    // Track deleted enum categories
+    private val KEY_DELETED_EXPENSE_ENUMS = "deleted_expense_enums"
+    private val KEY_DELETED_INCOME_ENUMS = "deleted_income_enums"
+    
+    private fun getDeletedExpenseEnums(): Set<String> {
+        return prefs.getStringSet(KEY_DELETED_EXPENSE_ENUMS, setOf()) ?: setOf()
+    }
+    
+    private fun getDeletedIncomeEnums(): Set<String> {
+        return prefs.getStringSet(KEY_DELETED_INCOME_ENUMS, setOf()) ?: setOf()
+    }
+    
+    private fun addToDeletedExpenseEnums(categoryName: String) {
+        val current = getDeletedExpenseEnums().toMutableSet()
+        current.add(categoryName)
+        prefs.edit {
+            putStringSet(KEY_DELETED_EXPENSE_ENUMS, current)
+        }
+        Log.d(TAG, "Added $categoryName to deleted expense enums list")
+    }
+    
+    private fun addToDeletedIncomeEnums(categoryName: String) {
+        val current = getDeletedIncomeEnums().toMutableSet()
+        current.add(categoryName)
+        prefs.edit {
+            putStringSet(KEY_DELETED_INCOME_ENUMS, current)
+        }
+        Log.d(TAG, "Added $categoryName to deleted income enums list")
+    }
+    
     // Storage for category colors
     private fun getCategoryColorKey(categoryName: String, isExpense: Boolean): String {
         val prefix = if (isExpense) "expense_color_" else "income_color_"
@@ -379,16 +409,10 @@ class CategoryManager private constructor(context: Context) {
     // Firestore: Delete expense category
     suspend fun deleteExpenseCategoryFromFirestore(categoryName: String) {
         try {
-            // Check if document exists before attempting to delete
+            // Delete without checking if it exists
             val docRef = expenseCategoriesRef.document(sanitizeDocumentId(categoryName))
-            val docSnapshot = docRef.get().await()
-            
-            if (docSnapshot.exists()) {
-                docRef.delete().await()
-                Log.d(TAG, "Successfully deleted expense category: $categoryName")
-            } else {
-                Log.w(TAG, "Expense category not found in Firestore: $categoryName")
-            }
+            docRef.delete().await()
+            Log.d(TAG, "Successfully deleted expense category: $categoryName")
         } catch (e: Exception) {
             Log.e(TAG, "Error deleting expense category: ${e.message}", e)
             throw e
@@ -398,16 +422,10 @@ class CategoryManager private constructor(context: Context) {
     // Firestore: Delete income category
     suspend fun deleteIncomeCategoryFromFirestore(categoryName: String) {
         try {
-            // Check if document exists before attempting to delete
+            // Delete without checking if it exists
             val docRef = incomeCategoriesRef.document(sanitizeDocumentId(categoryName))
-            val docSnapshot = docRef.get().await()
-            
-            if (docSnapshot.exists()) {
-                docRef.delete().await()
-                Log.d(TAG, "Successfully deleted income category: $categoryName")
-            } else {
-                Log.w(TAG, "Income category not found in Firestore: $categoryName")
-            }
+            docRef.delete().await()
+            Log.d(TAG, "Successfully deleted income category: $categoryName")
         } catch (e: Exception) {
             Log.e(TAG, "Error deleting income category: ${e.message}", e)
             throw e
@@ -448,60 +466,84 @@ class CategoryManager private constructor(context: Context) {
 
     // Fetch categories with offline fallback
     suspend fun getExpenseCategoriesWithFallback(): List<String> {
+        val deletedEnums = getDeletedExpenseEnums()
+        Log.d(TAG, "Deleted expense enums: $deletedEnums")
+        
         return try {
             // Get categories from Firestore
             val firestoreCategories = fetchAllExpenseCategoriesFromFirestore()
+            Log.d(TAG, "Fetched from Firestore: $firestoreCategories")
             
-            // Ensure all enum categories are included
+            // Ensure all non-deleted enum categories are included
             val allCategories = firestoreCategories.toMutableList()
             for (enumCategory in ExpenseCategory.entries) {
-                if (!allCategories.contains(enumCategory.name)) {
+                if (!allCategories.contains(enumCategory.name) && !deletedEnums.contains(enumCategory.name)) {
                     allCategories.add(enumCategory.name)
                 }
             }
             
+            // Filter out deleted enum categories
+            val filteredCategories = allCategories.filter { !deletedEnums.contains(it) }
+            Log.d(TAG, "Final expense categories: $filteredCategories")
+            
             // Save to local storage
-            saveExpenseCategoriesToLocal(allCategories)
-            allCategories
+            saveExpenseCategoriesToLocal(filteredCategories)
+            filteredCategories
         } catch (e: Exception) {
             Log.d(TAG, "Firestore unavailable, loading expense categories from local cache.")
-            // Include both custom categories and enum categories
+            // Include both custom categories and non-deleted enum categories
             val allCategories = getAllExpenseCategories().toMutableList()
             for (enumCategory in ExpenseCategory.entries) {
-                if (!allCategories.contains(enumCategory.name)) {
+                if (!allCategories.contains(enumCategory.name) && !deletedEnums.contains(enumCategory.name)) {
                     allCategories.add(enumCategory.name)
                 }
             }
-            allCategories
+            
+            // Filter out deleted enum categories
+            val filteredCategories = allCategories.filter { !deletedEnums.contains(it) }
+            Log.d(TAG, "Final expense categories from cache: $filteredCategories")
+            filteredCategories
         }
     }
     
     suspend fun getIncomeCategoriesWithFallback(): List<String> {
+        val deletedEnums = getDeletedIncomeEnums()
+        Log.d(TAG, "Deleted income enums: $deletedEnums")
+        
         return try {
             // Get categories from Firestore
             val firestoreCategories = fetchAllIncomeCategoriesFromFirestore()
+            Log.d(TAG, "Fetched from Firestore: $firestoreCategories")
             
-            // Ensure all enum categories are included
+            // Ensure all non-deleted enum categories are included
             val allCategories = firestoreCategories.toMutableList()
             for (enumCategory in IncomeCategory.entries) {
-                if (!allCategories.contains(enumCategory.name)) {
+                if (!allCategories.contains(enumCategory.name) && !deletedEnums.contains(enumCategory.name)) {
                     allCategories.add(enumCategory.name)
                 }
             }
             
+            // Filter out deleted enum categories
+            val filteredCategories = allCategories.filter { !deletedEnums.contains(it) }
+            Log.d(TAG, "Final income categories: $filteredCategories")
+            
             // Save to local storage
-            saveIncomeCategoriesToLocal(allCategories)
-            allCategories
+            saveIncomeCategoriesToLocal(filteredCategories)
+            filteredCategories
         } catch (e: Exception) {
             Log.d(TAG, "Firestore unavailable, loading income categories from local cache.")
-            // Include both custom categories and enum categories
+            // Include both custom categories and non-deleted enum categories
             val allCategories = getAllIncomeCategories().toMutableList()
             for (enumCategory in IncomeCategory.entries) {
-                if (!allCategories.contains(enumCategory.name)) {
+                if (!allCategories.contains(enumCategory.name) && !deletedEnums.contains(enumCategory.name)) {
                     allCategories.add(enumCategory.name)
                 }
             }
-            allCategories
+            
+            // Filter out deleted enum categories
+            val filteredCategories = allCategories.filter { !deletedEnums.contains(it) }
+            Log.d(TAG, "Final income categories from cache: $filteredCategories")
+            filteredCategories
         }
     }
 
@@ -535,14 +577,75 @@ class CategoryManager private constructor(context: Context) {
     }
     // Delete category (updates both Firestore and local)
     suspend fun deleteExpenseCategoryBoth(categoryName: String) {
-        deleteExpenseCategoryFromFirestore(categoryName)
-        val updated = getExpenseCategoriesWithFallback()
-        saveExpenseCategoriesToLocal(updated)
+        Log.d(TAG, "Starting deletion of expense category: $categoryName")
+        
+        // Check if it's an enum category
+        val isEnum = try {
+            ExpenseCategory.valueOf(categoryName)
+            Log.d(TAG, "Category $categoryName is an enum category")
+            true
+        } catch (e: IllegalArgumentException) {
+            Log.d(TAG, "Category $categoryName is NOT an enum category")
+            false
+        }
+        
+        try {
+            // Delete from Firestore
+            Log.d(TAG, "Attempting to delete from Firestore: $categoryName")
+            deleteExpenseCategoryFromFirestore(categoryName)
+            Log.d(TAG, "Successfully deleted from Firestore: $categoryName")
+            
+            // For enum categories, add to deleted enums tracking
+            if (isEnum) {
+                addToDeletedExpenseEnums(categoryName)
+            }
+            
+            // Get updated list and save to local
+            val updated = getExpenseCategoriesWithFallback()
+            Log.d(TAG, "Updated category list size: ${updated.size}, contains category? ${updated.contains(categoryName)}")
+            
+            saveExpenseCategoriesToLocal(updated)
+            Log.d(TAG, "Completed deletion of expense category: $categoryName")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during deleteExpenseCategoryBoth: ${e.message}", e)
+            throw e
+        }
     }
+    
     suspend fun deleteIncomeCategoryBoth(categoryName: String) {
-        deleteIncomeCategoryFromFirestore(categoryName)
-        val updated = getIncomeCategoriesWithFallback()
-        saveIncomeCategoriesToLocal(updated)
+        Log.d(TAG, "Starting deletion of income category: $categoryName")
+        
+        // Check if it's an enum category
+        val isEnum = try {
+            IncomeCategory.valueOf(categoryName)
+            Log.d(TAG, "Category $categoryName is an enum category")
+            true
+        } catch (e: IllegalArgumentException) {
+            Log.d(TAG, "Category $categoryName is NOT an enum category")
+            false
+        }
+        
+        try {
+            // Delete from Firestore
+            Log.d(TAG, "Attempting to delete from Firestore: $categoryName")
+            deleteIncomeCategoryFromFirestore(categoryName)
+            Log.d(TAG, "Successfully deleted from Firestore: $categoryName")
+            
+            // For enum categories, add to deleted enums tracking
+            if (isEnum) {
+                addToDeletedIncomeEnums(categoryName)
+            }
+            
+            // Get updated list and save to local
+            val updated = getIncomeCategoriesWithFallback()
+            Log.d(TAG, "Updated category list size: ${updated.size}, contains category? ${updated.contains(categoryName)}")
+            
+            saveIncomeCategoriesToLocal(updated)
+            Log.d(TAG, "Completed deletion of income category: $categoryName")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during deleteIncomeCategoryBoth: ${e.message}", e)
+            throw e
+        }
     }
 
     // (Optional) Real-time sync: add a snapshot listener for Firestore categories
@@ -572,6 +675,8 @@ class CategoryManager private constructor(context: Context) {
         private const val PREFS_NAME = "category_manager_prefs"
         private const val KEY_CUSTOM_EXPENSE_CATEGORIES = "custom_expense_categories"
         private const val KEY_CUSTOM_INCOME_CATEGORIES = "custom_income_categories"
+        private const val KEY_DELETED_EXPENSE_ENUMS = "deleted_expense_enums"
+        private const val KEY_DELETED_INCOME_ENUMS = "deleted_income_enums"
         
         @Volatile
         private var instance: CategoryManager? = null
