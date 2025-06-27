@@ -115,6 +115,7 @@ dependencies {
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.firebase.common.ktx)
     implementation(libs.firebase.database.ktx)
+    implementation("com.google.firebase:firebase-messaging-ktx") // Firebase Cloud Messaging
 
     // Календарска компонента
     implementation(libs.calendar.compose)
@@ -146,6 +147,7 @@ dependencies {
     
     // Notification dependencies
     implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.core:core:1.12.0")
     
     // Retrofit for network requests
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

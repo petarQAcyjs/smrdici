@@ -121,7 +121,8 @@ fun FinanceSettingsScreen(
                 title = "Подешавање финансија",
                 user = user,
                 navController = navController,
-                showBackButton = true
+                showBackButton = true,
+                showProfileIcon = false
             )
         }
     ) { paddingValues ->

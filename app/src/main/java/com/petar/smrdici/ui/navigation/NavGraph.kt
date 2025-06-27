@@ -9,34 +9,31 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import com.petar.smrdici.data.repository.ExpenseRepository
-import com.petar.smrdici.data.repository.IncomeRepository
 import com.petar.smrdici.data.repository.SettingsRepository
 import com.petar.smrdici.ui.components.MainLayout
 import com.petar.smrdici.ui.screens.addAccount.AddAccountScreen
 import com.petar.smrdici.ui.screens.auth.LoginScreen
+import com.petar.smrdici.ui.screens.calendar.AddEventScreen
+import com.petar.smrdici.ui.screens.calendar.CalendarScreen
+import com.petar.smrdici.ui.screens.editAccount.EditAccountScreen
 import com.petar.smrdici.ui.screens.finance.AddExpenseScreen
 import com.petar.smrdici.ui.screens.finance.AddIncomeScreen
 import com.petar.smrdici.ui.screens.finance.EditExpenseScreen
 import com.petar.smrdici.ui.screens.finance.EditIncomeScreen
-import com.petar.smrdici.ui.screens.calendar.AddEventScreen
-import com.petar.smrdici.ui.screens.calendar.CalendarScreen
-import com.petar.smrdici.ui.screens.editAccount.EditAccountScreen
+import com.petar.smrdici.ui.screens.finance.FinanceScreen
+import com.petar.smrdici.ui.screens.finance.FinanceViewModel
 import com.petar.smrdici.ui.screens.home.HomeScreen
 import com.petar.smrdici.ui.screens.lists.ListDetailsScreen
 import com.petar.smrdici.ui.screens.lists.ListsScreen
 import com.petar.smrdici.ui.screens.lists.ListsViewModel
 import com.petar.smrdici.ui.screens.profile.NotificationSettingsScreen
 import com.petar.smrdici.ui.screens.profile.ProfileScreen
-import com.petar.smrdici.ui.screens.settings.FinanceSettingsScreen
-import com.petar.smrdici.ui.screens.settings.FinanceSettingsViewModel
-import com.petar.smrdici.ui.screens.settings.ExpenseCategoriesScreen
-import com.petar.smrdici.ui.screens.settings.IncomeCategoriesScreen
-import com.petar.smrdici.ui.screens.settings.EditCategoryScreen
 import com.petar.smrdici.ui.screens.settings.CategoryType
+import com.petar.smrdici.ui.screens.settings.EditCategoryScreen
+import com.petar.smrdici.ui.screens.settings.ExpenseCategoriesScreen
+import com.petar.smrdici.ui.screens.settings.FinanceSettingsScreen
+import com.petar.smrdici.ui.screens.settings.IncomeCategoriesScreen
 import com.petar.smrdici.ui.screens.transfer.TransferScreen
-import com.petar.smrdici.ui.screens.finance.FinanceScreen
-import com.petar.smrdici.ui.screens.finance.FinanceViewModel
 
 @Composable
 fun NavGraph(
@@ -46,13 +43,8 @@ fun NavGraph(
     val context = LocalContext.current
     
     // Create repositories and settings view model
-    val expenseRepository = remember { ExpenseRepository.getInstance() }
-    val incomeRepository = remember { IncomeRepository.getInstance() }
     val settingsRepository = remember { SettingsRepository.getInstance(context) }
-    val settingsViewModel = remember { 
-        FinanceSettingsViewModel.Factory(context).create(FinanceSettingsViewModel::class.java)
-    }
-    
+
     NavHost(
         navController = navController,
         startDestination = startDestination

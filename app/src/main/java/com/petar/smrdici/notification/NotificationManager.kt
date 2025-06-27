@@ -18,6 +18,7 @@ class NotificationManager(private val context: Context) {
         private const val KEY_DYNAMIC_TIMING = "dynamic_timing"
         private const val KEY_SMART_GROUPING = "smart_grouping"
         private const val KEY_WEATHER_AWARE = "weather_aware"
+        private const val KEY_DAILY_MORNING = "daily_morning"
         
         const val TAG = "NotificationManager"
     }
@@ -65,15 +66,14 @@ class NotificationManager(private val context: Context) {
         get() = prefs.getBoolean(KEY_WEATHER_AWARE, true)
         set(value) {
             prefs.edit().putBoolean(KEY_WEATHER_AWARE, value).apply()
-            
-            // Schedule or cancel daily weather notifications based on the new setting
-            if (value) {
-                DailyWeatherScheduler.scheduleDailyWeatherNotification(context)
-                Log.d(TAG, "Weather-aware notifications enabled, daily weather notification scheduled")
-            } else {
-                DailyWeatherScheduler.cancelDailyWeatherNotification(context)
-                Log.d(TAG, "Weather-aware notifications disabled, daily weather notification cancelled")
-            }
+            Log.d(TAG, "Weather-aware notifications ${if (value) "enabled" else "disabled"}")
+        }
+    
+    var dailyMorningEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DAILY_MORNING, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_DAILY_MORNING, value).apply()
+            Log.d(TAG, "Daily morning notifications ${if (value) "enabled" else "disabled"}")
         }
     
     /**
@@ -119,9 +119,88 @@ class NotificationManager(private val context: Context) {
             putBoolean(KEY_DYNAMIC_TIMING, false)
             putBoolean(KEY_SMART_GROUPING, false)
             putBoolean(KEY_WEATHER_AWARE, true)
+            putBoolean(KEY_DAILY_MORNING, true)
             apply()
         }
+        
         Log.d(TAG, "Notification preferences reset to defaults")
+    }
+    
+    /**
+     * Initialize daily notifications
+     * Call this from the Application class or MainActivity onCreate
+     */
+    fun initializeDailyNotifications() {
+        if (notificationsEnabled && dailyMorningEnabled) {
+            try {
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                
+                // Create calendar for 8:00 AM
+                val morningCalendar = java.util.Calendar.getInstance().apply {
+                    set(java.util.Calendar.HOUR_OF_DAY, 8)
+                    set(java.util.Calendar.MINUTE, 0)
+                    set(java.util.Calendar.SECOND, 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                    
+                    // If it's already past 8 AM today, schedule for tomorrow
+                    if (timeInMillis < System.currentTimeMillis()) {
+                        add(java.util.Calendar.DAY_OF_YEAR, 1)
+                    }
+                }
+                
+                // Create intent for daily notification
+                val intent = android.content.Intent(context, NotificationReceiver::class.java).apply {
+                    putExtra("NOTIFICATION_TYPE", "DAILY_SUMMARY")
+                    putExtra("EVENT_TITLE", "Дневни преглед догађаја")
+                    putExtra("EVENT_MESSAGE", "Доброј јутро! Проверите данашње догађаје.")
+                }
+                
+                // Create pending intent with unique ID for daily notifications
+                val pendingIntent = android.app.PendingIntent.getBroadcast(
+                    context,
+                    "DAILY_MORNING_NOTIFICATION".hashCode(),
+                    intent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                
+                // Check if we can schedule exact alarms
+                val canScheduleExact = NotificationHelper.canScheduleExactAlarms(context)
+                
+                // Schedule the alarm to repeat daily
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    if (canScheduleExact) {
+                        // Use exact alarm for more reliable timing
+                        alarmManager.setExactAndAllowWhileIdle(
+                            android.app.AlarmManager.RTC_WAKEUP,
+                            morningCalendar.timeInMillis,
+                            pendingIntent
+                        )
+                    } else {
+                        // Fall back to repeating alarm
+                        alarmManager.setRepeating(
+                            android.app.AlarmManager.RTC_WAKEUP,
+                            morningCalendar.timeInMillis,
+                            android.app.AlarmManager.INTERVAL_DAY,
+                            pendingIntent
+                        )
+                    }
+                } else {
+                    // For older Android versions
+                    alarmManager.setRepeating(
+                        android.app.AlarmManager.RTC_WAKEUP,
+                        morningCalendar.timeInMillis,
+                        android.app.AlarmManager.INTERVAL_DAY,
+                        pendingIntent
+                    )
+                }
+                
+                Log.d(TAG, "Daily notifications scheduled for 8:00 AM, starting at ${java.util.Date(morningCalendar.timeInMillis)}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize daily notifications", e)
+            }
+        } else {
+            Log.d(TAG, "Daily notifications not initialized: enabled=${notificationsEnabled}, dailyMorning=${dailyMorningEnabled}")
+        }
     }
     
     /**

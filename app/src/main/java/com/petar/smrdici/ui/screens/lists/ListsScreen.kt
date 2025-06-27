@@ -167,7 +167,8 @@ fun ListsScreen(
                     title = "Листе",
                     navController = navController,
                     showBackButton = true,
-                    user = user
+                    user = user,
+                    showProfileIcon = false
                 )
             }
         ) { paddingValues ->

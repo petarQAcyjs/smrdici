@@ -1,6 +1,5 @@
 package com.petar.smrdici.ui.screens.finance
 
-import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -42,14 +42,15 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.data.model.Income
 import com.petar.smrdici.data.model.IncomeCategory
 import com.petar.smrdici.data.repository.TransactionRepository
@@ -58,19 +59,12 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.CategoryDropdown
 import com.petar.smrdici.ui.screens.settings.AccountViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import com.petar.smrdici.data.model.CategoryManager
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.runtime.mutableStateListOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Suppress("UNUSED_PARAMETER", "KotlinRedundantDiagnosticSuppress", "NAME_SHADOWING")
@@ -93,6 +87,7 @@ fun AddIncomeScreen(
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<IncomeCategory?>(null) }
+    var customCategoryName by remember { mutableStateOf("") } // For custom categories
     var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var selectedAccountId by remember { mutableStateOf("") }
     
@@ -102,9 +97,9 @@ fun AddIncomeScreen(
     var accountError by remember { mutableStateOf("") }
     
     // Стање за падајуће меније
-    var categoryMenuExpanded by remember { mutableStateOf(false) }
     var accountMenuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var categoryMenuExpanded by remember { mutableStateOf(false) }
     
     // Стање за снекбар
     val snackbarHostState = remember { SnackbarHostState() }
@@ -226,7 +221,8 @@ fun AddIncomeScreen(
                     userId = user?.uid ?: "",
                     amount = amountValue,
                     description = description,
-                    category = selectedCategory!!.name,
+                    category = if (customCategoryName.isNotEmpty() && selectedCategory == IncomeCategory.OTHER) 
+                        customCategoryName else selectedCategory!!.name,
                     date = dateStr,
                     accountId = selectedAccountId
                 )
@@ -339,14 +335,80 @@ fun AddIncomeScreen(
                 
                 // Избор категорије
                 Column {
-                    CategoryDropdown(
-                        selectedCategory = selectedCategory?.name ?: "",
-                        onCategorySelected = { name -> selectedCategory = if (name.isNotBlank()) IncomeCategory.entries.find { it.name == name } else null },
-                        categories = incomeCategories,
-                        getDisplayName = { name ->
-                            try { IncomeCategory.valueOf(name).getDisplayName() } catch (_: Exception) { name }
+                    // Custom implementation for string-based categories
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { categoryMenuExpanded = true },
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (customCategoryName.isNotEmpty() && selectedCategory == IncomeCategory.OTHER) 
+                                    customCategoryName 
+                                else selectedCategory?.getDisplayName() ?: "Изаберите категорију",
+                                color = if (selectedCategory == null) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Изаберите категорију"
+                            )
                         }
-                    )
+                    }
+                    
+                    DropdownMenu(
+                        expanded = categoryMenuExpanded,
+                        onDismissRequest = { categoryMenuExpanded = false },
+                        modifier = Modifier.fillMaxWidth(0.9f)
+                    ) {
+                        // First show built-in enum categories
+                        IncomeCategory.entries.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category.getDisplayName()) },
+                                onClick = {
+                                    selectedCategory = category
+                                    categoryMenuExpanded = false
+                                }
+                            )
+                        }
+                        
+                        // Then show custom categories from CategoryManager that aren't in the enum
+                        incomeCategories.filter { categoryName ->
+                            try {
+                                IncomeCategory.valueOf(categoryName)
+                                false // Skip if it's already in the enum
+                            } catch (_: IllegalArgumentException) {
+                                true // Include if it's a custom category
+                            }
+                        }.forEach { customCategory ->
+                            DropdownMenuItem(
+                                text = { Text(customCategory) },
+                                onClick = {
+                                    // For custom categories, we'll use the OTHER enum value
+                                    // but we'll save the actual category name when saving the income
+                                    selectedCategory = IncomeCategory.OTHER
+                                    customCategoryName = customCategory
+                                    categoryMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                    
                     if (categoryError.isNotEmpty()) {
                         Text(
                             text = categoryError,

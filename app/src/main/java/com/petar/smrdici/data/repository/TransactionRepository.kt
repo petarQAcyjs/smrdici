@@ -573,6 +573,34 @@ class TransactionRepository private constructor() {
         }
     }
 
+    // Method to update all transactions with a specific category name
+    suspend fun updateTransactionCategory(oldCategory: String, newCategory: String, isExpense: Boolean) {
+        try {
+            val type = if (isExpense) "EXPENSE" else "INCOME"
+            LogUtils.i("TransactionRepository", "Updating transactions with category $oldCategory to $newCategory (type: $type)", "transaction")
+            
+            // Query for all transactions with the old category name and correct type
+            val snapshot = transactionsCollection
+                .whereEqualTo("category", oldCategory)
+                .whereEqualTo("type", type)
+                .get()
+                .await()
+            
+            val count = snapshot.size()
+            LogUtils.d("TransactionRepository", "Found $count transactions to update", "transaction")
+            
+            // Update each transaction with the new category name
+            snapshot.documents.forEach { doc ->
+                transactionsCollection.document(doc.id).update("category", newCategory).await()
+            }
+            
+            LogUtils.i("TransactionRepository", "Successfully updated $count transactions from $oldCategory to $newCategory", "transaction")
+        } catch (e: Exception) {
+            LogUtils.e("TransactionRepository", "Error updating transaction categories", e, "transaction")
+            throw e
+        }
+    }
+
     companion object {
         @Volatile
         private var instance: TransactionRepository? = null

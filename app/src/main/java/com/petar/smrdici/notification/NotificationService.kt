@@ -442,10 +442,8 @@ class NotificationService(private val context: Context) {
         // Use a fixed notification ID for weather notifications
         val notificationId = 2000
         
+        // Show the notification
         with(NotificationManagerCompat.from(context)) {
-            // Cancel any existing weather notifications first
-            cancel(notificationId)
-            
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 if (ActivityCompat.checkSelfPermission(
                         context,
@@ -453,26 +451,174 @@ class NotificationService(private val context: Context) {
                     ) == PackageManager.PERMISSION_GRANTED
                 ) {
                     notify(notificationId, builder.build())
-                    Log.d("NotificationService", "Daily weather notification shown")
                 } else {
                     Log.e("NotificationService", "Notification permission not granted")
                 }
             } else {
-                // For Android versions prior to 13, no runtime permission needed
                 notify(notificationId, builder.build())
-                Log.d("NotificationService", "Daily weather notification shown (pre-13)")
             }
         }
     }
     
+    /**
+     * Shows a dedicated daily morning notification with user's agenda
+     */
+    fun showDailyMorningNotification(title: String, message: String) {
+        // Log detailed information about this notification
+        val currentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        val source = if (message.contains("[Source:")) {
+            message.substringAfter("[Source:").substringBefore("]").trim()
+        } else if (message.contains("[Test:")) {
+            message.substringAfter("[Test:").substringBefore("]").trim()
+        } else {
+            "Unknown"
+        }
+        
+        // Only log the source, don't include it in the notification
+        Log.d("NotificationService", "Showing morning notification at $currentTime")
+        Log.d("NotificationService", "Source: $source")
+        Log.d("NotificationService", "Title: $title")
+        Log.d("NotificationService", "Message: ${message.lines().first()}")
+        
+        // Clean the message from any source tags
+        val cleanMessage = message
+            .replace(Regex("\\[Source:.*?\\]"), "")
+            .replace(Regex("\\[Test:.*?\\]"), "")
+            .trim()
+        
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            // Add action to identify this is coming from a morning notification
+            action = "MORNING_NOTIFICATION"
+            // Add source tracking for analytics
+            putExtra("NOTIFICATION_SOURCE", source)
+        }
+        
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            "daily_morning".hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val notificationManager = SmrdiciApplication.getNotificationManager()
+        
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(cleanMessage)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(cleanMessage))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setSmallIcon(R.drawable.ic_notification_png)
+        
+        // Create a sun icon for morning notifications
+        val morningIcon = createMorningIcon()
+        builder.setLargeIcon(morningIcon)
+        
+        // Set a specific color for morning notifications (warm orange)
+        builder.setColor("#FF9800".toColorInt())
+        
+        // Set sound and vibration based on user preferences
+        if (notificationManager.notificationSoundEnabled) {
+            builder.setDefaults(NotificationCompat.DEFAULT_SOUND)
+        }
+        
+        if (notificationManager.notificationVibrationEnabled) {
+            builder.setVibrate(longArrayOf(0, 250, 250, 250))
+        }
+        
+        // Use a fixed notification ID for morning notifications (different from weather)
+        val notificationId = 2001
+        
+        // Show the notification
+        with(NotificationManagerCompat.from(context)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ActivityCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    notify(notificationId, builder.build())
+                    Log.d("NotificationService", "Morning notification shown: $title (Source: $source)")
+                } else {
+                    Log.e("NotificationService", "Notification permission not granted")
+                }
+            } else {
+                notify(notificationId, builder.build())
+                Log.d("NotificationService", "Morning notification shown: $title (Source: $source)")
+            }
+        }
+    }
+    
+    /**
+     * Creates a bitmap icon for morning notifications
+     */
+    private fun createMorningIcon(): Bitmap {
+        val size = 128
+        val bitmap = createBitmap(size, size)
+        val canvas = Canvas(bitmap)
+        val paint = Paint().apply {
+            isAntiAlias = true
+        }
+        
+        // Fill background with warm yellow
+        paint.color = "#FFEB3B".toColorInt() // Yellow
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+        
+        // Add a simple sun ray effect
+        paint.color = "#FF9800".toColorInt() // Orange
+        paint.strokeWidth = 8f
+        val centerX = size / 2f
+        val centerY = size / 2f
+        val rayLength = size * 0.45f
+        val rayOuterLength = size * 0.35f
+        
+        // Draw 8 rays
+        for (i in 0 until 8) {
+            val angle = Math.toRadians((i * 45).toDouble())
+            val startX = centerX + (rayLength * 0.4 * Math.cos(angle)).toFloat()
+            val startY = centerY + (rayLength * 0.4 * Math.sin(angle)).toFloat()
+            val endX = centerX + (rayOuterLength * Math.cos(angle)).toFloat()
+            val endY = centerY + (rayOuterLength * Math.sin(angle)).toFloat()
+            canvas.drawLine(startX, startY, endX, endY, paint)
+        }
+        
+        // Draw face
+        paint.color = "#795548".toColorInt() // Brown
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 4f
+        
+        // Draw smile
+        val smileRadius = size * 0.2f
+        canvas.drawArc(
+            centerX - smileRadius,
+            centerY - smileRadius / 2,
+            centerX + smileRadius,
+            centerY + smileRadius,
+            0f, 180f, false, paint
+        )
+        
+        // Draw eyes
+        val eyeSize = size * 0.1f
+        canvas.drawCircle(centerX - eyeSize, centerY - eyeSize, eyeSize / 4, paint)
+        canvas.drawCircle(centerX + eyeSize, centerY - eyeSize, eyeSize / 4, paint)
+        
+        return bitmap
+    }
+    
+    /**
+     * Creates a weather icon for weather notifications
+     */
     private fun createWeatherIcon(): Bitmap {
         val size = 128
-        val bitmap = createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(size, size)
         val canvas = Canvas(bitmap)
         
         val paint = Paint().apply {
             color = Color.rgb(66, 165, 245) // Blue background
             style = Paint.Style.FILL
+            isAntiAlias = true
         }
         
         // Draw circle background
@@ -492,7 +638,7 @@ class NotificationService(private val context: Context) {
     }
     
     /**
-     * Translate any English weather descriptions in the message
+     * Translates common English weather terms to Serbian in the message
      */
     private fun translateWeatherMessage(message: String): String {
         var result = message

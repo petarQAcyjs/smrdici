@@ -33,6 +33,15 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
     
+    // Правила за категорије трошкова и прихода - дозвољавамо свим аутентификованим корисницима
+    match /expenseCategories/{categoryId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /incomeCategories/{categoryId} {
+      allow read, write: if isAuthenticated();
+    }
+    
     // Правила за нову унифицирану колекцију трансакција
     match /transactions/{document=**} {
       allow read, write: if isAuthenticated();

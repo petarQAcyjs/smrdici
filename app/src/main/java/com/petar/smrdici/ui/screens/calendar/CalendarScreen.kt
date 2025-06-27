@@ -278,7 +278,8 @@ fun CalendarScreen(
                     title = "Календар",
                     user = user,
                     navController = navController,
-                    showBackButton = true
+                    showBackButton = true,
+                    showProfileIcon = false
                 )
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },

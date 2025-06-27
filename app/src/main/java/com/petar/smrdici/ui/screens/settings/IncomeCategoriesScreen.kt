@@ -445,43 +445,7 @@ fun IncomeCategoryItem(
                 }
             }
             
-            // Edit button - small white circle in top-right
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(2.dp)
-                    .size(12.dp)
-                    .clip(CircleShape)
-                    .background(Color.White)
-                    .clickable { onEdit() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "Edit",
-                    tint = color,
-                    modifier = Modifier.size(8.dp)
-                )
-            }
-            
-            // Delete button - small white circle in bottom-right
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(2.dp)
-                    .size(12.dp)
-                    .clip(CircleShape)
-                    .background(Color.White)
-                    .clickable { onDelete() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = color,
-                    modifier = Modifier.size(8.dp)
-                )
-            }
+            // Remove the edit and delete buttons
         }
         
         Spacer(modifier = Modifier.height(1.dp))
