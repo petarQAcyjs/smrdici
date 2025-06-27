@@ -144,7 +144,6 @@ fun ProfileScreen(
                 title = "Профил",
                 user = user,
                 navController = navController,
-                showBackButton = true,
                 showProfileIcon = false
             )
         }

@@ -119,7 +119,8 @@ fun HomeScreen(
                 AppHeader(
                     title = "Почетна",
                     user = user,
-                    navController = navController
+                    navController = navController,
+                    showProfileIcon = false
                 )
             },
             snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -142,45 +143,11 @@ fun HomeScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(250.dp)
-                        .padding(bottom = 16.dp)
+                        .height(350.dp)
+                        .padding(vertical = 16.dp)
                 )
                 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    NavigationCard(
-                        title = "Листе",
-                        iconResId = R.drawable.ic_list,
-                        onClick = { navController.navigate(Screen.Lists.route) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    )
-                    
-                    NavigationCard(
-                        title = "Календар",
-                        iconResId = R.drawable.ic_calendar,
-                        onClick = { navController.navigate(Screen.Calendar.route) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    )
-                    
-                    NavigationCard(
-                        title = "Финансије",
-                        iconResId = R.drawable.ic_budget,
-                        onClick = { navController.navigate(Screen.Finance.route) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(40.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
         
@@ -189,46 +156,6 @@ fun HomeScreen(
             state = pullRefreshState,
             modifier = Modifier.align(Alignment.TopCenter)
         )
-    }
-}
-
-@Composable
-fun NavigationCard(
-    title: String,
-    iconResId: Int,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            
-            Image(
-                painter = painterResource(id = iconResId),
-                contentDescription = title,
-                modifier = Modifier.size(48.dp)
-            )
-        }
     }
 }
 
