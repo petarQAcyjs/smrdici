@@ -65,6 +65,7 @@ fun EditExpenseScreen(
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("") }
+    var customCategoryName by remember { mutableStateOf("") }
     var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var selectedAccountId by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -97,7 +98,16 @@ fun EditExpenseScreen(
         expense?.let {
             amount = it.amount.toString()
             description = it.description
-            selectedCategory = it.category
+            
+            // Try to parse the category as an enum, if not set it as a custom category
+            try {
+                ExpenseCategory.valueOf(it.category)
+                selectedCategory = it.category
+                customCategoryName = ""
+            } catch (_: Exception) {
+                selectedCategory = ""
+                customCategoryName = it.category
+            }
             
             // Parse date using UTC timezone
             val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -149,8 +159,19 @@ fun EditExpenseScreen(
                 }
             } else {
                 CategoryDropdown(
-                    selectedCategory = selectedCategory,
-                    onCategorySelected = { selectedCategory = it },
+                    selectedCategory = if (selectedCategory.isNotEmpty()) selectedCategory else customCategoryName,
+                    onCategorySelected = { name ->
+                        try {
+                            // Try to convert the string name to an ExpenseCategory enum
+                            val enumCategory = ExpenseCategory.valueOf(name)
+                            selectedCategory = enumCategory.name
+                            customCategoryName = ""
+                        } catch (_: Exception) {
+                            // If it's not a valid enum, keep the original string
+                            selectedCategory = ""
+                            customCategoryName = name
+                        }
+                    },
                     categories = expenseCategories,
                     getDisplayName = { name ->
                         try { ExpenseCategory.valueOf(name).getDisplayName() } catch (_: Exception) { name }
@@ -189,7 +210,7 @@ fun EditExpenseScreen(
                             val updatedExpense = expense?.copy(
                                 amount = amountValue,
                                 description = description,
-                                category = selectedCategory,
+                                category = if (selectedCategory.isNotEmpty()) selectedCategory else customCategoryName,
                                 date = dateStr,
                                 accountId = selectedAccountId,
                                 userId = user?.uid ?: ""

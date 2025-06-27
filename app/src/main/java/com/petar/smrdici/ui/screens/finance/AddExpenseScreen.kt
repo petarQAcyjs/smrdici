@@ -87,6 +87,7 @@ fun AddExpenseScreen(
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
+    var customCategoryName by remember { mutableStateOf("") }
     
     // Initialize date with the passed date parameter if available, otherwise use current time
     var selectedDateMillis by remember { 
@@ -204,7 +205,7 @@ fun AddExpenseScreen(
         }
         
         // Валидација категорије
-        if (selectedCategory == null) {
+        if (selectedCategory == null && customCategoryName.isEmpty()) {
             categoryError = "Изаберите категорију"
             isValid = false
         } else {
@@ -249,7 +250,7 @@ fun AddExpenseScreen(
                     userId = user.uid,
                     amount = amountValue,
                     description = description,
-                    category = selectedCategory!!.name,
+                    category = selectedCategory?.name ?: customCategoryName,
                     date = dateStr,
                     accountId = selectedAccountId
                 )
@@ -363,11 +364,25 @@ fun AddExpenseScreen(
                     }
                 } else {
                     CategoryDropdown(
-                        selectedCategory = selectedCategory?.name ?: "",
-                        onCategorySelected = { name -> selectedCategory = if (name.isNotBlank()) ExpenseCategory.entries.find { it.name == name } else null },
+                        selectedCategory = selectedCategory?.name ?: customCategoryName,
+                        onCategorySelected = { name -> 
+                            try {
+                                // Try to convert the string name to an ExpenseCategory enum
+                                selectedCategory = ExpenseCategory.valueOf(name)
+                                customCategoryName = ""
+                            } catch (_: Exception) {
+                                // If it's not a valid enum, handle it as a custom category
+                                selectedCategory = null
+                                customCategoryName = name
+                            }
+                        },
                         categories = expenseCategories,
                         getDisplayName = { name ->
-                            try { ExpenseCategory.valueOf(name).getDisplayName() } catch (_: Exception) { name }
+                            try { 
+                                ExpenseCategory.valueOf(name).getDisplayName() 
+                            } catch (_: Exception) { 
+                                name 
+                            }
                         }
                     )
                     if (categoryError.isNotEmpty()) {
