@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,9 +46,12 @@ import kotlinx.coroutines.delay
  * @param user Пријављени корисник (опционо).
  * @param navController Навигациони контролер.
  * @param showBackButton Да ли приказати дугме за назад.
+ * @param onBackClick Акција која се извршава приликом клика на дугме за назад.
  * @param onMenuClick Акција која се извршава приликом клика на мени, ако је мени приказан.
  * @param showMenu Да ли приказати дугме за мени.
  * @param showProfileIcon Да ли приказати дугме за профил.
+ * @param showLogoutButton Да ли приказати дугме за одјављивање.
+ * @param onLogoutClick Акција која се извршава приликом клика на дугме за одјављивање.
  * @param onTitleLongPress Акција која се извршава приликом дугог притиска на наслов.
  * @param actions Custom actions to be displayed in the top app bar
  */
@@ -55,12 +59,15 @@ import kotlinx.coroutines.delay
 @Composable
 fun AppHeader(
     title: String,
-    user: FirebaseUser?,
-    navController: NavController,
+    user: FirebaseUser? = null,
+    navController: NavController? = null,
     showBackButton: Boolean = false,
+    onBackClick: (() -> Unit)? = null,
     onMenuClick: () -> Unit = {},
     showMenu: Boolean = false,
     showProfileIcon: Boolean = true,
+    showLogoutButton: Boolean = false,
+    onLogoutClick: () -> Unit = {},
     onTitleLongPress: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {}
 ) {
@@ -105,7 +112,13 @@ fun AppHeader(
         },
         navigationIcon = {
             if (showBackButton) {
-                IconButton(onClick = { navController.navigateUp() }) {
+                IconButton(onClick = { 
+                    if (onBackClick != null) {
+                        onBackClick()
+                    } else if (navController != null) {
+                        navController.navigateUp() 
+                    }
+                }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Назад",
@@ -129,7 +142,7 @@ fun AppHeader(
             actions()
             
             // Profile icon
-            if (showProfileIcon) {
+            if (showProfileIcon && navController != null) {
                 IconButton(
                     onClick = { 
                         if (user != null) {
@@ -140,6 +153,17 @@ fun AppHeader(
                     Icon(
                         imageVector = Icons.Default.Person,
                         contentDescription = "Профил",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+            
+            // Logout button
+            if (showLogoutButton) {
+                IconButton(onClick = onLogoutClick) {
+                    Icon(
+                        imageVector = Icons.Default.ExitToApp,
+                        contentDescription = "Одјави се",
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }

@@ -601,6 +601,100 @@ class TransactionRepository private constructor() {
         }
     }
 
+    // Method to get transactions between two dates
+    suspend fun getTransactionsBetween(startDate: java.util.Date, endDate: java.util.Date): List<Transaction> {
+        try {
+            LogUtils.d("TransactionRepository", "Getting transactions between $startDate and $endDate", "transaction")
+            
+            // Convert dates to Firestore timestamp format
+            val startTimestamp = com.google.firebase.Timestamp(startDate)
+            val endTimestamp = com.google.firebase.Timestamp(endDate)
+            
+            // Format dates for string comparison if dates are stored as strings
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val startDateStr = dateFormat.format(startDate)
+            val endDateStr = dateFormat.format(endDate)
+            
+            // Get all transactions first (we'll filter them after)
+            val snapshot = transactionsCollection.get().await()
+            
+            // Filter transactions by date (handling both Timestamp and String date formats)
+            val transactions = snapshot.documents.mapNotNull { doc ->
+                try {
+                    val id = doc.id
+                    val userId = doc.getString("userId") ?: currentUserId
+                    val amount = doc.getDouble("amount") ?: 0.0
+                    val description = doc.getString("description") ?: ""
+                    val category = doc.getString("category") ?: ""
+                    val accountId = doc.getString("accountId") ?: ""
+                    val type = doc.getString("type") ?: ""
+                    
+                    // Get date from document
+                    val dateField = doc.get("date")
+                    val date: String
+                    val dateObj: java.util.Date
+                    
+                    when (dateField) {
+                        is com.google.firebase.Timestamp -> {
+                            dateObj = dateField.toDate()
+                            date = dateFormat.format(dateObj)
+                        }
+                        is String -> {
+                            date = dateField
+                            try {
+                                dateObj = dateFormat.parse(date) ?: java.util.Date()
+                            } catch (e: Exception) {
+                                LogUtils.e("TransactionRepository", "Error parsing date string: $date", e, "transaction")
+                                return@mapNotNull null
+                            }
+                        }
+                        else -> {
+                            return@mapNotNull null
+                        }
+                    }
+                    
+                    // Check if the transaction date is within the range
+                    if (dateObj.before(startDate) || dateObj.after(endDate)) {
+                        return@mapNotNull null
+                    }
+                    
+                    // Create the appropriate transaction object based on type
+                    when (type) {
+                        "INCOME" -> Income(
+                            id = id,
+                            userId = userId,
+                            amount = amount,
+                            description = description,
+                            category = category,
+                            date = date,
+                            accountId = accountId
+                        )
+                        "EXPENSE" -> Expense(
+                            id = id,
+                            userId = userId,
+                            amount = -amount, // Make expense amount negative for easier handling
+                            description = description,
+                            category = category,
+                            date = date,
+                            accountId = accountId
+                        )
+                        else -> null
+                    }
+                } catch (e: Exception) {
+                    LogUtils.e("TransactionRepository", "Error parsing transaction document", e, "transaction")
+                    null
+                }
+            }
+            
+            LogUtils.i("TransactionRepository", "Retrieved ${transactions.size} transactions between $startDate and $endDate", "transaction")
+            return transactions
+        } catch (e: Exception) {
+            LogUtils.e("TransactionRepository", "Error getting transactions between dates", e, "transaction")
+            return emptyList()
+        }
+    }
+
     companion object {
         @Volatile
         private var instance: TransactionRepository? = null

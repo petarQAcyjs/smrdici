@@ -1,32 +1,53 @@
 package com.petar.smrdici.ui.screens.home
 
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Event
+import com.petar.smrdici.data.model.Expense
+import com.petar.smrdici.data.model.ExpenseCategory
+import com.petar.smrdici.data.model.Transaction
+import com.petar.smrdici.data.model.getExpenseCategoryColor
 import com.petar.smrdici.data.repository.EventRepository
+import com.petar.smrdici.data.repository.TransactionRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Job
+import kotlin.math.abs
+
+// Data class for expense category summaries
+data class CategorySummary(
+    val categoryName: String,
+    val iconName: String,
+    val color: Color,
+    val amount: Double,
+    val percentage: Double
+)
 
 class HomeViewModel() : ViewModel() {
     // Лења иницијализација EventRepository
-    private val eventRepository by lazy { 
-        EventRepository(FirebaseFirestore.getInstance(), FirebaseAuth.getInstance()) 
-    }
+    private val eventRepository = EventRepository.getInstance()
+    
+    private val _events = MutableStateFlow<List<Event>>(emptyList())
+    val events: StateFlow<List<Event>> = _events
     
     private val _todayEvents = MutableStateFlow<List<Event>>(emptyList())
     val todayEvents: StateFlow<List<Event>> = _todayEvents
     
-    private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
+    private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.Initial)
     val syncStatus: StateFlow<SyncStatus> = _syncStatus
     
     private val auth = FirebaseAuth.getInstance()
@@ -35,61 +56,63 @@ class HomeViewModel() : ViewModel() {
     private val loadedEventsCache = mutableMapOf<String, List<Event>>()
     
     // Застава за спречавање вишеструких истовремених учитавања
-    private var isLoadingEvents = false
+    var isLoadingEvents by mutableStateOf(false)
+        private set
     
     // Job за праћење текућег учитавања
     private var currentLoadJob: Job? = null
     
+    // Expense chart data
+    private val _expenseChartData = MutableStateFlow<List<CategorySummary>>(emptyList())
+    val expenseChartData: StateFlow<List<CategorySummary>> = _expenseChartData
+    
+    private val _isLoadingExpenseData = MutableStateFlow(false)
+    val isLoadingExpenseData: StateFlow<Boolean> = _isLoadingExpenseData
+    
+    // Lazy initialization of TransactionRepository
+    private val transactionRepository = TransactionRepository.getInstance()
+    
+    companion object {
+        private const val TAG = "HomeViewModel"
+    }
+    
     init {
-        // Учитавамо догађаје само када је HomeViewModel активан
         loadTodayEvents()
-        
-        // УКЛАЊАМО БЕСКОНАЧНУ ПЕТЉУ ЗА ОСВЕЖАВАЊЕ
-        // viewModelScope.launch {
-        //     while (true) {
-        //         delay(60000)
-        //         refreshEvents()
-        //     }
-        // }
+        loadExpenseData()
     }
     
     private fun loadTodayEvents() {
-        // Спречавамо вишеструка паралелна учитавања
-        if (isLoadingEvents) return
-        
-        // Отказујемо претходни посао ако постоји
+        // Cancel any previous job
         currentLoadJob?.cancel()
         
-        viewModelScope.launch {
-            isLoadingEvents = true
+        isLoadingEvents = true
+        
+        currentLoadJob = viewModelScope.launch {
             try {
-                Log.d("HomeViewModel", "\n=== УЧИТАВАЊЕ ДАНАШЊИХ ДОГАЂАЈА ===")
-                // Проверавамо да ли је корисник пријављен
-                if (auth.currentUser?.uid == null) {
-                    Log.d("HomeViewModel", "Корисник није пријављен, прекидам учитавање догађаја")
-                    return@launch
-                }
-                
-                // Постављамо временски опсег за данас
+                // Постављамо почетак и крај дана
                 val calendar = Calendar.getInstance()
-                calendar.set(Calendar.HOUR_OF_DAY, 0)
-                calendar.set(Calendar.MINUTE, 0)
-                calendar.set(Calendar.SECOND, 0)
-                val startOfDay = calendar.time
+                val today = calendar.apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
                 
-                calendar.set(Calendar.HOUR_OF_DAY, 23)
-                calendar.set(Calendar.MINUTE, 59)
-                calendar.set(Calendar.SECOND, 59)
-                val endOfDay = calendar.time
+                val endOfDay = calendar.apply {
+                    set(Calendar.HOUR_OF_DAY, 23)
+                    set(Calendar.MINUTE, 59)
+                    set(Calendar.SECOND, 59)
+                    set(Calendar.MILLISECOND, 999)
+                }.time
                 
                 Log.d("HomeViewModel", """
                     Тражим догађаје за данас:
-                    - Почетак дана: ${formatDate(startOfDay)}
+                    - Почетак дана: ${formatDate(today)}
                     - Крај дана: ${formatDate(endOfDay)}
                 """.trimIndent())
                 
                 // Проверавамо кеш
-                val cacheKey = "${formatDate(startOfDay)}_${formatDate(endOfDay)}"
+                val cacheKey = "${formatDate(today)}_${formatDate(endOfDay)}"
                 if (loadedEventsCache.containsKey(cacheKey)) {
                     Log.d("HomeViewModel", "Користим кеширане догађаје")
                     val cachedEvents = loadedEventsCache[cacheKey]!!
@@ -98,7 +121,7 @@ class HomeViewModel() : ViewModel() {
                 }
                 
                 // Учитавамо све догађаје за данас
-                eventRepository.getEvents(startOfDay, endOfDay)
+                eventRepository.getEvents(today, endOfDay)
                     .collect { events ->
                         Log.d("HomeViewModel", "Учитано ${events.size} догађаја")
                         
@@ -198,41 +221,179 @@ class HomeViewModel() : ViewModel() {
     // Функција за синхронизацију догађаја
     fun syncEvents() {
         if (_syncStatus.value == SyncStatus.Syncing) {
-            Log.d("HomeViewModel", "Синхронизација у току, нећу поново покренути")
             return
         }
         
+        _syncStatus.value = SyncStatus.Syncing
+        
         viewModelScope.launch {
             try {
-                Log.d("HomeViewModel", "Почињем синхронизацију догађаја...")
-                _syncStatus.value = SyncStatus.Syncing
-                isLoadingEvents = true
-                
-                // Затим покушавамо синхронизацију
-                Log.d("HomeViewModel", "Покрећем синхронизацију са сервером...")
-                eventRepository.syncEvents()
-                    .onSuccess {
-                        Log.d("HomeViewModel", "Синхронизација успешна!")
-                        _syncStatus.value = SyncStatus.Success
-                        // Поново учитавамо догађаје након успешне синхронизације
-                        loadTodayEvents()
-                        // Враћамо статус на Idle након кратког времена
-                        delay(3000)
-                        if (_syncStatus.value == SyncStatus.Success) {
-                            _syncStatus.value = SyncStatus.Idle
-                        }
-                    }
-                    .onFailure { e ->
-                        Log.e("HomeViewModel", "Грешка при синхронизацији", e)
-                        _syncStatus.value = SyncStatus.Error(e.message ?: "Грешка при синхронизацији")
-                    }
-                
+                loadTodayEvents()
+                _syncStatus.value = SyncStatus.Success("Догађаји успешно синхронизовани")
             } catch (e: Exception) {
-                Log.e("HomeViewModel", "Грешка при синхронизацији", e)
-                _syncStatus.value = SyncStatus.Error(e.message ?: "Непозната грешка")
+                _syncStatus.value = SyncStatus.Error("Грешка при синхронизацији: ${e.message}")
+            }
+        }
+    }
+    
+    // Function to load expense data for the current period
+    fun loadCurrentPeriodExpenses() {
+        viewModelScope.launch {
+            _isLoadingExpenseData.value = true
+            try {
+                // Get current month start and end dates
+                val calendar = Calendar.getInstance()
+                calendar.set(Calendar.DAY_OF_MONTH, 1)
+                calendar.set(Calendar.HOUR_OF_DAY, 0)
+                calendar.set(Calendar.MINUTE, 0)
+                calendar.set(Calendar.SECOND, 0)
+                val startDate = calendar.time
+                
+                calendar.add(Calendar.MONTH, 1)
+                calendar.add(Calendar.DAY_OF_MONTH, -1)
+                calendar.set(Calendar.HOUR_OF_DAY, 23)
+                calendar.set(Calendar.MINUTE, 59)
+                calendar.set(Calendar.SECOND, 59)
+                val endDate = calendar.time
+                
+                Log.d("HomeViewModel", "Loading expenses from ${formatDate(startDate)} to ${formatDate(endDate)}")
+                
+                // Get transactions for the current period
+                val transactions = transactionRepository.getTransactionsBetween(startDate, endDate)
+                
+                // Filter expenses only
+                val expenses = transactions.filter { it is Expense }
+                
+                // Calculate total amount
+                val totalAmount = expenses.sumOf { abs(it.amount) }
+                
+                // Group by category and create summaries
+                val categorySummaries = expenses
+                    .groupBy { it.category ?: "Other" }
+                    .map { (category, categoryTransactions) ->
+                        val amount = categoryTransactions.sumOf { abs(it.amount) }
+                        val percentage = if (totalAmount > 0) (amount / totalAmount) * 100 else 0.0
+                        
+                        // Find appropriate icon name for the category
+                        val iconName = try {
+                            // Try to match with enum category
+                            val enumCategory = ExpenseCategory.valueOf(category)
+                            when (enumCategory) {
+                                ExpenseCategory.FOOD -> "Restaurant"
+                                ExpenseCategory.TRANSPORTATION -> "DirectionsCar"
+                                ExpenseCategory.ENTERTAINMENT -> "SportsEsports"
+                                ExpenseCategory.UTILITIES -> "Receipt"
+                                ExpenseCategory.RENT -> "Home"
+                                ExpenseCategory.SHOPPING -> "ShoppingCart"
+                                ExpenseCategory.HEALTH -> "LocalHospital"
+                                ExpenseCategory.EDUCATION -> "School"
+                                ExpenseCategory.TRAVEL -> "Flight"
+                                else -> "Receipt"
+                            }
+                        } catch (e: IllegalArgumentException) {
+                            // Default icon for custom categories
+                            "Receipt"
+                        }
+                        
+                        CategorySummary(
+                            categoryName = category,
+                            iconName = iconName,
+                            color = getExpenseCategoryColor(category),
+                            amount = amount,
+                            percentage = percentage
+                        )
+                    }
+                    .sortedByDescending { it.amount }
+                
+                Log.d("HomeViewModel", "Loaded expenses by category: ${categorySummaries.size} categories")
+                
+                _expenseChartData.value = categorySummaries
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error loading expense data", e)
+                _expenseChartData.value = emptyList()
             } finally {
-                isLoadingEvents = false
-                Log.d("HomeViewModel", "Синхронизација завршена!")
+                _isLoadingExpenseData.value = false
+            }
+        }
+    }
+    
+    // Load expense data for the current period
+    fun loadExpenseData() {
+        viewModelScope.launch {
+            try {
+                _isLoadingExpenseData.value = true
+                
+                // Get start and end dates for the current month
+                val calendar = Calendar.getInstance()
+                val startDate = calendar.apply {
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }.time
+                
+                val endDate = calendar.apply {
+                    set(Calendar.DAY_OF_MONTH, calendar.getActualMaximum(Calendar.DAY_OF_MONTH))
+                    set(Calendar.HOUR_OF_DAY, 23)
+                    set(Calendar.MINUTE, 59)
+                    set(Calendar.SECOND, 59)
+                }.time
+                
+                // Get transactions for the current month
+                val transactions = transactionRepository.getTransactionsBetween(startDate, endDate)
+                
+                // Filter expense transactions
+                val expenses = transactions.filter { it is Expense }
+                
+                // Calculate total for percentages
+                val totalAmount = expenses.sumOf { Math.abs(it.amount) }
+                
+                // Group by category and create summaries
+                val categorySummaries = expenses
+                    .groupBy { it.category ?: "Other" }
+                    .map { (category, categoryTransactions) ->
+                        val amount = categoryTransactions.sumOf { Math.abs(it.amount) }
+                        val percentage = if (totalAmount > 0) (amount / totalAmount) * 100 else 0.0
+                        
+                        // Find appropriate icon name for the category
+                        val iconName = try {
+                            // Try to match with enum category
+                            val enumCategory = ExpenseCategory.valueOf(category)
+                            when (enumCategory) {
+                                ExpenseCategory.FOOD -> "Restaurant"
+                                ExpenseCategory.TRANSPORTATION -> "DirectionsCar"
+                                ExpenseCategory.ENTERTAINMENT -> "SportsEsports"
+                                ExpenseCategory.UTILITIES -> "Receipt"
+                                ExpenseCategory.RENT -> "Home"
+                                ExpenseCategory.SHOPPING -> "ShoppingCart"
+                                ExpenseCategory.HEALTH -> "LocalHospital"
+                                ExpenseCategory.EDUCATION -> "School"
+                                ExpenseCategory.TRAVEL -> "Flight"
+                                else -> "Receipt"
+                            }
+                        } catch (e: IllegalArgumentException) {
+                            // Default icon for custom categories
+                            "Receipt"
+                        }
+                        
+                        CategorySummary(
+                            categoryName = category,
+                            iconName = iconName,
+                            color = getExpenseCategoryColor(category),
+                            amount = amount,
+                            percentage = percentage
+                        )
+                    }
+                    .sortedByDescending { it.amount }
+                
+                _expenseChartData.value = categorySummaries
+                _isLoadingExpenseData.value = false
+                
+                Log.d(TAG, "Loaded expense data: ${categorySummaries.size} categories")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading expense data", e)
+                _expenseChartData.value = emptyList()
+                _isLoadingExpenseData.value = false
             }
         }
     }
@@ -256,8 +417,9 @@ class HomeViewModel() : ViewModel() {
 
 // Класа за праћење статуса синхронизације
 sealed class SyncStatus {
+    data object Initial : SyncStatus()
     data object Idle : SyncStatus()
     data object Syncing : SyncStatus()
-    data object Success : SyncStatus()
+    data class Success(val message: String) : SyncStatus()
     data class Error(val message: String) : SyncStatus()
 } 

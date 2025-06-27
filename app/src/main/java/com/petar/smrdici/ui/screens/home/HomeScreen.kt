@@ -1,5 +1,6 @@
 @file:OptIn(ExperimentalMaterialApi::class)
 package com.petar.smrdici.ui.screens.home
+
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,10 +21,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshState
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -41,10 +44,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -55,107 +63,153 @@ import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
+import com.petar.smrdici.data.model.ExpenseCategory
+import com.petar.smrdici.data.model.getExpenseCategoryColor
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
-import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
+import com.petar.smrdici.ui.components.PieChart
+import com.petar.smrdici.ui.components.PieChartData
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
-    authViewModel: AuthViewModel = viewModel(),
-    homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory())
+    authViewModel: AuthViewModel = viewModel()
 ) {
-    val coroutineScope = rememberCoroutineScope()
+    val authState = authViewModel.authState.collectAsState().value
+    val homeViewModel: HomeViewModel = viewModel()
+    val todayEvents = homeViewModel.todayEvents.collectAsState().value
+    val syncStatus = homeViewModel.syncStatus.collectAsState().value
+    
     val snackbarHostState = remember { SnackbarHostState() }
-    val authState by authViewModel.authState.collectAsState()
-    val todayEvents by homeViewModel.todayEvents.collectAsState()
-    val syncStatus by homeViewModel.syncStatus.collectAsState()
-    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
     
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
         onRefresh = {
-            coroutineScope.launch {
-                isRefreshing = true
-                homeViewModel.syncEvents()
-            }
+            isRefreshing = true
+            homeViewModel.syncEvents()
         }
     )
     
+    // Observe sync status and show messages
     LaunchedEffect(syncStatus) {
         when (syncStatus) {
-            is SyncStatus.Success, is SyncStatus.Error, is SyncStatus.Idle -> {
+            is SyncStatus.Success -> {
+                scope.launch {
+                    snackbarHostState.showSnackbar(syncStatus.message)
+                }
+                isRefreshing = false
+            }
+            is SyncStatus.Error -> {
+                scope.launch {
+                    snackbarHostState.showSnackbar(syncStatus.message)
+                }
                 isRefreshing = false
             }
             else -> {}
         }
-        
-        if (syncStatus is SyncStatus.Error) {
-            (syncStatus as SyncStatus.Error).message.let { errorMsg ->
-                snackbarHostState.showSnackbar("Грешка: $errorMsg")
-            }
-        }
     }
     
-    val user = if (authState is AuthState.Authenticated) {
-        (authState as AuthState.Authenticated).user
-    } else null
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .pullRefresh(pullRefreshState)
-    ) {
-        Scaffold(
-            topBar = {
-                AppHeader(
-                    title = "Почетна",
-                    user = user,
-                    navController = navController,
-                    showProfileIcon = false
-                )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                TodayActivitiesCard(
-                    events = todayEvents,
-                    onEventClick = { event ->
-                        event.id?.let { _ ->
-                            navController.navigate(Screen.Calendar.route)
-                        }
-                    },
+    Scaffold(
+        topBar = {
+            AppHeader(
+                title = "Почетна",
+                showLogoutButton = true,
+                onLogoutClick = {
+                    authViewModel.signOut()
+                }
+            )
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .pullRefresh(pullRefreshState)
+        ) {
+            // Check if user is authenticated
+            if (authState !is AuthState.Authenticated) {
+                // Show login prompt
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(350.dp)
-                        .padding(vertical = 16.dp)
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Пријавите се да бисте видели садржај",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            } else {
+                // Show content for authenticated user
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Welcome message
+                    Text(
+                        text = "Добродошли!",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Today's activities card
+                    TodayActivitiesCard(
+                        events = todayEvents,
+                        onEventClick = { event ->
+                            event.id?.let { _ ->
+                                navController.navigate(Screen.Calendar.route)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(350.dp)
+                            .padding(vertical = 16.dp)
+                    )
+                    
+                    // Add Expense Pie Chart Card
+                    ExpensePieChartCard(
+                        expenseData = homeViewModel.expenseChartData.collectAsState().value,
+                        isLoading = homeViewModel.isLoadingExpenseData.collectAsState().value,
+                        onCardClick = {
+                            navController.navigate(Screen.Finance.route)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(350.dp)
+                            .padding(vertical = 8.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
             }
+            
+            // Pull to refresh indicator
+            androidx.compose.material.pullrefresh.PullRefreshIndicator(
+                refreshing = isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
-        
-        StandardPullRefreshIndicator(
-            refreshing = isRefreshing,
-            state = pullRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
     }
 }
 
@@ -314,6 +368,134 @@ fun EventItemCompact(
                     style = MaterialTheme.typography.bodySmall,
                     color = textColor.copy(alpha = 0.7f)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun ExpensePieChartCard(
+    expenseData: List<CategorySummary>,
+    isLoading: Boolean,
+    onCardClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onCardClick() },
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Трошкови по категоријама",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (expenseData.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Нема података за приказ",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                // Create pie chart data
+                val pieChartData = expenseData.map { category ->
+                    PieChartData.Slice(
+                        value = category.amount.toFloat(),
+                        color = category.color,
+                        label = category.categoryName
+                    )
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PieChart(
+                        data = pieChartData,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Legend
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    expenseData.take(5).forEach { category ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .background(
+                                        color = category.color,
+                                        shape = CircleShape
+                                    )
+                            )
+                            
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            Text(
+                                text = category.categoryName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            
+                            Text(
+                                text = String.format("%.2f", category.amount),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    
+                    // Show "View more" if there are more than 5 categories
+                    if (expenseData.size > 5) {
+                        Text(
+                            text = "Види све категорије...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .padding(top = 8.dp)
+                        )
+                    }
+                }
             }
         }
     }
