@@ -449,22 +449,59 @@ class CategoryManager private constructor(context: Context) {
     // Fetch categories with offline fallback
     suspend fun getExpenseCategoriesWithFallback(): List<String> {
         return try {
+            // Get categories from Firestore
             val firestoreCategories = fetchAllExpenseCategoriesFromFirestore()
-            saveExpenseCategoriesToLocal(firestoreCategories)
-            firestoreCategories
+            
+            // Ensure all enum categories are included
+            val allCategories = firestoreCategories.toMutableList()
+            for (enumCategory in ExpenseCategory.entries) {
+                if (!allCategories.contains(enumCategory.name)) {
+                    allCategories.add(enumCategory.name)
+                }
+            }
+            
+            // Save to local storage
+            saveExpenseCategoriesToLocal(allCategories)
+            allCategories
         } catch (e: Exception) {
             Log.d(TAG, "Firestore unavailable, loading expense categories from local cache.")
-            getAllExpenseCategories()
+            // Include both custom categories and enum categories
+            val allCategories = getAllExpenseCategories().toMutableList()
+            for (enumCategory in ExpenseCategory.entries) {
+                if (!allCategories.contains(enumCategory.name)) {
+                    allCategories.add(enumCategory.name)
+                }
+            }
+            allCategories
         }
     }
+    
     suspend fun getIncomeCategoriesWithFallback(): List<String> {
         return try {
+            // Get categories from Firestore
             val firestoreCategories = fetchAllIncomeCategoriesFromFirestore()
-            saveIncomeCategoriesToLocal(firestoreCategories)
-            firestoreCategories
+            
+            // Ensure all enum categories are included
+            val allCategories = firestoreCategories.toMutableList()
+            for (enumCategory in IncomeCategory.entries) {
+                if (!allCategories.contains(enumCategory.name)) {
+                    allCategories.add(enumCategory.name)
+                }
+            }
+            
+            // Save to local storage
+            saveIncomeCategoriesToLocal(allCategories)
+            allCategories
         } catch (e: Exception) {
             Log.d(TAG, "Firestore unavailable, loading income categories from local cache.")
-            getAllIncomeCategories()
+            // Include both custom categories and enum categories
+            val allCategories = getAllIncomeCategories().toMutableList()
+            for (enumCategory in IncomeCategory.entries) {
+                if (!allCategories.contains(enumCategory.name)) {
+                    allCategories.add(enumCategory.name)
+                }
+            }
+            allCategories
         }
     }
 
