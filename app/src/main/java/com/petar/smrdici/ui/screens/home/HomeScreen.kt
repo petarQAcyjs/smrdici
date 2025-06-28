@@ -1,6 +1,7 @@
 @file:OptIn(ExperimentalMaterialApi::class)
 package com.petar.smrdici.ui.screens.home
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -48,6 +49,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -82,6 +85,21 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.min
+
+// Data classes for stacked bar chart
+data class CategoryExpense(
+    val categoryName: String,
+    val color: Color,
+    val amount: Double,
+    val percentage: Double
+)
+
+data class PeriodExpenses(
+    val periodName: String,
+    val totalAmount: Double,
+    val categoryExpenses: List<CategoryExpense>
+)
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -184,6 +202,19 @@ fun HomeScreen(
                     ExpensePieChartCard(
                         expenseData = homeViewModel.expenseChartData.collectAsState().value,
                         isLoading = homeViewModel.isLoadingExpenseData.collectAsState().value,
+                        onCardClick = {
+                            navController.navigate(Screen.Finance.route)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(350.dp)
+                            .padding(vertical = 8.dp)
+                    )
+                    
+                    // Add Expense History Card with stacked bar chart
+                    ExpenseHistoryCard(
+                        historyData = homeViewModel.expenseHistoryData.collectAsState().value,
+                        isLoading = homeViewModel.isLoadingHistoryData.collectAsState().value,
                         onCardClick = {
                             navController.navigate(Screen.Finance.route)
                         },
@@ -586,6 +617,203 @@ private fun CompactCategoryLegendItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun ExpenseHistoryCard(
+    historyData: List<PeriodExpenses>,
+    isLoading: Boolean,
+    onCardClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onCardClick() },
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Card title
+            Text(
+                text = "Историја трошкова",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (historyData.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Нема података за приказ",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                // Main chart area
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                ) {
+                    // Simple stacked bar chart implementation
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val availableWidth = size.width - (historyData.size * 20f)
+                        val barWidth = min(40f, availableWidth / historyData.size)
+                        val startX = (size.width - ((historyData.size - 1) * 20f + historyData.size * barWidth)) / 2
+                        
+                        // Find maximum value for scaling
+                        val maxValue = historyData.maxOfOrNull { it.totalAmount } ?: 0.0
+                        
+                        historyData.forEachIndexed { index, periodData ->
+                            val x = startX + index * (barWidth + 20f)
+                            var yOffset = size.height
+                            val scaleFactor = if (maxValue > 0) size.height / maxValue else 0.0
+                            
+                            // Draw each category segment in the bar
+                            periodData.categoryExpenses.forEach { category ->
+                                val segmentHeight = (category.amount * scaleFactor).toFloat()
+                                
+                                // Don't draw segments that are too small to be visible
+                                if (segmentHeight >= 1f) {
+                                    drawRect(
+                                        color = category.color,
+                                        topLeft = Offset(x, yOffset - segmentHeight),
+                                        size = Size(barWidth, segmentHeight)
+                                    )
+                                    
+                                    yOffset -= segmentHeight
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Period labels
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    historyData.forEach { periodData ->
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = periodData.periodName,
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            
+                            Text(
+                                text = String.format("%.0f", periodData.totalAmount),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Legend for top categories
+                val allCategories = mutableListOf<CategoryExpense>()
+                
+                // Collect all unique categories
+                historyData.forEach { period ->
+                    period.categoryExpenses.forEach { category ->
+                        if (allCategories.none { it.categoryName == category.categoryName }) {
+                            allCategories.add(category)
+                        }
+                    }
+                }
+                
+                // Sort by total amount across all periods and take top 5
+                val topCategories = allCategories.sortedByDescending { category ->
+                    historyData.sumOf { period ->
+                        period.categoryExpenses
+                            .find { it.categoryName == category.categoryName }?.amount ?: 0.0
+                    }
+                }.take(5)
+                
+                // Display legend in rows of 3 items
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                ) {
+                    val rows = topCategories.chunked(3)
+                    rows.forEach { rowCategories ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            rowCategories.forEach { category ->
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(category.color)
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    
+                                    Text(
+                                        text = category.categoryName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            
+                            // Add empty spacers if row is not full
+                            repeat(3 - rowCategories.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
             }
         }
     }

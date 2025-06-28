@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -84,11 +85,21 @@ class HomeViewModel(
     private val _expenseChartData = MutableStateFlow<List<CategorySummary>>(emptyList())
     val expenseChartData: StateFlow<List<CategorySummary>> = _expenseChartData
     
+    // Stacked bar chart data for multiple periods
+    private val _expenseHistoryData = MutableStateFlow<List<PeriodExpenses>>(emptyList())
+    val expenseHistoryData: StateFlow<List<PeriodExpenses>> = _expenseHistoryData
+    
     private val _isLoadingExpenseData = MutableStateFlow(false)
     val isLoadingExpenseData: StateFlow<Boolean> = _isLoadingExpenseData
     
+    private val _isLoadingHistoryData = MutableStateFlow(false)
+    val isLoadingHistoryData: StateFlow<Boolean> = _isLoadingHistoryData
+    
     // Lazy initialization of TransactionRepository
     private val transactionRepository = TransactionRepository.getInstance()
+    
+    // Number of previous periods to show in the stacked bar chart
+    private val numPeriodsToShow = 8 // Current period + 7 previous periods
     
     // Predefined colors for category cards - same as in FinanceViewModel
     private val categoryColors = listOf(
@@ -154,11 +165,13 @@ class HomeViewModel(
     init {
         loadTodayEvents()
         loadExpenseData()
+        loadExpenseHistoryData()
     }
     
     // Function to refresh expense data (similar to FinanceViewModel's refreshData)
     fun refreshExpenseData() {
         loadExpenseData()
+        loadExpenseHistoryData()
     }
     
     private fun loadTodayEvents() {
@@ -451,6 +464,179 @@ class HomeViewModel(
                 _isLoadingExpenseData.value = false
             }
         }
+    }
+    
+    // Function to load expense history data for multiple periods
+    fun loadExpenseHistoryData() {
+        viewModelScope.launch {
+            try {
+                _isLoadingHistoryData.value = true
+                
+                // Get the period setting from SettingsRepository
+                val configuredPeriod = settingsRepository.period.first()
+                val now = LocalDate.now()
+                
+                // Calculate periods based on the configured period type
+                val periods = calculatePeriods(configuredPeriod, now, numPeriodsToShow)
+                
+                // Create a list to hold all period expense data
+                val periodExpensesList = mutableListOf<PeriodExpenses>()
+                
+                // Process each period
+                for ((index, period) in periods.withIndex()) {
+                    val (startDate, endDate, periodName) = period
+                    
+                    // Convert LocalDate to Calendar for the repository
+                    val startCalendar = Calendar.getInstance().apply {
+                        set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    
+                    val endCalendar = Calendar.getInstance().apply {
+                        set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
+                        set(Calendar.MILLISECOND, 999)
+                    }
+                    
+                    // Get transactions for this period
+                    val allTransactions = transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
+                    
+                    // Filter to only include expenses
+                    val expenses = allTransactions.filterIsInstance<Expense>()
+                    
+                    // Calculate total for percentages - use absolute values for expenses
+                    val totalAmount = expenses.sumOf { abs(it.amount) }
+                    
+                    // Group by category and create category expenses
+                    val categoryExpenses = expenses
+                        .groupBy { it.category ?: "OTHER" }
+                        .map { (category, categoryTransactions) ->
+                            val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
+                            val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+                            
+                            // Get a consistent color for this category using CategoryManager
+                            val categoryManager = CategoryManager.getInstance(context)
+                            val savedColorValue = categoryManager.getCategoryColor(category, true)
+                            
+                            // Use the saved color or fall back to the hash-based approach
+                            val color = if (savedColorValue != null) {
+                                Color(savedColorValue)
+                            } else {
+                                // Use a color based on category hash code for consistency
+                                val colorIndex = abs(category.hashCode()) % categoryColors.size
+                                categoryColors[colorIndex]
+                            }
+                            
+                            // Get display name for the category
+                            val displayName = try {
+                                // Try to get the enum value and its display name
+                                ExpenseCategory.valueOf(category).getDisplayName()
+                            } catch (e: Exception) {
+                                // If not a standard category, just use the category string directly
+                                category
+                            }
+                            
+                            CategoryExpense(
+                                categoryName = displayName,
+                                color = color,
+                                amount = categoryAmount,
+                                percentage = percentage
+                            )
+                        }
+                        .sortedByDescending { it.amount }
+                    
+                    // Add this period's data to our list
+                    periodExpensesList.add(
+                        PeriodExpenses(
+                            periodName = periodName,
+                            totalAmount = totalAmount,
+                            categoryExpenses = categoryExpenses
+                        )
+                    )
+                }
+                
+                // Reverse the list so most recent period is last (rightmost in chart)
+                _expenseHistoryData.value = periodExpensesList.reversed()
+                _isLoadingHistoryData.value = false
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading expense history data", e)
+                _expenseHistoryData.value = emptyList()
+                _isLoadingHistoryData.value = false
+            }
+        }
+    }
+    
+    // Helper function to calculate period ranges based on the period type
+    private fun calculatePeriods(
+        periodType: Period,
+        currentDate: LocalDate,
+        count: Int
+    ): List<Triple<LocalDate, LocalDate, String>> {
+        val periods = mutableListOf<Triple<LocalDate, LocalDate, String>>()
+        val dateFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
+        val monthFormatter = DateTimeFormatter.ofPattern("MMM", Locale.getDefault())
+        val customStartDay = runBlocking { settingsRepository.customPeriodStartDay.first() }
+        
+        for (i in 0 until count) {
+            val (startDate, endDate, periodName) = when (periodType) {
+                Period.DAILY -> {
+                    val date = currentDate.minusDays(i.toLong())
+                    val name = if (i == 0) "Данас" else if (i == 1) "Јуче" else date.format(dateFormatter)
+                    Triple(date, date, name)
+                }
+                Period.WEEKLY -> {
+                    val weekStart = currentDate.minusWeeks(i.toLong())
+                        .minusDays((currentDate.dayOfWeek.value - 1).toLong())
+                    val weekEnd = weekStart.plusDays(6)
+                    val name = if (i == 0) "Ова недеља" else weekStart.format(dateFormatter)
+                    Triple(weekStart, weekEnd, name)
+                }
+                Period.MONTHLY -> {
+                    val month = YearMonth.from(currentDate).minusMonths(i.toLong())
+                    val name = if (i == 0) "Овај месец" else month.format(monthFormatter)
+                    Triple(month.atDay(1), month.atEndOfMonth(), name)
+                }
+                Period.YEARLY -> {
+                    val year = currentDate.year - i
+                    val name = if (i == 0) "Ова година" else year.toString()
+                    Triple(LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31), name)
+                }
+                Period.CUSTOM -> {
+                    // Calculate custom periods based on start day
+                    val referenceDate = currentDate.minusMonths(i.toLong())
+                    val currentMonth = YearMonth.from(referenceDate)
+                    
+                    val periodStartDate = if (referenceDate.dayOfMonth >= customStartDay) {
+                        currentMonth.atDay(customStartDay)
+                    } else {
+                        currentMonth.minusMonths(1).atDay(customStartDay)
+                    }
+                    
+                    val periodEndDate = periodStartDate.plusMonths(1).minusDays(1)
+                    val name = if (i == 0) "Овај период" else periodStartDate.format(dateFormatter)
+                    
+                    Triple(periodStartDate, periodEndDate, name)
+                }
+                else -> {
+                    // Default to monthly for "ALL" or any other case
+                    val month = YearMonth.from(currentDate).minusMonths(i.toLong())
+                    Triple(month.atDay(1), month.atEndOfMonth(), month.format(monthFormatter))
+                }
+            }
+            
+            periods.add(Triple(startDate, endDate, periodName))
+        }
+        
+        return periods
+    }
+    
+    // Add missing runBlocking import at the top
+    private fun runBlocking(block: suspend () -> Int): Int {
+        var result = 1 // Default value
+        kotlinx.coroutines.runBlocking {
+            result = block()
+        }
+        return result
     }
     
     override fun onCleared() {
