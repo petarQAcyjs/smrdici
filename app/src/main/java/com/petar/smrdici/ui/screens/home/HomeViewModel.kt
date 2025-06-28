@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.screens.home
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,11 +16,22 @@ import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.ExpenseCategory
 import com.petar.smrdici.data.model.Transaction
 import com.petar.smrdici.data.model.getExpenseCategoryColor
+import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.data.repository.EventRepository
 import com.petar.smrdici.data.repository.TransactionRepository
+import com.petar.smrdici.data.repository.SettingsRepository
+import com.petar.smrdici.ui.screens.settings.Period
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -27,6 +39,9 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlin.math.abs
+import org.threeten.bp.LocalDate
+import org.threeten.bp.YearMonth
+import org.threeten.bp.format.DateTimeFormatter
 
 // Data class for expense category summaries
 data class CategorySummary(
@@ -37,7 +52,10 @@ data class CategorySummary(
     val percentage: Double
 )
 
-class HomeViewModel() : ViewModel() {
+class HomeViewModel(
+    private val context: Context,
+    private val settingsRepository: SettingsRepository = SettingsRepository.getInstance(context)
+) : ViewModel() {
     // Лења иницијализација EventRepository
     private val eventRepository = EventRepository.getInstance()
     
@@ -72,12 +90,74 @@ class HomeViewModel() : ViewModel() {
     // Lazy initialization of TransactionRepository
     private val transactionRepository = TransactionRepository.getInstance()
     
+    // Predefined colors for category cards - same as in FinanceViewModel
+    private val categoryColors = listOf(
+        Color(0xFFFF5252),  // Red
+        Color(0xFFFF9800),  // Orange
+        Color(0xFFFFEB3B),  // Yellow
+        Color(0xFF4CAF50),  // Green
+        Color(0xFF2196F3),  // Blue
+        Color(0xFF673AB7),  // Purple
+        Color(0xFFE91E63),  // Pink
+        Color(0xFF009688),  // Teal
+        Color(0xFF795548),  // Brown
+        Color(0xFF607D8B),  // Blue Grey
+        Color(0xFFFFA000),  // Amber
+        Color(0xFF00BCD4),  // Cyan
+        Color(0xFF3F51B5)   // Indigo
+    )
+    
+    // Category icon mapping - same as in FinanceViewModel
+    private val categoryIconMapping = mapOf(
+        "GROCERIES" to "LocalGroceryStore",
+        "UTILITIES" to "Receipt",
+        "RENT" to "Home",
+        "TRANSPORTATION" to "DirectionsCar",
+        "ENTERTAINMENT" to "SportsEsports",
+        "HEALTH" to "LocalHospital",
+        "EDUCATION" to "School",
+        "CLOTHING" to "Checkroom",
+        "TRAVEL" to "Flight",
+        "FOOD" to "Restaurant",
+        "COFFEE" to "LocalCafe",
+        "ALCOHOL" to "LocalBar",
+        "CIGARETTES" to "SmokingRooms",
+        "GIFTS" to "CardGiftcard",
+        "SUBSCRIPTIONS" to "Subscriptions",
+        "ELECTRONICS" to "Devices",
+        "HOME" to "Home",
+        "BEAUTY" to "Face",
+        "PETS" to "Pets",
+        "SPORTS" to "FitnessCenter",
+        "INVESTMENTS" to "TrendingUp",
+        "DEBT" to "CreditCard",
+        "INSURANCE" to "Security",
+        "TAXES" to "Receipt",
+        "CHARITY" to "Favorite",
+        "BUSINESS" to "BusinessCenter",
+        "CHILDREN" to "ChildCare",
+        "PERSONAL_CARE" to "Face",
+        "SHOPPING" to "ShoppingCart",
+        "MAINTENANCE" to "Handyman",
+        "SERVICES" to "Receipt",
+        "SAVINGS" to "Savings",
+        "LOAN" to "CreditCard",
+        "RAMPA" to "DirectionsCar",
+        "PARKING" to "DirectionsCar",
+        "OTHER" to "Receipt"
+    )
+    
     companion object {
         private const val TAG = "HomeViewModel"
     }
     
     init {
         loadTodayEvents()
+        loadExpenseData()
+    }
+    
+    // Function to refresh expense data (similar to FinanceViewModel's refreshData)
+    fun refreshExpenseData() {
         loadExpenseData()
     }
     
@@ -228,8 +308,13 @@ class HomeViewModel() : ViewModel() {
         
         viewModelScope.launch {
             try {
+                // Sync events from the event repository
                 loadTodayEvents()
-                _syncStatus.value = SyncStatus.Success("Догађаји успешно синхронизовани")
+                
+                // Also refresh expense data when syncing
+                loadExpenseData()
+                
+                _syncStatus.value = SyncStatus.Success("Подаци успешно синхронизовани")
             } catch (e: Exception) {
                 _syncStatus.value = SyncStatus.Error("Грешка при синхронизацији: ${e.message}")
             }
@@ -237,159 +322,129 @@ class HomeViewModel() : ViewModel() {
     }
     
     // Function to load expense data for the current period
-    fun loadCurrentPeriodExpenses() {
-        viewModelScope.launch {
-            _isLoadingExpenseData.value = true
-            try {
-                // Get current month start and end dates
-                val calendar = Calendar.getInstance()
-                calendar.set(Calendar.DAY_OF_MONTH, 1)
-                calendar.set(Calendar.HOUR_OF_DAY, 0)
-                calendar.set(Calendar.MINUTE, 0)
-                calendar.set(Calendar.SECOND, 0)
-                val startDate = calendar.time
-                
-                calendar.add(Calendar.MONTH, 1)
-                calendar.add(Calendar.DAY_OF_MONTH, -1)
-                calendar.set(Calendar.HOUR_OF_DAY, 23)
-                calendar.set(Calendar.MINUTE, 59)
-                calendar.set(Calendar.SECOND, 59)
-                val endDate = calendar.time
-                
-                Log.d("HomeViewModel", "Loading expenses from ${formatDate(startDate)} to ${formatDate(endDate)}")
-                
-                // Get transactions for the current period
-                val transactions = transactionRepository.getTransactionsBetween(startDate, endDate)
-                
-                // Filter expenses only
-                val expenses = transactions.filter { it is Expense }
-                
-                // Calculate total amount
-                val totalAmount = expenses.sumOf { abs(it.amount) }
-                
-                // Group by category and create summaries
-                val categorySummaries = expenses
-                    .groupBy { it.category ?: "Other" }
-                    .map { (category, categoryTransactions) ->
-                        val amount = categoryTransactions.sumOf { abs(it.amount) }
-                        val percentage = if (totalAmount > 0) (amount / totalAmount) * 100 else 0.0
-                        
-                        // Find appropriate icon name for the category
-                        val iconName = try {
-                            // Try to match with enum category
-                            val enumCategory = ExpenseCategory.valueOf(category)
-                            when (enumCategory) {
-                                ExpenseCategory.FOOD -> "Restaurant"
-                                ExpenseCategory.TRANSPORTATION -> "DirectionsCar"
-                                ExpenseCategory.ENTERTAINMENT -> "SportsEsports"
-                                ExpenseCategory.UTILITIES -> "Receipt"
-                                ExpenseCategory.RENT -> "Home"
-                                ExpenseCategory.SHOPPING -> "ShoppingCart"
-                                ExpenseCategory.HEALTH -> "LocalHospital"
-                                ExpenseCategory.EDUCATION -> "School"
-                                ExpenseCategory.TRAVEL -> "Flight"
-                                else -> "Receipt"
-                            }
-                        } catch (e: IllegalArgumentException) {
-                            // Default icon for custom categories
-                            "Receipt"
-                        }
-                        
-                        CategorySummary(
-                            categoryName = category,
-                            iconName = iconName,
-                            color = getExpenseCategoryColor(category),
-                            amount = amount,
-                            percentage = percentage
-                        )
-                    }
-                    .sortedByDescending { it.amount }
-                
-                Log.d("HomeViewModel", "Loaded expenses by category: ${categorySummaries.size} categories")
-                
-                _expenseChartData.value = categorySummaries
-            } catch (e: Exception) {
-                Log.e("HomeViewModel", "Error loading expense data", e)
-                _expenseChartData.value = emptyList()
-            } finally {
-                _isLoadingExpenseData.value = false
-            }
-        }
-    }
-    
-    // Load expense data for the current period
     fun loadExpenseData() {
         viewModelScope.launch {
             try {
                 _isLoadingExpenseData.value = true
                 
-                // Get start and end dates for the current month
-                val calendar = Calendar.getInstance()
-                val startDate = calendar.apply {
-                    set(Calendar.DAY_OF_MONTH, 1)
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                }.time
+                // Get the period setting from SettingsRepository
+                val configuredPeriod = settingsRepository.period.first()
+                val now = LocalDate.now()
                 
-                val endDate = calendar.apply {
-                    set(Calendar.DAY_OF_MONTH, calendar.getActualMaximum(Calendar.DAY_OF_MONTH))
-                    set(Calendar.HOUR_OF_DAY, 23)
-                    set(Calendar.MINUTE, 59)
-                    set(Calendar.SECOND, 59)
-                }.time
-                
-                // Get transactions for the current month
-                val transactions = transactionRepository.getTransactionsBetween(startDate, endDate)
-                
-                // Filter expense transactions
-                val expenses = transactions.filter { it is Expense }
-                
-                // Calculate total for percentages
-                val totalAmount = expenses.sumOf { Math.abs(it.amount) }
-                
-                // Group by category and create summaries
-                val categorySummaries = expenses
-                    .groupBy { it.category ?: "Other" }
-                    .map { (category, categoryTransactions) ->
-                        val amount = categoryTransactions.sumOf { Math.abs(it.amount) }
-                        val percentage = if (totalAmount > 0) (amount / totalAmount) * 100 else 0.0
+                // Calculate start and end dates based on the configured period
+                val (startDate, endDate) = when (configuredPeriod) {
+                    Period.DAILY -> {
+                        // Daily - just today
+                        Pair(now, now)
+                    }
+                    Period.WEEKLY -> {
+                        // Weekly - current week (starting Monday)
+                        val currentWeekStart = now.minusDays(now.dayOfWeek.value.toLong() - 1)
+                        Pair(currentWeekStart, currentWeekStart.plusDays(6))
+                    }
+                    Period.MONTHLY -> {
+                        // Monthly - current month
+                        val currentMonth = YearMonth.from(now)
+                        Pair(currentMonth.atDay(1), currentMonth.atEndOfMonth())
+                    }
+                    Period.YEARLY -> {
+                        // Yearly - current year
+                        Pair(LocalDate.of(now.year, 1, 1), LocalDate.of(now.year, 12, 31))
+                    }
+                    Period.CUSTOM -> {
+                        // Custom period based on start day setting
+                        val startDay = settingsRepository.customPeriodStartDay.first()
+                        val currentMonth = YearMonth.from(now)
                         
-                        // Find appropriate icon name for the category
-                        val iconName = try {
-                            // Try to match with enum category
-                            val enumCategory = ExpenseCategory.valueOf(category)
-                            when (enumCategory) {
-                                ExpenseCategory.FOOD -> "Restaurant"
-                                ExpenseCategory.TRANSPORTATION -> "DirectionsCar"
-                                ExpenseCategory.ENTERTAINMENT -> "SportsEsports"
-                                ExpenseCategory.UTILITIES -> "Receipt"
-                                ExpenseCategory.RENT -> "Home"
-                                ExpenseCategory.SHOPPING -> "ShoppingCart"
-                                ExpenseCategory.HEALTH -> "LocalHospital"
-                                ExpenseCategory.EDUCATION -> "School"
-                                ExpenseCategory.TRAVEL -> "Flight"
-                                else -> "Receipt"
-                            }
-                        } catch (e: IllegalArgumentException) {
-                            // Default icon for custom categories
-                            "Receipt"
+                        // Calculate the current period's start date
+                        val periodStartDate = if (now.dayOfMonth >= startDay) {
+                            currentMonth.atDay(startDay)
+                        } else {
+                            currentMonth.minusMonths(1).atDay(startDay)
+                        }
+                        
+                        // End date is the day before start day in the next month
+                        val periodEndDate = periodStartDate.plusMonths(1).minusDays(1)
+                        
+                        Pair(periodStartDate, periodEndDate)
+                    }
+                    else -> {
+                        // Default to current month for "ALL" or any other case
+                        val currentMonth = YearMonth.from(now)
+                        Pair(currentMonth.atDay(1), currentMonth.atEndOfMonth())
+                    }
+                }
+                
+                Log.d(TAG, "Loading expenses from $startDate to $endDate with period setting: $configuredPeriod")
+                
+                // Convert LocalDate to Calendar for the repository
+                val startCalendar = Calendar.getInstance().apply {
+                    set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                
+                val endCalendar = Calendar.getInstance().apply {
+                    set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
+                    set(Calendar.MILLISECOND, 999)
+                }
+                
+                // Get transactions from the unified TransactionRepository
+                val allTransactions = transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
+                
+                // Filter to only include expenses
+                val expenses = allTransactions.filterIsInstance<Expense>()
+                
+                // Calculate total for percentages - use absolute values for expenses
+                val totalAmount = expenses.sumOf { abs(it.amount) }
+                
+                Log.d(TAG, "Found ${expenses.size} expense transactions with total amount: $totalAmount")
+                
+                // Group by category and create summaries (exactly as in FinanceViewModel)
+                val categorySummaries = expenses
+                    .groupBy { it.category ?: "OTHER" }
+                    .map { (category, categoryTransactions) ->
+                        val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
+                        val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+                        
+                        // Get a consistent color for this category using CategoryManager
+                        val categoryManager = CategoryManager.getInstance(context)
+                        val savedColorValue = categoryManager.getCategoryColor(category, true)
+                        
+                        // Use the saved color or fall back to the hash-based approach
+                        val color = if (savedColorValue != null) {
+                            Color(savedColorValue)
+                        } else {
+                            // Use a color based on category hash code for consistency
+                            val colorIndex = abs(category.hashCode()) % categoryColors.size
+                            categoryColors[colorIndex]
+                        }
+                        
+                        // Get icon name for this category using the mapping
+                        val iconName = categoryIconMapping[category] ?: "Receipt"
+                        
+                        // Get display name for the category - IMPORTANT: Use the exact same logic as FinanceViewModel
+                        val displayName = try {
+                            // Try to get the enum value and its display name
+                            ExpenseCategory.valueOf(category).getDisplayName()
+                        } catch (e: Exception) {
+                            // If not a standard category, just use the category string directly
+                            category
                         }
                         
                         CategorySummary(
-                            categoryName = category,
+                            categoryName = displayName,
                             iconName = iconName,
-                            color = getExpenseCategoryColor(category),
-                            amount = amount,
+                            color = color,
+                            amount = categoryAmount,
                             percentage = percentage
                         )
                     }
                     .sortedByDescending { it.amount }
                 
+                Log.d(TAG, "Created ${categorySummaries.size} category summaries: ${categorySummaries.map { "${it.categoryName}: ${it.amount}" }}")
+                
                 _expenseChartData.value = categorySummaries
                 _isLoadingExpenseData.value = false
-                
-                Log.d(TAG, "Loaded expense data: ${categorySummaries.size} categories")
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading expense data", e)
                 _expenseChartData.value = emptyList()
@@ -404,11 +459,14 @@ class HomeViewModel() : ViewModel() {
     }
     
     // Додајемо Factory класу за креирање HomeViewModel са Context параметром
-    class Factory() : ViewModelProvider.Factory {
+    class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(HomeViewModel::class.java)) {
-                return HomeViewModel() as T
+                return HomeViewModel(
+                    context = context,
+                    settingsRepository = SettingsRepository.getInstance(context)
+                ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

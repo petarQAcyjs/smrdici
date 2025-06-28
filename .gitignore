@@ -81,7 +81,7 @@ ehthumbs.db
 Thumbs.db
 
 # Kotlin-specific
-*.kotlin/sessions/
+**/.kotlin/sessions/
 
 # Firebase
 firebase.json

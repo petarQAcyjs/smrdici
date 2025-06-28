@@ -75,7 +75,7 @@ import kotlinx.coroutines.launch
 fun ProfileScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(),
-    homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory()),
+    homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(LocalContext.current)),
     themeViewModel: ThemeViewModel = viewModel(factory = ThemeViewModelFactory(LocalContext.current))
 ) {
     val authState by authViewModel.authState.collectAsState()

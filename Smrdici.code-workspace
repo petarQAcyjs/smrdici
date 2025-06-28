@@ -1,0 +1,24 @@
+{
+    "folders": [
+        {
+            "name": "Smrdici",
+            "path": "."
+        }
+    ],
+    "settings": {
+        "files.associations": {
+            "*.kt": "kotlin",
+            "*.kts": "kotlin"
+        },
+        "search.useIgnoreFiles": false,
+        "files.watcherExclude": {
+            "**/build/**": true,
+            "**/.gradle/**": true
+        }
+    },
+    "extensions": {
+        "recommendations": [
+            "mathiasfrohlich.kotlin"
+        ]
+    }
+} 

@@ -27,12 +27,14 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,6 +42,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,7 +90,8 @@ fun HomeScreen(
     authViewModel: AuthViewModel = viewModel()
 ) {
     val authState = authViewModel.authState.collectAsState().value
-    val homeViewModel: HomeViewModel = viewModel()
+    val context = LocalContext.current
+    val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(context))
     val todayEvents = homeViewModel.todayEvents.collectAsState().value
     val syncStatus = homeViewModel.syncStatus.collectAsState().value
     
@@ -97,7 +103,7 @@ fun HomeScreen(
         refreshing = isRefreshing,
         onRefresh = {
             isRefreshing = true
-            homeViewModel.syncEvents()
+            homeViewModel.syncEvents() // This already calls loadExpenseData() in the updated syncEvents function
         }
     )
     
@@ -124,10 +130,7 @@ fun HomeScreen(
         topBar = {
             AppHeader(
                 title = "Почетна",
-                showLogoutButton = true,
-                onLogoutClick = {
-                    authViewModel.signOut()
-                }
+                showLogoutButton = false
             )
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
@@ -163,15 +166,6 @@ fun HomeScreen(
                 ) {
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Welcome message
-                    Text(
-                        text = "Добродошли!",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
                     // Today's activities card
                     TodayActivitiesCard(
                         events = todayEvents,
@@ -182,8 +176,8 @@ fun HomeScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(350.dp)
-                            .padding(vertical = 16.dp)
+                            .height(250.dp)
+                            .padding(vertical = 8.dp)
                     )
                     
                     // Add Expense Pie Chart Card
@@ -198,6 +192,20 @@ fun HomeScreen(
                             .height(350.dp)
                             .padding(vertical = 8.dp)
                     )
+                    
+                    // Refresh expense data when returning to home screen
+                    val lifecycleOwner = LocalLifecycleOwner.current
+                    DisposableEffect(lifecycleOwner) {
+                        val observer = LifecycleEventObserver { _, event ->
+                            if (event == Lifecycle.Event.ON_RESUME) {
+                                homeViewModel.refreshExpenseData()
+                            }
+                        }
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        onDispose {
+                            lifecycleOwner.lifecycle.removeObserver(observer)
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.height(16.dp))
                 }
@@ -394,8 +402,9 @@ fun ExpensePieChartCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
+            // Updated title
             Text(
-                text = "Трошкови по категоријама",
+                text = "Трошкови у тренутном периоду",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -425,6 +434,9 @@ fun ExpensePieChartCard(
                     )
                 }
             } else {
+                // Calculate total expenses
+                val totalExpenses = expenseData.sumOf { it.amount }
+                
                 // Create pie chart data
                 val pieChartData = expenseData.map { category ->
                     PieChartData.Slice(
@@ -434,68 +446,146 @@ fun ExpensePieChartCard(
                     )
                 }
                 
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp),
-                    contentAlignment = Alignment.Center
+                        .height(220.dp), // Increased height for larger chart
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    PieChart(
-                        data = pieChartData,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Legend
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    expenseData.take(5).forEach { category ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .background(
-                                        color = category.color,
-                                        shape = CircleShape
-                                    )
-                            )
-                            
-                            Spacer(modifier = Modifier.width(8.dp))
-                            
-                            Text(
-                                text = category.categoryName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            
-                            Text(
-                                text = String.format("%.2f", category.amount),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    
-                    // Show "View more" if there are more than 5 categories
-                    if (expenseData.size > 5) {
-                        Text(
-                            text = "Види све категорије...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .align(Alignment.End)
-                                .padding(top = 8.dp)
+                    // Pie chart on the left - increased size
+                    Box(
+                        modifier = Modifier
+                            .weight(1.2f) // Give more space to the chart
+                            .fillMaxHeight()
+                            .padding(4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        PieChart(
+                            data = pieChartData,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
+                    
+                    // Compact legend on the right with percentages
+                    Column(
+                        modifier = Modifier
+                            .weight(0.8f) // Less space for the legend
+                            .fillMaxHeight()
+                            .padding(start = 4.dp),
+                        verticalArrangement = Arrangement.SpaceBetween // Changed to SpaceBetween
+                    ) {
+                        // Categories section
+                        Column {
+                            // Show categories in a compact layout
+                            val topCategories = expenseData.take(5) // Show up to 5 categories
+                            
+                            // Create rows of 1 item each for better readability
+                            topCategories.forEach { category ->
+                                CompactCategoryLegendItem(
+                                    category = category,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            
+                            // Show "View more" if there are more categories
+                            if (expenseData.size > 5) {
+                                Text(
+                                    text = "... и још ${expenseData.size - 5}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .align(Alignment.End)
+                                        .padding(top = 4.dp)
+                                )
+                            }
+                        }
+                        
+                        // Total section - always at the bottom
+                        Column {
+                            // Add divider before total
+                            HorizontalDivider(
+                                thickness = 1.dp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Total expenses
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Укупно:",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                
+                                Text(
+                                    text = String.format("%.2f", totalExpenses),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactCategoryLegendItem(
+    category: CategorySummary,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Color indicator
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(
+                    color = category.color,
+                    shape = CircleShape
+                )
+        )
+        
+        Spacer(modifier = Modifier.width(4.dp))
+        
+        // Category name and percentage
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = category.categoryName,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = String.format("%.1f%%", category.percentage),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.width(4.dp))
+                
+                Text(
+                    text = String.format("%.0f", category.amount),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
