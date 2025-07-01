@@ -278,7 +278,6 @@ fun CalendarScreen(
                     title = "Календар",
                     user = user,
                     navController = navController,
-                    showBackButton = true,
                     showProfileIcon = false
                 )
             },

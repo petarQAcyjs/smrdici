@@ -18,9 +18,11 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
+import com.google.firebase.auth.FirebaseAuth
 import com.petar.smrdici.SmrdiciApplication
 import com.petar.smrdici.notification.NotificationManager
 import com.petar.smrdici.ui.navigation.NavGraph
+import com.petar.smrdici.ui.navigation.Screen
 import com.petar.smrdici.ui.theme.SmrdiciTheme
 import com.petar.smrdici.ui.theme.ThemeViewModel
 import com.petar.smrdici.ui.theme.ThemeViewModelFactory
@@ -67,7 +69,15 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
-                    NavGraph(navController = navController)
+                    val startDestination = if (FirebaseAuth.getInstance().currentUser != null) {
+                        Screen.Home.route
+                    } else {
+                        Screen.Login.route
+                    }
+                    NavGraph(
+                        navController = navController,
+                        startDestination = startDestination
+                    )
                 }
             }
         }

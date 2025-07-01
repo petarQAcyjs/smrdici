@@ -165,9 +165,8 @@ fun ListsScreen(
             topBar = {
                 AppHeader(
                     title = "Листе",
-                    navController = navController,
-                    showBackButton = true,
                     user = user,
+                    navController = navController,
                     showProfileIcon = false
                 )
             }

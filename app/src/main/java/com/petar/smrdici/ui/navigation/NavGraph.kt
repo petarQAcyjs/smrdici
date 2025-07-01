@@ -54,25 +54,33 @@ fun NavGraph(
         }
         
         composable(route = Screen.Home.route) {
-            MainLayout {
+            MainLayout(
+                navController = navController
+            ) {
                 HomeScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Calendar.route) {
-            MainLayout {
+            MainLayout(
+                navController = navController
+            ) {
                 CalendarScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Lists.route) {
-            MainLayout {
+            MainLayout(
+                navController = navController
+            ) {
                 ListsScreen(navController = navController)
             }
         }
         
         composable(route = Screen.Finance.route) {
-            MainLayout {
+            MainLayout(
+                navController = navController
+            ) {
                 FinanceScreen(
                     navController = navController,
                     viewModel = viewModel(
@@ -83,7 +91,9 @@ fun NavGraph(
         }
         
         composable(route = Screen.Profile.route) {
-            MainLayout {
+            MainLayout(
+                navController = navController
+            ) {
                 ProfileScreen(navController = navController)
             }
         }

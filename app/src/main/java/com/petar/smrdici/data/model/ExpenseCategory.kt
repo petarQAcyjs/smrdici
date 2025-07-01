@@ -1,6 +1,7 @@
 package com.petar.smrdici.data.model
 
 import java.util.Locale
+import androidx.compose.ui.graphics.Color
 
 enum class ExpenseCategory {
     GROCERIES,
@@ -227,5 +228,35 @@ enum class ExpenseCategory {
                 else -> "Other"
             }
         }
+    }
+}
+
+// Function to get color for a category
+fun getExpenseCategoryColor(category: String): Color {
+    return try {
+        val enumCategory = ExpenseCategory.valueOf(category)
+        when (enumCategory) {
+            ExpenseCategory.FOOD -> Color(0xFFE57373) // Red
+            ExpenseCategory.TRANSPORTATION -> Color(0xFF64B5F6) // Blue
+            ExpenseCategory.ENTERTAINMENT -> Color(0xFFFFD54F) // Yellow
+            ExpenseCategory.UTILITIES -> Color(0xFF81C784) // Green
+            ExpenseCategory.RENT -> Color(0xFFBA68C8) // Purple
+            ExpenseCategory.SHOPPING -> Color(0xFF4FC3F7) // Light Blue
+            ExpenseCategory.HEALTH -> Color(0xFFFF8A65) // Orange
+            ExpenseCategory.EDUCATION -> Color(0xFF9575CD) // Deep Purple
+            ExpenseCategory.TRAVEL -> Color(0xFF4DB6AC) // Teal
+            ExpenseCategory.OTHER -> Color(0xFFF06292) // Pink
+            else -> Color(0xFFF06292) // Pink for any other categories
+        }
+    } catch (e: IllegalArgumentException) {
+        // For custom categories, use a hash-based color
+        val index = Math.abs(category.hashCode()) % 10
+        val colors = listOf(
+            Color(0xFFE57373), Color(0xFF64B5F6), Color(0xFFFFD54F),
+            Color(0xFF81C784), Color(0xFFBA68C8), Color(0xFF4FC3F7),
+            Color(0xFFFF8A65), Color(0xFF9575CD), Color(0xFF4DB6AC),
+            Color(0xFFF06292)
+        )
+        colors[index]
     }
 } 
