@@ -485,7 +485,7 @@ fun ExpensePieChartCard(
                         .weight(1f), // Use weight to fill available space
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Pie chart on the left
+                    // Pie chart on the left - now a donut chart with total in center
                     Box(
                         modifier = Modifier
                             .weight(1.2f)
@@ -495,6 +495,7 @@ fun ExpensePieChartCard(
                     ) {
                         PieChart(
                             data = pieChartData,
+                            centerText = totalExpenses.toInt().toString(),
                             modifier = Modifier.fillMaxSize()
                         )
                     }
