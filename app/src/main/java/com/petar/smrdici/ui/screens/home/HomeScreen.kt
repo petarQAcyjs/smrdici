@@ -646,17 +646,12 @@ fun ExpenseHistoryCard(
     onCardClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Get the primary color for the chart
-    val chartColor = MaterialTheme.colorScheme.primary
-    
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onCardClick() },
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 4.dp
-        )
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier
@@ -695,97 +690,145 @@ fun ExpenseHistoryCard(
                     )
                 }
             } else {
-                // Main chart area
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                ) {
-                    // Improved bar chart implementation with single color
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val availableWidth = size.width
-                        val chartPadding = 8f // Small padding on sides
-                        val chartWidth = availableWidth - (2 * chartPadding)
-                        
-                        // Find maximum value for scaling
-                        val maxValue = historyData.maxOfOrNull { it.totalAmount } ?: 0.0
-                        
-                        // Calculate bar width with proper spacing
-                        val barCount = historyData.size
-                        val barWidthMax = 80f // Maximum width of a bar
-                        val barWidthMin = 30f // Minimum width of a bar
-                        val totalBarsWidth = chartWidth * 0.85f // Use 85% of chart width for bars
-                        val spacing = chartWidth * 0.15f / (barCount - 1).coerceAtLeast(1) // 15% for spacing
-                        val barWidth = (totalBarsWidth / barCount).coerceIn(barWidthMin, barWidthMax)
-                        
-                        // Draw horizontal grid lines
-                        val gridLineCount = 5
-                        val gridLineColor = Color.Gray.copy(alpha = 0.2f)
-                        for (i in 0..gridLineCount) {
-                            val y = size.height - (size.height * i / gridLineCount) - 30f // Leave space for labels
-                            drawLine(
-                                color = gridLineColor,
-                                start = Offset(chartPadding, y),
-                                end = Offset(availableWidth - chartPadding, y),
-                                strokeWidth = 1f
-                            )
+                // Define fixed grid line values
+                val gridLineValues = listOf(0, 100000, 200000, 300000, 400000, 500000, 600000, 700000)
+                val maxGridValue = 800000.0  // Keep max value for scaling but don't show the line
+                
+                // Use LazyRow to align bars and labels perfectly
+                Column {
+                    // Y-axis labels and chart area
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                    ) {
+                        // Y-axis labels
+                        Column(
+                            modifier = Modifier
+                                .width(48.dp)
+                                .fillMaxHeight()
+                        ) {
+                            gridLineValues.reversed().forEach { value ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    Text(
+                                        text = formatNumber(value),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
+                                        color = Color.Gray,
+                                        textAlign = TextAlign.End,
+                                        modifier = Modifier.padding(end = 4.dp)
+                                    )
+                                }
+                            }
                         }
                         
-                        // Draw bars
-                        historyData.forEachIndexed { index, periodData ->
-                            val totalItems = historyData.size
-                            val x = chartPadding + (index * (chartWidth / (totalItems - 1).coerceAtLeast(1)))
-                            val barHeight = if (maxValue > 0) {
-                                (periodData.totalAmount * (size.height - 30f) / maxValue).toFloat() // Leave space for labels
-                            } else 0f
+                        // Bars container with grid lines
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        ) {
+                            // Grid lines
+                            Canvas(
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                val chartHeight = size.height
+                                
+                                // Draw horizontal grid lines
+                                val gridLineColor = Color.Gray.copy(alpha = 0.2f)
+                                gridLineValues.forEach { value ->
+                                    val yRatio = value.toFloat() / maxGridValue.toFloat()
+                                    val y = chartHeight - (chartHeight * yRatio)
+                                    
+                                    drawLine(
+                                        color = gridLineColor,
+                                        start = Offset(0f, y),
+                                        end = Offset(size.width, y),
+                                        strokeWidth = 1f
+                                    )
+                                }
+                            }
                             
-                            val barX = x - (barWidth / 2) // Center the bar on the x position
-                            
-                            // Draw bar with rounded top
-                            if (barHeight > 0) {
-                                drawRoundRect(
-                                    color = chartColor,
-                                    topLeft = Offset(barX, size.height - barHeight - 30f),
-                                    size = Size(barWidth, barHeight),
-                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
+                            // Bars - use Row to align bars evenly
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                historyData.forEach { periodData ->
+                                    // Calculate bar height as percentage of max value
+                                    val heightPercentage = if (maxGridValue > 0) {
+                                        (periodData.totalAmount / maxGridValue).toFloat()
+                                    } else 0f
+                                    
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 8.dp)
+                                            .fillMaxHeight(heightPercentage)
+                                            .width(24.dp)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.primary,
+                                                shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
+                    // X-axis labels - aligned with bars using the same Row arrangement
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 48.dp, top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        historyData.forEach { periodData ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = periodData.periodName,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                
+                                Text(
+                                    text = formatNumber(periodData.totalAmount.toInt()),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
                     }
                 }
-                
-                // Period labels
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    historyData.forEach { periodData ->
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = periodData.periodName,
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            
-                            Text(
-                                text = String.format("%.0f", periodData.totalAmount),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.error,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
             }
         }
+    }
+}
+
+// Format numbers with thousands separator
+private fun formatNumber(value: Int): String {
+    return if (value >= 1000) {
+        val thousands = value / 1000
+        val remainder = value % 1000
+        if (remainder == 0) {
+            "$thousands.000"
+        } else {
+            "$thousands.${remainder.toString().padStart(3, '0')}"
+        }
+    } else {
+        value.toString()
     }
 } 
