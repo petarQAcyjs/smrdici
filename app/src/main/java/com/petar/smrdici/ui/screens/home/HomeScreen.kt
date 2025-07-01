@@ -646,6 +646,9 @@ fun ExpenseHistoryCard(
     onCardClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Get the primary color for the chart
+    val chartColor = MaterialTheme.colorScheme.primary
+    
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -667,7 +670,7 @@ fun ExpenseHistoryCard(
                 fontWeight = FontWeight.Bold
             )
             
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             
             if (isLoading) {
                 Box(
@@ -698,56 +701,74 @@ fun ExpenseHistoryCard(
                         .fillMaxWidth()
                         .height(220.dp)
                 ) {
-                    // Simple stacked bar chart implementation
+                    // Improved bar chart implementation with single color
                     Canvas(modifier = Modifier.fillMaxSize()) {
-                        val availableWidth = size.width - (historyData.size * 20f)
-                        val barWidth = min(40f, availableWidth / historyData.size)
-                        val startX = (size.width - ((historyData.size - 1) * 20f + historyData.size * barWidth)) / 2
+                        val availableWidth = size.width
+                        val chartPadding = 8f // Small padding on sides
+                        val chartWidth = availableWidth - (2 * chartPadding)
                         
                         // Find maximum value for scaling
                         val maxValue = historyData.maxOfOrNull { it.totalAmount } ?: 0.0
                         
+                        // Calculate bar width with proper spacing
+                        val barCount = historyData.size
+                        val barWidthMax = 80f // Maximum width of a bar
+                        val barWidthMin = 30f // Minimum width of a bar
+                        val totalBarsWidth = chartWidth * 0.85f // Use 85% of chart width for bars
+                        val spacing = chartWidth * 0.15f / (barCount - 1).coerceAtLeast(1) // 15% for spacing
+                        val barWidth = (totalBarsWidth / barCount).coerceIn(barWidthMin, barWidthMax)
+                        
+                        // Draw horizontal grid lines
+                        val gridLineCount = 5
+                        val gridLineColor = Color.Gray.copy(alpha = 0.2f)
+                        for (i in 0..gridLineCount) {
+                            val y = size.height - (size.height * i / gridLineCount) - 30f // Leave space for labels
+                            drawLine(
+                                color = gridLineColor,
+                                start = Offset(chartPadding, y),
+                                end = Offset(availableWidth - chartPadding, y),
+                                strokeWidth = 1f
+                            )
+                        }
+                        
+                        // Draw bars
                         historyData.forEachIndexed { index, periodData ->
-                            val x = startX + index * (barWidth + 20f)
-                            var yOffset = size.height
-                            val scaleFactor = if (maxValue > 0) size.height / maxValue else 0.0
+                            val totalItems = historyData.size
+                            val x = chartPadding + (index * (chartWidth / (totalItems - 1).coerceAtLeast(1)))
+                            val barHeight = if (maxValue > 0) {
+                                (periodData.totalAmount * (size.height - 30f) / maxValue).toFloat() // Leave space for labels
+                            } else 0f
                             
-                            // Draw each category segment in the bar
-                            periodData.categoryExpenses.forEach { category ->
-                                val segmentHeight = (category.amount * scaleFactor).toFloat()
-                                
-                                // Don't draw segments that are too small to be visible
-                                if (segmentHeight >= 1f) {
-                                    drawRect(
-                                        color = category.color,
-                                        topLeft = Offset(x, yOffset - segmentHeight),
-                                        size = Size(barWidth, segmentHeight)
-                                    )
-                                    
-                                    yOffset -= segmentHeight
-                                }
+                            val barX = x - (barWidth / 2) // Center the bar on the x position
+                            
+                            // Draw bar with rounded top
+                            if (barHeight > 0) {
+                                drawRoundRect(
+                                    color = chartColor,
+                                    topLeft = Offset(barX, size.height - barHeight - 30f),
+                                    size = Size(barWidth, barHeight),
+                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
+                                )
                             }
                         }
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(8.dp))
-                
                 // Period labels
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     historyData.forEach { periodData ->
                         Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 text = periodData.periodName,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
                                 textAlign = TextAlign.Center,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -761,73 +782,6 @@ fun ExpenseHistoryCard(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Legend for top categories
-                val allCategories = mutableListOf<CategoryExpense>()
-                
-                // Collect all unique categories
-                historyData.forEach { period ->
-                    period.categoryExpenses.forEach { category ->
-                        if (allCategories.none { it.categoryName == category.categoryName }) {
-                            allCategories.add(category)
-                        }
-                    }
-                }
-                
-                // Sort by total amount across all periods and take top 5
-                val topCategories = allCategories.sortedByDescending { category ->
-                    historyData.sumOf { period ->
-                        period.categoryExpenses
-                            .find { it.categoryName == category.categoryName }?.amount ?: 0.0
-                    }
-                }.take(5)
-                
-                // Display legend in rows of 3 items
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                ) {
-                    val rows = topCategories.chunked(3)
-                    rows.forEach { rowCategories ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            rowCategories.forEach { category ->
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(category.color)
-                                    )
-                                    
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    
-                                    Text(
-                                        text = category.categoryName,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                            
-                            // Add empty spacers if row is not full
-                            repeat(3 - rowCategories.size) {
-                                Spacer(modifier = Modifier.weight(1f))
-                            }
                         }
                     }
                 }
