@@ -122,7 +122,8 @@ class EventRepository(
                 "color" to event.color,
                 "assignee" to event.assignee,
                 "createdBy" to currentUserId,
-                "createdAt" to Timestamp.now()
+                "createdAt" to Timestamp.now(),
+                "isRecurringYearly" to event.isRecurringYearly
             )
             
             val docRef = eventsCollection.add(eventData).await()
@@ -149,10 +150,11 @@ class EventRepository(
                 "allDay" to event.allDay,
                 "location" to event.location,
                 "assignee" to event.assignee,
-                "color" to event.color
+                "color" to event.color,
+                "isRecurringYearly" to event.isRecurringYearly
             )
             
-            Log.d("EventRepository", "Ажурирам догађај у бази: id=${event.id}, assignee=${event.assignee}")
+            Log.d("EventRepository", "Ажурирам догађај у бази: id=${event.id}, assignee=${event.assignee}, isRecurringYearly=${event.isRecurringYearly}")
             
             event.id?.let { id ->
                 eventsCollection.document(id)
