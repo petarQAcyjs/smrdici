@@ -419,6 +419,8 @@ fun ExpensePieChartCard(
     onCardClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var expandedCategories by remember { mutableStateOf(false) }
+    
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -480,13 +482,13 @@ fun ExpensePieChartCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(220.dp), // Increased height for larger chart
+                        .weight(1f), // Use weight to fill available space
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Pie chart on the left - increased size
+                    // Pie chart on the left
                     Box(
                         modifier = Modifier
-                            .weight(1.2f) // Give more space to the chart
+                            .weight(1.2f)
                             .fillMaxHeight()
                             .padding(4.dp),
                         contentAlignment = Alignment.Center
@@ -500,18 +502,21 @@ fun ExpensePieChartCard(
                     // Compact legend on the right with percentages
                     Column(
                         modifier = Modifier
-                            .weight(0.8f) // Less space for the legend
+                            .weight(0.8f)
                             .fillMaxHeight()
                             .padding(start = 4.dp),
-                        verticalArrangement = Arrangement.SpaceBetween // Changed to SpaceBetween
+                        verticalArrangement = Arrangement.spacedBy(2.dp) // Evenly space items
                     ) {
-                        // Categories section
-                        Column {
-                            // Show categories in a compact layout
-                            val topCategories = expenseData.take(5) // Show up to 5 categories
+                        // Categories section in a scrollable column
+                        Column(
+                            modifier = Modifier
+                                .weight(1f) // Take all available space
+                                .verticalScroll(rememberScrollState()) // Make scrollable if needed
+                        ) {
+                            // Show categories
+                            val categoriesToShow = if (expandedCategories) expenseData else expenseData.take(5)
                             
-                            // Create rows of 1 item each for better readability
-                            topCategories.forEach { category ->
+                            categoriesToShow.forEach { category ->
                                 CompactCategoryLegendItem(
                                     category = category,
                                     modifier = Modifier.fillMaxWidth()
@@ -519,7 +524,7 @@ fun ExpensePieChartCard(
                             }
                             
                             // Show "View more" if there are more categories
-                            if (expenseData.size > 5) {
+                            if (expenseData.size > 5 && !expandedCategories) {
                                 Text(
                                     text = "... и још ${expenseData.size - 5}",
                                     style = MaterialTheme.typography.bodySmall,
@@ -527,40 +532,52 @@ fun ExpensePieChartCard(
                                     modifier = Modifier
                                         .align(Alignment.End)
                                         .padding(top = 4.dp)
+                                        .clickable { expandedCategories = true }
+                                )
+                            } else if (expandedCategories && expenseData.size > 5) {
+                                Text(
+                                    text = "Прикажи мање",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .align(Alignment.End)
+                                        .padding(top = 4.dp)
+                                        .clickable { expandedCategories = false }
                                 )
                             }
                         }
+                    }
+                }
+                
+                // Total section - outside of Row but inside the main Column
+                Column {
+                    // Add divider before total
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Total expenses
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Укупно:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                         
-                        // Total section - always at the bottom
-                        Column {
-                            // Add divider before total
-                            HorizontalDivider(
-                                thickness = 1.dp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                            )
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            // Total expenses
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Укупно:",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                
-                                Text(
-                                    text = String.format("%.2f", totalExpenses),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
+                        Text(
+                            text = String.format("%.2f", totalExpenses),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }
