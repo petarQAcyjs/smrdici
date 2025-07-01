@@ -15,6 +15,7 @@ import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.utils.LogUtils
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
  * Menadžer za dinamičke kategorije koje mogu biti importovane
@@ -92,6 +93,94 @@ class CategoryManager private constructor(context: Context) {
         val colorValue = prefs.getLong(key, 0)
         Log.d(TAG, "Retrieved color for category: $categoryName, isExpense: $isExpense, color: $colorValue")
         return colorValue
+    }
+    
+    /**
+     * Returns a random color from the predefined category colors
+     */
+    fun getRandomCategoryColor(): Long {
+        return CATEGORY_COLORS.random()
+    }
+    
+    /**
+     * Returns all available predefined category colors
+     */
+    fun getAllCategoryColors(): List<Long> {
+        return CATEGORY_COLORS
+    }
+    
+    /**
+     * Returns a color for a specific index (with wraparound if index is out of bounds)
+     */
+    fun getCategoryColorByIndex(index: Int): Long {
+        val safeIndex = index % CATEGORY_COLORS.size
+        return CATEGORY_COLORS[safeIndex]
+    }
+    
+    /**
+     * Returns the name of a color based on its value
+     */
+    fun getColorName(colorValue: Long): String {
+        return when (colorValue) {
+            0xFF4285F4 -> "Plava"
+            0xFFEA4335 -> "Crvena"
+            0xFFFBBC05 -> "Žuta"
+            0xFF34A853 -> "Zelena"
+            0xFF9C27B0 -> "Ljubičasta"
+            0xFF3F51B5 -> "Indigo"
+            0xFF2196F3 -> "Svetlo plava"
+            0xFF03A9F4 -> "Azurna"
+            0xFF00BCD4 -> "Tirkizna"
+            0xFF009688 -> "Morsko zelena"
+            0xFF4CAF50 -> "Svetlo zelena"
+            0xFF8BC34A -> "Limeta"
+            0xFFCDDC39 -> "Žuto-zelena"
+            0xFFFFEB3B -> "Sunčano žuta"
+            0xFFFFC107 -> "Ćilibarna"
+            0xFFFF9800 -> "Narandžasta"
+            0xFFFF5722 -> "Tamno narandžasta"
+            0xFF795548 -> "Braon"
+            0xFF607D8B -> "Plavo-siva"
+            0xFF9E9E9E -> "Siva"
+            0xFFE91E63 -> "Roze"
+            0xFFF44336 -> "Jarko crvena"
+            0xFF673AB7 -> "Tamno ljubičasta"
+            0xFF00796B -> "Tamno zelena"
+            0xFF006064 -> "Tamno cijan"
+            0xFFAD1457 -> "Tamno ružičasta"
+            0xFF1A237E -> "Noćno plava"
+            0xFF33691E -> "Šumsko zelena"
+            0xFFBF360C -> "Rđavo crvena"
+            0xFF6A1B9A -> "Kraljevsko ljubičasta"
+            0xFFB71C1C -> "Krvavo crvena"
+            0xFF880E4F -> "Vino crvena"
+            0xFF4A148C -> "Duboko ljubičasta"
+            0xFF1B5E20 -> "Smaragdno zelena"
+            else -> "Nepoznata"
+        }
+    }
+    
+    /**
+     * Converts a Long color value to a Compose Color object
+     */
+    fun longToComposeColor(colorValue: Long): Color {
+        return Color(colorValue)
+    }
+    
+    /**
+     * Gets the category color as a Compose Color object
+     * If no color is saved, returns a default color
+     */
+    fun getCategoryComposeColor(categoryName: String, isExpense: Boolean): Color {
+        val colorValue = getCategoryColor(categoryName, isExpense) ?: CATEGORY_COLORS[0]
+        return Color(colorValue)
+    }
+    
+    /**
+     * Returns all predefined colors as Compose Color objects
+     */
+    fun getAllComposeColors(): List<Color> {
+        return CATEGORY_COLORS.map { Color(it) }
     }
     
     fun updateCategoryColor(oldName: String, newName: String, isExpense: Boolean) {
@@ -172,6 +261,12 @@ class CategoryManager private constructor(context: Context) {
             prefs.edit {
                 putStringSet(KEY_CUSTOM_EXPENSE_CATEGORIES, updatedSet)
             }
+            
+            // Assign a default color if none exists
+            if (getCategoryColor(categoryName, true) == null) {
+                assignDefaultCategoryColor(categoryName, true)
+            }
+            
             Log.d(TAG, "Dodata nova kategorija troškova: $categoryName")
         }
     }
@@ -192,8 +287,28 @@ class CategoryManager private constructor(context: Context) {
             prefs.edit {
                 putStringSet(KEY_CUSTOM_INCOME_CATEGORIES, updatedSet)
             }
+            
+            // Assign a default color if none exists
+            if (getCategoryColor(categoryName, false) == null) {
+                assignDefaultCategoryColor(categoryName, false)
+            }
+            
             Log.d(TAG, "Dodata nova kategorija prihoda: $categoryName")
         }
+    }
+    
+    /**
+     * Assigns a default color to a category based on its name
+     * This ensures that the same category name always gets the same color
+     */
+    fun assignDefaultCategoryColor(categoryName: String, isExpense: Boolean) {
+        // Use the hash code of the category name to deterministically select a color
+        val colorIndex = abs(categoryName.hashCode()) % CATEGORY_COLORS.size
+        val colorValue = CATEGORY_COLORS[colorIndex]
+        
+        // Save the color
+        saveCategoryColor(categoryName, colorValue, isExpense)
+        Log.d(TAG, "Assigned default color to category: $categoryName, color: ${getColorName(colorValue)}")
     }
     
     /**
@@ -357,21 +472,35 @@ class CategoryManager private constructor(context: Context) {
     // Firestore: Update expense category
     suspend fun updateExpenseCategoryInFirestore(oldName: String, newName: String) {
         try {
-            // Use a transaction to ensure atomicity
-            firestore.runTransaction { transaction ->
-                // Check if the old document exists
-                val oldDocRef = expenseCategoriesRef.document(sanitizeDocumentId(oldName))
-                val oldDocSnapshot = transaction.get(oldDocRef)
-                
-                // Create the new document first
-                val newDocRef = expenseCategoriesRef.document(sanitizeDocumentId(newName))
-                transaction.set(newDocRef, FirestoreCategory(name = newName))
-                
-                // Delete the old document only if it exists
-                if (oldDocSnapshot.exists()) {
-                    transaction.delete(oldDocRef)
-                }
-            }.await()
+            // If names are the same, nothing to do
+            if (oldName == newName) {
+                Log.d(TAG, "Category name unchanged, skipping update")
+                return
+            }
+            
+            // First check if the new name already exists to avoid duplicates
+            val newDocRef = expenseCategoriesRef.document(sanitizeDocumentId(newName))
+            val newDocSnapshot = newDocRef.get().await()
+            
+            if (newDocSnapshot.exists()) {
+                Log.d(TAG, "Category with name $newName already exists, skipping update")
+                return
+            }
+            
+            // Create the new document first
+            newDocRef.set(FirestoreCategory(name = newName)).await()
+            Log.d(TAG, "Created new expense category: $newName")
+            
+            // Only after successful creation, delete the old document
+            val oldDocRef = expenseCategoriesRef.document(sanitizeDocumentId(oldName))
+            val oldDocSnapshot = oldDocRef.get().await()
+            
+            if (oldDocSnapshot.exists()) {
+                oldDocRef.delete().await()
+                Log.d(TAG, "Deleted old expense category: $oldName")
+            } else {
+                Log.d(TAG, "Old expense category $oldName not found, skipping deletion")
+            }
             
             Log.d(TAG, "Successfully updated expense category from $oldName to $newName")
         } catch (e: Exception) {
@@ -383,21 +512,35 @@ class CategoryManager private constructor(context: Context) {
     // Firestore: Update income category
     suspend fun updateIncomeCategoryInFirestore(oldName: String, newName: String) {
         try {
-            // Use a transaction to ensure atomicity
-            firestore.runTransaction { transaction ->
-                // Check if the old document exists
-                val oldDocRef = incomeCategoriesRef.document(sanitizeDocumentId(oldName))
-                val oldDocSnapshot = transaction.get(oldDocRef)
-                
-                // Create the new document first
-                val newDocRef = incomeCategoriesRef.document(sanitizeDocumentId(newName))
-                transaction.set(newDocRef, FirestoreCategory(name = newName))
-                
-                // Delete the old document only if it exists
-                if (oldDocSnapshot.exists()) {
-                    transaction.delete(oldDocRef)
-                }
-            }.await()
+            // If names are the same, nothing to do
+            if (oldName == newName) {
+                Log.d(TAG, "Category name unchanged, skipping update")
+                return
+            }
+            
+            // First check if the new name already exists to avoid duplicates
+            val newDocRef = incomeCategoriesRef.document(sanitizeDocumentId(newName))
+            val newDocSnapshot = newDocRef.get().await()
+            
+            if (newDocSnapshot.exists()) {
+                Log.d(TAG, "Category with name $newName already exists, skipping update")
+                return
+            }
+            
+            // Create the new document first
+            newDocRef.set(FirestoreCategory(name = newName)).await()
+            Log.d(TAG, "Created new income category: $newName")
+            
+            // Only after successful creation, delete the old document
+            val oldDocRef = incomeCategoriesRef.document(sanitizeDocumentId(oldName))
+            val oldDocSnapshot = oldDocRef.get().await()
+            
+            if (oldDocSnapshot.exists()) {
+                oldDocRef.delete().await()
+                Log.d(TAG, "Deleted old income category: $oldName")
+            } else {
+                Log.d(TAG, "Old income category $oldName not found, skipping deletion")
+            }
             
             Log.d(TAG, "Successfully updated income category from $oldName to $newName")
         } catch (e: Exception) {
@@ -560,20 +703,58 @@ class CategoryManager private constructor(context: Context) {
     }
     // Edit category (updates both Firestore and local)
     suspend fun updateExpenseCategoryBoth(oldName: String, newName: String) {
-        updateExpenseCategoryInFirestore(oldName, newName)
-        val updated = getExpenseCategoriesWithFallback()
-        saveExpenseCategoriesToLocal(updated)
-        
-        // Update all transactions with this category
-        transactionRepository.updateTransactionCategory(oldName, newName, true)
+        try {
+            // Update in Firestore
+            updateExpenseCategoryInFirestore(oldName, newName)
+            
+            // Update in local storage directly to ensure it's updated even if Firestore fails
+            val currentCategories = customExpenseCategories.toMutableSet()
+            if (currentCategories.contains(oldName)) {
+                currentCategories.remove(oldName)
+                currentCategories.add(newName)
+                prefs.edit {
+                    putStringSet(KEY_CUSTOM_EXPENSE_CATEGORIES, currentCategories)
+                }
+                Log.d(TAG, "Updated expense category in local storage from $oldName to $newName")
+            }
+            
+            // Get updated list from Firestore and save to local
+            val updated = getExpenseCategoriesWithFallback()
+            saveExpenseCategoriesToLocal(updated)
+            
+            // Update all transactions with this category
+            transactionRepository.updateTransactionCategory(oldName, newName, true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in updateExpenseCategoryBoth: ${e.message}", e)
+            throw e
+        }
     }
     suspend fun updateIncomeCategoryBoth(oldName: String, newName: String) {
-        updateIncomeCategoryInFirestore(oldName, newName)
-        val updated = getIncomeCategoriesWithFallback()
-        saveIncomeCategoriesToLocal(updated)
-        
-        // Update all transactions with this category
-        transactionRepository.updateTransactionCategory(oldName, newName, false)
+        try {
+            // Update in Firestore
+            updateIncomeCategoryInFirestore(oldName, newName)
+            
+            // Update in local storage directly to ensure it's updated even if Firestore fails
+            val currentCategories = customIncomeCategories.toMutableSet()
+            if (currentCategories.contains(oldName)) {
+                currentCategories.remove(oldName)
+                currentCategories.add(newName)
+                prefs.edit {
+                    putStringSet(KEY_CUSTOM_INCOME_CATEGORIES, currentCategories)
+                }
+                Log.d(TAG, "Updated income category in local storage from $oldName to $newName")
+            }
+            
+            // Get updated list from Firestore and save to local
+            val updated = getIncomeCategoriesWithFallback()
+            saveIncomeCategoriesToLocal(updated)
+            
+            // Update all transactions with this category
+            transactionRepository.updateTransactionCategory(oldName, newName, false)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in updateIncomeCategoryBoth: ${e.message}", e)
+            throw e
+        }
     }
     // Delete category (updates both Firestore and local)
     suspend fun deleteExpenseCategoryBoth(categoryName: String) {
@@ -677,6 +858,53 @@ class CategoryManager private constructor(context: Context) {
         private const val KEY_CUSTOM_INCOME_CATEGORIES = "custom_income_categories"
         private const val KEY_DELETED_EXPENSE_ENUMS = "deleted_expense_enums"
         private const val KEY_DELETED_INCOME_ENUMS = "deleted_income_enums"
+        
+        // Predefined category colors (as Long values for easy storage in SharedPreferences)
+        // These colors are carefully selected from multiple palettes to be visually distinct
+        val CATEGORY_COLORS = listOf(
+            // Material Design primary colors
+            0xFF4285F4, // Google Blue
+            0xFFEA4335, // Google Red
+            0xFFFBBC05, // Google Yellow
+            0xFF34A853, // Google Green
+            
+            // Vibrant colors
+            0xFFE91E63, // Pink
+            0xFF9C27B0, // Purple
+            0xFF673AB7, // Deep Purple
+            0xFF3F51B5, // Indigo
+            0xFF2196F3, // Blue
+            0xFF00BCD4, // Cyan
+            0xFF009688, // Teal
+            0xFF4CAF50, // Green
+            0xFF8BC34A, // Light Green
+            0xFFCDDC39, // Lime
+            0xFFFFEB3B, // Yellow
+            0xFFFFC107, // Amber
+            0xFFFF9800, // Orange
+            0xFFFF5722, // Deep Orange
+            0xFF795548, // Brown
+            
+            // Dark and rich colors
+            0xFF6A1B9A, // Rich Purple
+            0xFF1A237E, // Deep Blue
+            0xFF1B5E20, // Forest Green
+            0xFFB71C1C, // Dark Red
+            0xFF880E4F, // Dark Pink
+            0xFF4A148C, // Dark Purple
+            0xFF006064, // Dark Cyan
+            0xFF33691E, // Dark Green
+            0xFFBF360C, // Rust
+            
+            // Pastel colors
+            0xFFBBDEFB, // Pastel Blue
+            0xFFF8BBD0, // Pastel Pink
+            0xFFD1C4E9, // Pastel Purple
+            0xFFC8E6C9, // Pastel Green
+            0xFFFFF9C4, // Pastel Yellow
+            0xFFFFE0B2, // Pastel Orange
+            0xFFFFCCBC  // Pastel Red
+        )
         
         @Volatile
         private var instance: CategoryManager? = null
