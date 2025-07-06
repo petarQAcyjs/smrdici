@@ -550,31 +550,48 @@ class HomeViewModel(
                     customStartDay = if (configuredPeriod == Period.CUSTOM) customStartDay else 1
                 )
                 
-                // Check if we have a valid cached result
+                // Calculate periods based on the configured period type
+                val periods = calculatePeriods(configuredPeriod, now, numPeriodsToShow)
+                
+                // Create a list to hold all period expense data
+                val newPeriodExpensesList = mutableListOf<PeriodExpenses>()
+                
+                // Current time for cache timestamps
                 val currentTime = System.currentTimeMillis()
-                var periodExpensesList: List<PeriodExpenses>? = null
                 
-                cacheMutex.withLock {
-                    val cacheTimestamp = cacheTimestamps[cacheKey] ?: 0L
-                    val isCacheValid = currentTime - cacheTimestamp < cacheExpirationTime
+                // Process each period - with optimized caching strategy
+                for ((index, period) in periods.withIndex()) {
+                    val (startDate, endDate, periodName) = period
                     
-                    if (isCacheValid && expenseHistoryCache.containsKey(cacheKey)) {
-                        Log.d(TAG, "Using cached expense history data for period: $configuredPeriod")
-                        periodExpensesList = expenseHistoryCache[cacheKey]
+                    // Create individual period cache key
+                    val periodCacheKey = ExpenseCacheKey(
+                        periodType = configuredPeriod,
+                        startDate = startDate,
+                        endDate = endDate,
+                        customStartDay = if (configuredPeriod == Period.CUSTOM) customStartDay else 1
+                    )
+                    
+                    // Determine if we should use cached data for this period
+                    // Only recalculate for current period (index == 0) and previous period (index == 1)
+                    val shouldRecalculate = index < 2
+                    var periodExpenses: PeriodExpenses? = null
+                    
+                    if (!shouldRecalculate) {
+                        // Try to get cached data for older periods
+                        cacheMutex.withLock {
+                            if (expenseHistoryCache.containsKey(periodCacheKey)) {
+                                Log.d(TAG, "Using cached expense data for period: $periodName")
+                                val cachedPeriodsList = expenseHistoryCache[periodCacheKey]
+                                if (cachedPeriodsList != null && cachedPeriodsList.isNotEmpty()) {
+                                    periodExpenses = cachedPeriodsList[0]
+                                }
+                            }
+                        }
                     }
-                }
-                
-                // If we don't have a valid cached result, load the data
-                if (periodExpensesList == null) {
-                    // Calculate periods based on the configured period type
-                    val periods = calculatePeriods(configuredPeriod, now, numPeriodsToShow)
                     
-                    // Create a list to hold all period expense data
-                    val newPeriodExpensesList = mutableListOf<PeriodExpenses>()
-                    
-                    // Process each period
-                    for ((index, period) in periods.withIndex()) {
-                        val (startDate, endDate, periodName) = period
+                    // If we need to calculate this period (current, previous, or no cache)
+                    if (periodExpenses == null) {
+                        Log.d(TAG, "Calculating expense data for period: $periodName")
                         
                         // Convert LocalDate to Calendar for the repository
                         val startCalendar = Calendar.getInstance().apply {
@@ -634,35 +651,98 @@ class HomeViewModel(
                             }
                             .sortedByDescending { it.amount }
                         
-                        // Add this period's data to our list
-                        newPeriodExpensesList.add(
-                            PeriodExpenses(
-                                periodName = periodName,
-                                totalAmount = totalAmount,
-                                categoryExpenses = categoryExpenses
-                            )
+                        // Create period expenses object
+                        periodExpenses = PeriodExpenses(
+                            periodName = periodName,
+                            totalAmount = totalAmount,
+                            categoryExpenses = categoryExpenses
                         )
+                        
+                        // Cache individual period data
+                        cacheMutex.withLock {
+                            // Store as a list with one item to maintain compatibility with existing code
+                            expenseHistoryCache[periodCacheKey] = listOf(periodExpenses!!)
+                            cacheTimestamps[periodCacheKey] = currentTime
+                        }
                     }
                     
-                    // Reverse the list so most recent period is last (rightmost in chart)
-                    periodExpensesList = newPeriodExpensesList.reversed()
-                    
-                    // Cache the result
-                    cacheMutex.withLock {
-                        expenseHistoryCache[cacheKey] = periodExpensesList!!
-                        cacheTimestamps[cacheKey] = currentTime
-                    }
-                    
-                    Log.d(TAG, "Created and cached expense history data for ${periodExpensesList!!.size} periods")
+                    // Add this period's data to our list
+                    newPeriodExpensesList.add(periodExpenses!!)
                 }
                 
-                _expenseHistoryData.value = periodExpensesList!!
+                // Clean up old cache entries (older than 9 periods)
+                viewModelScope.launch {
+                    cleanupOldCacheEntries(configuredPeriod, now, customStartDay)
+                }
+                
+                // Reverse the list so most recent period is last (rightmost in chart)
+                val periodExpensesList = newPeriodExpensesList.reversed()
+                
+                // Cache the complete result for the main cache key
+                cacheMutex.withLock {
+                    expenseHistoryCache[cacheKey] = periodExpensesList
+                    cacheTimestamps[cacheKey] = currentTime
+                }
+                
+                Log.d(TAG, "Finalized expense history data for ${periodExpensesList.size} periods")
+                
+                _expenseHistoryData.value = periodExpensesList
                 _isLoadingHistoryData.value = false
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading expense history data", e)
                 _expenseHistoryData.value = emptyList()
                 _isLoadingHistoryData.value = false
+            }
+        }
+    }
+    
+    // Helper function to clean up old cache entries
+    private suspend fun cleanupOldCacheEntries(periodType: Period, currentDate: LocalDate, customStartDay: Int) {
+        cacheMutex.withLock {
+            // Find cache keys that are for individual periods (not aggregate results)
+            val keysToRemove = mutableListOf<ExpenseCacheKey>()
+            
+            for (key in expenseHistoryCache.keys) {
+                // Skip keys that represent aggregate results (those with large date ranges)
+                if (key.startDate.until(key.endDate).months >= 1) {
+                    continue
+                }
+                
+                // Calculate how old this period is compared to the current date
+                val periodAge = when (periodType) {
+                    Period.DAILY -> currentDate.toEpochDay() - key.startDate.toEpochDay()
+                    Period.WEEKLY -> {
+                        val currentWeek = currentDate.toEpochDay() / 7
+                        val keyWeek = key.startDate.toEpochDay() / 7
+                        currentWeek - keyWeek
+                    }
+                    Period.MONTHLY -> {
+                        val currentMonth = currentDate.year * 12 + currentDate.monthValue
+                        val keyMonth = key.startDate.year * 12 + key.startDate.monthValue
+                        (currentMonth - keyMonth).toLong()
+                    }
+                    Period.YEARLY -> (currentDate.year - key.startDate.year).toLong()
+                    Period.CUSTOM -> {
+                        // For custom periods, approximate by months
+                        val currentMonth = currentDate.year * 12 + currentDate.monthValue
+                        val keyMonth = key.startDate.year * 12 + key.startDate.monthValue
+                        (currentMonth - keyMonth).toLong()
+                    }
+                    else -> 0L // Default case, don't remove
+                }
+                
+                // If period is older than 9 periods, mark for removal
+                if (periodAge > 9L) {
+                    keysToRemove.add(key)
+                }
+            }
+            
+            // Remove old entries
+            for (key in keysToRemove) {
+                expenseHistoryCache.remove(key)
+                cacheTimestamps.remove(key)
+                Log.d(TAG, "Removed old cache entry for period: ${key.startDate} to ${key.endDate}")
             }
         }
     }

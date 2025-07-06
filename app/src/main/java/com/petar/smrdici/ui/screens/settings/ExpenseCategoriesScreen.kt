@@ -127,7 +127,7 @@ class CategoryMigrationViewModel(context: Context) : ViewModel() {
 }
 
 // Funkcija za generisanje boje na osnovu imena kategorije
-fun getExpenseCategoryColor(categoryName: String): Color {
+private fun getExpenseCategoryColor(categoryName: String): Color {
     val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
     
     // If context is available, check for saved color
@@ -182,7 +182,7 @@ fun getExpenseCategoryColor(categoryName: String): Color {
 }
 
 // Funkcija za dobijanje odgovarajuće ikone za kategoriju
-fun getCategoryIcon(categoryName: String): ImageVector {
+private fun getCategoryIcon(categoryName: String): ImageVector {
     val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
     
     // If context is available, check for saved icon

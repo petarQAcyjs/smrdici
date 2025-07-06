@@ -92,7 +92,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 // Funkcija za generisanje boje na osnovu imena kategorije
-fun getIncomeCategoryColor(categoryName: String): Color {
+private fun getIncomeCategoryColor(categoryName: String): Color {
     val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
     
     // If context is available, check for saved color
@@ -146,8 +146,8 @@ fun getIncomeCategoryColor(categoryName: String): Color {
     return defaultColor
 }
 
-// Funkcija za dobijanje odgovarajuće ikone za kategoriju prihoda
-fun getIncomeCategoryIcon(categoryName: String): ImageVector {
+// Funkcija za dobijanje odgovarajuće ikone za kategoriju
+private fun getIncomeCategoryIcon(categoryName: String): ImageVector {
     val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
     
     // If context is available, check for saved icon
