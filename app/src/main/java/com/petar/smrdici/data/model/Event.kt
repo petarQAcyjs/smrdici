@@ -17,7 +17,8 @@ data class Event(
     val participants: List<String> = emptyList(),
     val calendarId: String? = null,
     val createdAt: Timestamp? = null,
-    val updatedAt: Timestamp? = null
+    val updatedAt: Timestamp? = null,
+    val isRecurringYearly: Boolean = false // Поље за годишње понављање догађаја
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -54,4 +55,10 @@ enum class EventAssignee(val displayName: String, val initial: String, val color
     NATASA("Наташа", "Н", "#DB4437"),
     MILICA("Милица", "М", "#E91E63"),
     BOGDAN("Богдан", "Б", "#F4B400")
+}
+
+// Enum for recurring event types
+enum class RecurringType(val displayName: String) {
+    NONE("Не понавља се"),
+    YEARLY("Годишње")
 }

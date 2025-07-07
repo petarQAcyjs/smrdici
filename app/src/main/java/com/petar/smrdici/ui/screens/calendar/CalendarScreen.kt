@@ -795,6 +795,32 @@ fun AddEventDialog(
                         }
                     )
                 }
+                
+                // Годишње понављање догађаја
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Понављај сваке године",
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = eventFormState.isRecurringYearly,
+                        onCheckedChange = { isRecurringYearly -> 
+                            onEventFormChanged("isRecurringYearly", isRecurringYearly)
+                        }
+                    )
+                }
+                
+                if (eventFormState.isRecurringYearly) {
+                    Text(
+                        text = "Догађај ће се понављати сваке године на исти датум",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
 
                 // Одабир особе - побољшана секција
                 Column {
@@ -1135,6 +1161,31 @@ fun EventDetailsDialog(
                         text = event.description,
                         style = MaterialTheme.typography.bodyLarge
                     )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Приказ информације о годишњем понављању
+                if (event.isRecurringYearly) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = "Годишње понављање",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Годишњи догађај",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
                 }
                 
                 Spacer(modifier = Modifier.height(24.dp))

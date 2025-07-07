@@ -26,6 +26,53 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.SmokingRooms
+import androidx.compose.material.icons.filled.LocalGroceryStore
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.SportsBasketball
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Commute
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Subscriptions
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Handyman
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Chair
+import androidx.compose.material.icons.filled.Grass
+import androidx.compose.material.icons.filled.LocalBar
+import androidx.compose.material.icons.filled.Work
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.CurrencyExchange
+import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,6 +110,261 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.utils.LogUtils
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+
+// Helper functions to get category icons and colors
+@Composable
+private fun getCategoryIcon(categoryName: String): ImageVector {
+    val context = LocalContext.current
+    val categoryManager = remember { CategoryManager.getInstance(context) }
+    
+    // First check if we have a saved icon
+    val savedIconName = categoryManager.getCategoryIcon(categoryName, true)
+    LogUtils.d("EditCategoryScreen", "Getting icon for $categoryName: savedIconName=$savedIconName")
+    
+    if (savedIconName != null) {
+        // Try to find the icon by name
+        try {
+            LogUtils.d("EditCategoryScreen", "Attempting to find icon with name: $savedIconName")
+            
+            // Use the shared icon finder
+            val foundIcon = CategoryIcons.findIconByName(savedIconName)
+            if (foundIcon != null) {
+                LogUtils.d("EditCategoryScreen", "Found icon for name: $savedIconName")
+                return foundIcon
+            }
+            
+            LogUtils.e("EditCategoryScreen", "Could not find icon with name: $savedIconName")
+        } catch (e: Exception) {
+            LogUtils.e("EditCategoryScreen", "Error finding icon $savedIconName: ${e.message}")
+            // Fall through to default icon selection
+        }
+    }
+    
+    // If no saved icon or couldn't find it, use the default mapping
+    LogUtils.d("EditCategoryScreen", "Using default icon mapping for $categoryName")
+    
+    // If no saved icon, use the default mapping
+    return when (categoryName.lowercase()) {
+        "food", "храна", "hrana" -> Icons.Default.Fastfood
+        "home", "кућа", "kuća" -> Icons.Default.Home
+        "health", "здравље", "zdravlje" -> Icons.Default.LocalHospital
+        "car", "ауто", "auto" -> Icons.Default.DirectionsCar
+        "education", "образовање", "obrazovanje" -> Icons.Default.School
+        "children", "деца", "deca" -> Icons.Default.ChildCare
+        "gifts", "поклони", "pokloni" -> Icons.Default.CardGiftcard
+        "cafe", "кафа", "kafa" -> Icons.Default.LocalCafe
+        "electronics", "електроника", "elektronika" -> Icons.Default.Devices
+        "entertainment", "забава", "zabava" -> Icons.Filled.SportsEsports
+        "pets", "љубимци", "ljubimci" -> Icons.Filled.Pets
+        "restaurant", "ресторан", "restoran" -> Icons.Filled.Restaurant
+        "cigarettes", "цигарете", "cigarete" -> Icons.Filled.SmokingRooms
+        "groceries", "намирнице", "namirnice" -> Icons.Filled.LocalGroceryStore
+        "debt", "дуг", "dug" -> Icons.Filled.CreditCard
+        "celebration", "прослава", "proslava" -> Icons.Filled.Celebration
+        "bills", "рачуни", "računi" -> Icons.Filled.Receipt
+        "clothing", "одећа", "odeća" -> Icons.Filled.Checkroom
+        "travel", "путовање", "putovanje" -> Icons.Filled.Flight
+        "sports", "спорт", "sport" -> Icons.Filled.SportsBasketball
+        "fitness", "фитнес", "fitnes" -> Icons.Filled.FitnessCenter
+        "beauty", "лепота", "lepota" -> Icons.Filled.Face
+        "transport", "превоз", "prevoz" -> Icons.Filled.Commute
+        "books", "књиге", "knjige" -> Icons.AutoMirrored.Filled.MenuBook
+        "games", "игре", "igre" -> Icons.Filled.Casino
+        "music", "музика", "muzika" -> Icons.Filled.MusicNote
+        "movies", "филмови", "filmovi" -> Icons.Filled.Movie
+        "subscriptions", "претплате", "pretplate" -> Icons.Filled.Subscriptions
+        "insurance", "осигурање", "osiguranje" -> Icons.Filled.Security
+        "taxes", "порези", "porezi" -> Icons.Filled.Receipt
+        "maintenance", "одржавање", "održavanje" -> Icons.Filled.Handyman
+        "internet", "интернет" -> Icons.Filled.Wifi
+        "phone", "телефон", "telefon" -> Icons.Filled.Smartphone
+        "utilities", "комуналије", "komunalije" -> Icons.Filled.WaterDrop
+        "rent", "кирија", "kirija" -> Icons.Filled.Apartment
+        "mortgage", "хипотека", "hipoteka" -> Icons.Filled.AccountBalance
+        "investments", "инвестиције", "investicije" -> Icons.AutoMirrored.Filled.TrendingUp
+        "charity", "добротворно", "dobrotvorno" -> Icons.Filled.Favorite
+        "furniture", "намештај", "nameštaj" -> Icons.Filled.Chair
+        "garden", "башта", "bašta" -> Icons.Filled.Grass
+        "alcohol", "алкохол", "alkohol" -> Icons.Filled.LocalBar
+        else -> Icons.Default.ShoppingCart
+    }
+}
+
+@Composable
+private fun getIncomeCategoryIcon(categoryName: String): ImageVector {
+    val context = LocalContext.current
+    val categoryManager = remember { CategoryManager.getInstance(context) }
+    
+    // First check if we have a saved icon
+    val savedIconName = categoryManager.getCategoryIcon(categoryName, false)
+    LogUtils.d("EditCategoryScreen", "Getting income icon for $categoryName: savedIconName=$savedIconName")
+    
+    if (savedIconName != null) {
+        // Try to find the icon by name
+        try {
+            LogUtils.d("EditCategoryScreen", "Attempting to find icon with name: $savedIconName")
+            
+            // Use the shared icon finder
+            val foundIcon = CategoryIcons.findIconByName(savedIconName)
+            if (foundIcon != null) {
+                LogUtils.d("EditCategoryScreen", "Found icon for name: $savedIconName")
+                return foundIcon
+            }
+            
+            LogUtils.e("EditCategoryScreen", "Could not find icon with name: $savedIconName")
+        } catch (e: Exception) {
+            LogUtils.e("EditCategoryScreen", "Error finding icon $savedIconName: ${e.message}")
+            // Fall through to default icon selection
+        }
+    }
+    
+    // If no saved icon or couldn't find it, use the default mapping
+    LogUtils.d("EditCategoryScreen", "Using default icon mapping for income category: $categoryName")
+    
+    // If no saved icon, use the default mapping
+    return when (categoryName.lowercase()) {
+        "salary", "плата", "plata" -> Icons.Default.Work
+        "bonus", "бонус" -> Icons.Default.MonetizationOn
+        "gift", "поклон", "poklon" -> Icons.Default.CardGiftcard
+        "investment", "инвестиција", "investicija" -> Icons.AutoMirrored.Filled.TrendingUp
+        "rental", "рентал", "rental" -> Icons.Default.Apartment
+        "business", "бизнис", "biznis" -> Icons.Default.Business
+        "freelance", "фриленс", "frilens" -> Icons.Default.Payments
+        "interest", "камата", "kamata" -> Icons.Default.AccountBalance
+        "dividend", "дивиденда", "dividenda" -> Icons.Default.CurrencyExchange
+        "refund", "повраћај", "povraćaj" -> Icons.Default.Savings
+        "sale", "продаја", "prodaja" -> Icons.Default.LocalGroceryStore
+        "other", "друго", "drugo" -> Icons.Default.AccountBalanceWallet
+        else -> Icons.Default.AttachMoney
+    }
+}
+
+@Composable
+private fun getExpenseCategoryColor(categoryName: String): Color {
+    val context = LocalContext.current
+    val categoryManager = remember { CategoryManager.getInstance(context) }
+    
+    // First check if we have a saved color
+    val savedColor = categoryManager.getCategoryColor(categoryName, true)
+    LogUtils.d("EditCategoryScreen", "Getting color for $categoryName: savedColor=$savedColor")
+    if (savedColor != null) {
+        try {
+            // Convert the long value to a Color
+            val alpha = (savedColor shr 24 and 0xFF).toInt()
+            val red = (savedColor shr 16 and 0xFF).toInt()
+            val green = (savedColor shr 8 and 0xFF).toInt()
+            val blue = (savedColor and 0xFF).toInt()
+            
+            val color = Color(red, green, blue, alpha)
+            LogUtils.d("EditCategoryScreen", "Using saved color for $categoryName: ARGB($alpha,$red,$green,$blue)")
+            return color
+        } catch (e: Exception) {
+            LogUtils.e("EditCategoryScreen", "Error converting color value: $savedColor", e)
+            // Fall through to default color
+        }
+    }
+    
+    // If no saved color, use a diverse set of colors
+    val colors = listOf(
+        // Material Design colors
+        Color(0xFFE91E63), // Pink
+        Color(0xFF9C27B0), // Purple
+        Color(0xFF3F51B5), // Indigo
+        Color(0xFF2196F3), // Blue
+        Color(0xFF00BCD4), // Cyan
+        Color(0xFF009688), // Teal
+        Color(0xFF4CAF50), // Green
+        Color(0xFFCDDC39), // Lime
+        Color(0xFFFFC107), // Amber
+        Color(0xFFFF5722), // Deep Orange
+        
+        // Rich/Dark colors
+        Color(0xFF6A1B9A), // Rich Purple
+        Color(0xFF1A237E), // Deep Blue
+        Color(0xFF1B5E20), // Forest Green
+        Color(0xFFB71C1C), // Dark Red
+        Color(0xFF880E4F), // Dark Pink
+        
+        // Bright colors
+        Color(0xFF4285F4), // Google Blue
+        Color(0xFFEA4335), // Google Red
+        Color(0xFFFBBC05), // Google Yellow
+        Color(0xFF34A853), // Google Green
+        Color(0xFFFF9800)  // Orange
+    )
+    
+    // Use hash code of category name to select color
+    val index = abs(categoryName.hashCode()) % colors.size
+    val defaultColor = colors[index]
+    LogUtils.d("EditCategoryScreen", "Using default color for $categoryName: ${defaultColor.value}")
+    return defaultColor
+}
+
+@Composable
+private fun getIncomeCategoryColor(categoryName: String): Color {
+    val context = LocalContext.current
+    val categoryManager = remember { CategoryManager.getInstance(context) }
+    
+    // First check if we have a saved color
+    val savedColor = categoryManager.getCategoryColor(categoryName, false)
+    LogUtils.d("EditCategoryScreen", "Getting income color for $categoryName: savedColor=$savedColor")
+    if (savedColor != null) {
+        try {
+            // Convert the long value to a Color
+            val alpha = (savedColor shr 24 and 0xFF).toInt()
+            val red = (savedColor shr 16 and 0xFF).toInt()
+            val green = (savedColor shr 8 and 0xFF).toInt()
+            val blue = (savedColor and 0xFF).toInt()
+            
+            val color = Color(red, green, blue, alpha)
+            LogUtils.d("EditCategoryScreen", "Using saved income color for $categoryName: ARGB($alpha,$red,$green,$blue)")
+            return color
+        } catch (e: Exception) {
+            LogUtils.e("EditCategoryScreen", "Error converting income color value: $savedColor", e)
+            // Fall through to default color
+        }
+    }
+    
+    // If no saved color, use a diverse set of colors with an income-focused palette
+    val colors = listOf(
+        // Green/Blue tones (traditionally associated with income/money)
+        Color(0xFF4CAF50), // Green
+        Color(0xFF009688), // Teal
+        Color(0xFF00BCD4), // Cyan
+        Color(0xFF2196F3), // Blue
+        Color(0xFF3F51B5), // Indigo
+        
+        // Warm colors for contrast
+        Color(0xFFFF9800), // Orange
+        Color(0xFFE91E63), // Pink
+        Color(0xFF9C27B0), // Purple
+        
+        // Rich/Dark colors
+        Color(0xFF1A237E), // Deep Blue
+        Color(0xFF1B5E20), // Forest Green
+        Color(0xFF006064), // Dark Cyan
+        
+        // Bright colors
+        Color(0xFF4285F4), // Google Blue
+        Color(0xFF34A853), // Google Green
+        Color(0xFFFBBC05), // Google Yellow
+        
+        // Pastel colors for a softer look
+        Color(0xFFBBDEFB), // Pastel Blue
+        Color(0xFFC8E6C9), // Pastel Green
+        Color(0xFFD1C4E9), // Pastel Purple
+        Color(0xFFFFF9C4), // Pastel Yellow
+        Color(0xFFFFE0B2), // Pastel Orange
+        Color(0xFFFFCCBC)  // Pastel Red
+    )
+    
+    // Use hash code of category name to select color
+    val index = abs(categoryName.hashCode()) % colors.size
+    val defaultColor = colors[index]
+    LogUtils.d("EditCategoryScreen", "Using default income color for $categoryName: ${defaultColor.value}")
+    return defaultColor
+}
 
 enum class CategoryType {
     EXPENSE, INCOME
@@ -83,8 +385,16 @@ fun EditCategoryScreen(
     
     var currentCategoryName by remember { mutableStateOf(categoryName) }
     var isNewCategory by remember { mutableStateOf(categoryName.isEmpty()) }
-    var selectedIcon by remember { mutableStateOf<ImageVector?>(null) }
-    var selectedColor by remember { mutableStateOf<Color?>(null) }
+    var selectedIcon by remember { 
+        mutableStateOf<ImageVector>(
+            if (categoryType == CategoryType.EXPENSE) Icons.Default.ShoppingCart else Icons.Default.AttachMoney
+        ) 
+    }
+    var selectedColor by remember { 
+        mutableStateOf<Color>(
+            categoryManager.getAllComposeColors()[0]
+        ) 
+    }
     
     // Dialog state for delete confirmation
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -93,28 +403,25 @@ fun EditCategoryScreen(
     var iconSearchQuery by remember { mutableStateOf("") }
     
     // Initialize with existing category data if editing
-    LaunchedEffect(categoryName) {
-        if (!isNewCategory) {
-            selectedIcon = when (categoryType) {
-                CategoryType.EXPENSE -> getCategoryIcon(categoryName)
-                CategoryType.INCOME -> getIncomeCategoryIcon(categoryName)
-            }
-            
-            LogUtils.d("EditCategoryScreen", "Initialized with icon: ${selectedIcon?.toString() ?: "null"} for category: $categoryName")
-            
-            selectedColor = when (categoryType) {
-                CategoryType.EXPENSE -> getExpenseCategoryColor(categoryName)
-                CategoryType.INCOME -> getIncomeCategoryColor(categoryName)
-            }
-            
-            LogUtils.d("EditCategoryScreen", "Initialized with color: ${selectedColor?.toString() ?: "null"} for category: $categoryName")
+    if (!isNewCategory) {
+        val icon = if (categoryType == CategoryType.EXPENSE) {
+            getCategoryIcon(categoryName)
         } else {
-            // Default selections for new category
-            selectedIcon = if (categoryType == CategoryType.EXPENSE) 
-                Icons.Default.ShoppingCart else Icons.Default.AttachMoney
-            selectedColor = predefinedColors[0]
-            
-            LogUtils.d("EditCategoryScreen", "New category initialized with default icon: ${selectedIcon?.toString() ?: "null"} and color: ${selectedColor?.toString() ?: "null"}")
+            getIncomeCategoryIcon(categoryName)
+        }
+        
+        val color = if (categoryType == CategoryType.EXPENSE) {
+            getExpenseCategoryColor(categoryName)
+        } else {
+            getIncomeCategoryColor(categoryName)
+        }
+        
+        // Update the state variables with the computed values
+        LaunchedEffect(categoryName) {
+            selectedIcon = icon
+            selectedColor = color
+            LogUtils.d("EditCategoryScreen", "Initialized with icon: ${selectedIcon?.toString() ?: "null"} for category: $categoryName")
+            LogUtils.d("EditCategoryScreen", "Initialized with color: ${selectedColor?.toString() ?: "null"} for category: $categoryName")
         }
     }
     
@@ -482,11 +789,11 @@ fun EditCategoryScreen(
             )
             
             LazyVerticalGrid(
-                columns = GridCells.Fixed(5),
+                columns = GridCells.Adaptive(minSize = 48.dp),
                 contentPadding = PaddingValues(4.dp),
-                modifier = Modifier.height(120.dp)
+                modifier = Modifier.height(180.dp)
             ) {
-                items(predefinedColors) { color ->
+                items(categoryManager.getAllComposeColors()) { color ->
                     ColorSelectionItem(
                         color = color,
                         isSelected = selectedColor == color,
@@ -564,21 +871,10 @@ fun ColorSelectionItem(
     }
 }
 
-// Predefined colors for selection
-val predefinedColors = listOf(
-    Color(0xFFE57373), // Red
-    Color(0xFF64B5F6), // Blue
-    Color(0xFFFFD54F), // Yellow
-    Color(0xFF81C784), // Green
-    Color(0xFFBA68C8), // Purple
-    Color(0xFF4FC3F7), // Light Blue
-    Color(0xFFFF8A65), // Orange
-    Color(0xFF9575CD), // Deep Purple
-    Color(0xFF4DB6AC), // Teal
-    Color(0xFFF06292), // Pink
-    Color(0xFF7986CB), // Indigo
-    Color(0xFFA1887F), // Brown
-    Color(0xFF90A4AE), // Blue Grey
-    Color(0xFFFFB74D), // Amber
-    Color(0xFFAED581)  // Light Green
-) 
+// Get colors from CategoryManager instead of hardcoded list
+@Composable
+private fun getCategoryColors(): List<Color> {
+    val context = LocalContext.current
+    val categoryManager = remember { CategoryManager.getInstance(context) }
+    return categoryManager.getAllComposeColors()
+} 

@@ -204,7 +204,7 @@ fun NavGraph(
             
             EditCategoryScreen(
                 navController = navController,
-                categoryName = categoryName.replace("_", "/"),
+                categoryName = if (categoryName == "new") "" else categoryName.replace("_", "/"),
                 categoryType = if (categoryType == "EXPENSE") CategoryType.EXPENSE else CategoryType.INCOME
             )
         }

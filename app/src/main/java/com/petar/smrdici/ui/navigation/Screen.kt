@@ -28,7 +28,11 @@ sealed class Screen(val route: String) {
     object IncomeCategories : Screen("income_categories")
     object EditCategory : Screen("edit_category/{categoryName}/{categoryType}") {
         fun createRoute(categoryName: String = "", categoryType: String) = 
-            "edit_category/${categoryName.replace("/", "_")}/$categoryType"
+            if (categoryName.isEmpty()) {
+                "edit_category/new/$categoryType"
+            } else {
+                "edit_category/${categoryName.replace("/", "_")}/$categoryType"
+            }
     }
     
     object EditExpense : Screen("edit_expense/{expenseId}")

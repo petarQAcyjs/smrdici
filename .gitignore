@@ -82,6 +82,7 @@ Thumbs.db
 
 # Kotlin-specific
 **/.kotlin/sessions/
+.kotlin/
 
 # Firebase
 firebase.json
@@ -148,3 +149,10 @@ smrdici.pub
 # User-specific files
 *.swp
 *.swo
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+package-lock.json

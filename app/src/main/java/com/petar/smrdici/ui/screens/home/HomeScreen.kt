@@ -419,6 +419,8 @@ fun ExpensePieChartCard(
     onCardClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var expandedCategories by remember { mutableStateOf(false) }
+    
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -480,19 +482,20 @@ fun ExpensePieChartCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(220.dp), // Increased height for larger chart
+                        .weight(1f), // Use weight to fill available space
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Pie chart on the left - increased size
+                    // Pie chart on the left - now a donut chart with total in center
                     Box(
                         modifier = Modifier
-                            .weight(1.2f) // Give more space to the chart
+                            .weight(1.2f)
                             .fillMaxHeight()
                             .padding(4.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         PieChart(
                             data = pieChartData,
+                            centerText = totalExpenses.toInt().toString(),
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -500,18 +503,21 @@ fun ExpensePieChartCard(
                     // Compact legend on the right with percentages
                     Column(
                         modifier = Modifier
-                            .weight(0.8f) // Less space for the legend
+                            .weight(0.8f)
                             .fillMaxHeight()
                             .padding(start = 4.dp),
-                        verticalArrangement = Arrangement.SpaceBetween // Changed to SpaceBetween
+                        verticalArrangement = Arrangement.spacedBy(2.dp) // Evenly space items
                     ) {
-                        // Categories section
-                        Column {
-                            // Show categories in a compact layout
-                            val topCategories = expenseData.take(5) // Show up to 5 categories
+                        // Categories section in a scrollable column
+                        Column(
+                            modifier = Modifier
+                                .weight(1f) // Take all available space
+                                .verticalScroll(rememberScrollState()) // Make scrollable if needed
+                        ) {
+                            // Show categories
+                            val categoriesToShow = if (expandedCategories) expenseData else expenseData.take(5)
                             
-                            // Create rows of 1 item each for better readability
-                            topCategories.forEach { category ->
+                            categoriesToShow.forEach { category ->
                                 CompactCategoryLegendItem(
                                     category = category,
                                     modifier = Modifier.fillMaxWidth()
@@ -519,7 +525,7 @@ fun ExpensePieChartCard(
                             }
                             
                             // Show "View more" if there are more categories
-                            if (expenseData.size > 5) {
+                            if (expenseData.size > 5 && !expandedCategories) {
                                 Text(
                                     text = "... и још ${expenseData.size - 5}",
                                     style = MaterialTheme.typography.bodySmall,
@@ -527,40 +533,52 @@ fun ExpensePieChartCard(
                                     modifier = Modifier
                                         .align(Alignment.End)
                                         .padding(top = 4.dp)
+                                        .clickable { expandedCategories = true }
+                                )
+                            } else if (expandedCategories && expenseData.size > 5) {
+                                Text(
+                                    text = "Прикажи мање",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .align(Alignment.End)
+                                        .padding(top = 4.dp)
+                                        .clickable { expandedCategories = false }
                                 )
                             }
                         }
+                    }
+                }
+                
+                // Total section - outside of Row but inside the main Column
+                Column {
+                    // Add divider before total
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Total expenses
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Укупно:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                         
-                        // Total section - always at the bottom
-                        Column {
-                            // Add divider before total
-                            HorizontalDivider(
-                                thickness = 1.dp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                            )
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            // Total expenses
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Укупно:",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                
-                                Text(
-                                    text = String.format("%.2f", totalExpenses),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
+                        Text(
+                            text = String.format("%.2f", totalExpenses),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }
@@ -634,9 +652,7 @@ fun ExpenseHistoryCard(
             .fillMaxWidth()
             .clickable { onCardClick() },
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 4.dp
-        )
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier
@@ -650,7 +666,7 @@ fun ExpenseHistoryCard(
                 fontWeight = FontWeight.Bold
             )
             
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             
             if (isLoading) {
                 Box(
@@ -675,146 +691,145 @@ fun ExpenseHistoryCard(
                     )
                 }
             } else {
-                // Main chart area
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                ) {
-                    // Simple stacked bar chart implementation
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val availableWidth = size.width - (historyData.size * 20f)
-                        val barWidth = min(40f, availableWidth / historyData.size)
-                        val startX = (size.width - ((historyData.size - 1) * 20f + historyData.size * barWidth)) / 2
-                        
-                        // Find maximum value for scaling
-                        val maxValue = historyData.maxOfOrNull { it.totalAmount } ?: 0.0
-                        
-                        historyData.forEachIndexed { index, periodData ->
-                            val x = startX + index * (barWidth + 20f)
-                            var yOffset = size.height
-                            val scaleFactor = if (maxValue > 0) size.height / maxValue else 0.0
-                            
-                            // Draw each category segment in the bar
-                            periodData.categoryExpenses.forEach { category ->
-                                val segmentHeight = (category.amount * scaleFactor).toFloat()
-                                
-                                // Don't draw segments that are too small to be visible
-                                if (segmentHeight >= 1f) {
-                                    drawRect(
-                                        color = category.color,
-                                        topLeft = Offset(x, yOffset - segmentHeight),
-                                        size = Size(barWidth, segmentHeight)
+                // Define fixed grid line values
+                val gridLineValues = listOf(0, 100000, 200000, 300000, 400000, 500000, 600000, 700000)
+                val maxGridValue = 800000.0  // Keep max value for scaling but don't show the line
+                
+                // Use LazyRow to align bars and labels perfectly
+                Column {
+                    // Y-axis labels and chart area
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                    ) {
+                        // Y-axis labels
+                        Column(
+                            modifier = Modifier
+                                .width(48.dp)
+                                .fillMaxHeight()
+                        ) {
+                            gridLineValues.reversed().forEach { value ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    Text(
+                                        text = formatNumber(value),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
+                                        color = Color.Gray,
+                                        textAlign = TextAlign.End,
+                                        modifier = Modifier.padding(end = 4.dp)
                                     )
-                                    
-                                    yOffset -= segmentHeight
                                 }
                             }
                         }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Period labels
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    historyData.forEach { periodData ->
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = periodData.periodName,
-                                style = MaterialTheme.typography.bodySmall,
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            
-                            Text(
-                                text = String.format("%.0f", periodData.totalAmount),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.error,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Legend for top categories
-                val allCategories = mutableListOf<CategoryExpense>()
-                
-                // Collect all unique categories
-                historyData.forEach { period ->
-                    period.categoryExpenses.forEach { category ->
-                        if (allCategories.none { it.categoryName == category.categoryName }) {
-                            allCategories.add(category)
-                        }
-                    }
-                }
-                
-                // Sort by total amount across all periods and take top 5
-                val topCategories = allCategories.sortedByDescending { category ->
-                    historyData.sumOf { period ->
-                        period.categoryExpenses
-                            .find { it.categoryName == category.categoryName }?.amount ?: 0.0
-                    }
-                }.take(5)
-                
-                // Display legend in rows of 3 items
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                ) {
-                    val rows = topCategories.chunked(3)
-                    rows.forEach { rowCategories ->
-                        Row(
+                        
+                        // Bars container with grid lines
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .weight(1f)
+                                .fillMaxHeight()
                         ) {
-                            rowCategories.forEach { category ->
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                            // Grid lines
+                            Canvas(
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                val chartHeight = size.height
+                                
+                                // Draw horizontal grid lines
+                                val gridLineColor = Color.Gray.copy(alpha = 0.2f)
+                                gridLineValues.forEach { value ->
+                                    val yRatio = value.toFloat() / maxGridValue.toFloat()
+                                    val y = chartHeight - (chartHeight * yRatio)
+                                    
+                                    drawLine(
+                                        color = gridLineColor,
+                                        start = Offset(0f, y),
+                                        end = Offset(size.width, y),
+                                        strokeWidth = 1f
+                                    )
+                                }
+                            }
+                            
+                            // Bars - use Row to align bars evenly
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                historyData.forEach { periodData ->
+                                    // Calculate bar height as percentage of max value
+                                    val heightPercentage = if (maxGridValue > 0) {
+                                        (periodData.totalAmount / maxGridValue).toFloat()
+                                    } else 0f
+                                    
                                     Box(
                                         modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(category.color)
-                                    )
-                                    
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    
-                                    Text(
-                                        text = category.categoryName,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                            .weight(1f)
+                                            .padding(horizontal = 8.dp)
+                                            .fillMaxHeight(heightPercentage)
+                                            .width(24.dp)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.primary,
+                                                shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                                            )
                                     )
                                 }
                             }
-                            
-                            // Add empty spacers if row is not full
-                            repeat(3 - rowCategories.size) {
-                                Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                    
+                    // X-axis labels - aligned with bars using the same Row arrangement
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 48.dp, top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        historyData.forEach { periodData ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = periodData.periodName,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                
+                                Text(
+                                    text = formatNumber(periodData.totalAmount.toInt()),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+// Format numbers with thousands separator
+private fun formatNumber(value: Int): String {
+    return if (value >= 1000) {
+        val thousands = value / 1000
+        val remainder = value % 1000
+        if (remainder == 0) {
+            "$thousands.000"
+        } else {
+            "$thousands.${remainder.toString().padStart(3, '0')}"
+        }
+    } else {
+        value.toString()
     }
 } 
