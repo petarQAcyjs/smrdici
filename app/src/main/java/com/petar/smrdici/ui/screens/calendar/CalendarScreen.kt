@@ -340,6 +340,11 @@ fun CalendarScreen(
                     }
                 }
                 
+                // Add days of week header
+                DaysOfWeekHeader(
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
                 // Враћамо CalendarGrid уместо MonthCalendar
                 CalendarGrid(
                     dates = dates,
@@ -438,6 +443,34 @@ fun CalendarScreen(
                 showEventDetailsDialog = false
             }
         )
+    }
+}
+
+@Composable
+fun DaysOfWeekHeader(
+    modifier: Modifier = Modifier
+) {
+    val daysOfWeek = listOf("П", "У", "С", "Ч", "П", "С", "Н") // Monday to Sunday in Serbian Cyrillic
+    
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(7),
+        modifier = modifier
+    ) {
+        items(daysOfWeek) { day ->
+            Box(
+                modifier = Modifier
+                    .aspectRatio(1f)
+                    .padding(2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = day,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
