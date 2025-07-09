@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -83,20 +84,20 @@ fun AppHeader(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(40.dp), // 40dp instead of default 64dp (37.5% reduction, close to 40%)
+            .height(48.dp), // Increased from 40dp to 48dp to accommodate title better
         color = MaterialTheme.colorScheme.surface
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp), // Reduced padding
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 4.dp)
         ) {
-            // Navigation icon section
+            // Navigation icon section (left side)
             Box(
-                modifier = Modifier.width(48.dp),
-                contentAlignment = Alignment.Center
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .width(80.dp), // Reduced from 100dp to give more space to title
+                contentAlignment = Alignment.CenterStart
             ) {
                 if (showBackButton) {
                     IconButton(
@@ -107,7 +108,7 @@ fun AppHeader(
                                 navController.navigateUp() 
                             }
                         },
-                        modifier = Modifier.padding(4.dp) // Reduced padding for smaller icon buttons
+                        modifier = Modifier.padding(4.dp)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -129,17 +130,18 @@ fun AppHeader(
                 }
             }
             
-            // Title section (centered both horizontally and vertically)
+            // Title section (centered)
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp), // Match the Surface height for proper vertical centering
+                    .align(Alignment.Center)
+                    .fillMaxWidth(0.7f), // Increased from 0.6f to 0.7f for more title space
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium, // Smaller title for slimmer look
+                    style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
+                    maxLines = 1, // Ensure single line
                     modifier = Modifier
                         .scale(scale)
                         .then(
@@ -165,43 +167,50 @@ fun AppHeader(
                 )
             }
             
-            // Actions section
-            Row(
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+            // Actions section (right side)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .width(80.dp), // Reduced from 100dp to match left side
+                contentAlignment = Alignment.CenterEnd
             ) {
-                // Custom actions
-                actions()
-                
-                // Profile icon
-                if (showProfileIcon && navController != null) {
-                    IconButton(
-                        onClick = { 
-                            if (user != null) {
-                                navController.navigate(Screen.Profile.route)
-                            }
-                        },
-                        modifier = Modifier.padding(2.dp) // Smaller padding
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Профил",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Custom actions
+                    actions()
+                    
+                    // Profile icon
+                    if (showProfileIcon && navController != null) {
+                        IconButton(
+                            onClick = { 
+                                if (user != null) {
+                                    navController.navigate(Screen.Profile.route)
+                                }
+                            },
+                            modifier = Modifier.padding(2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Профил",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
-                }
-                
-                // Logout button
-                if (showLogoutButton) {
-                    IconButton(
-                        onClick = onLogoutClick,
-                        modifier = Modifier.padding(2.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = "Одјави се",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
+                    
+                    // Logout button
+                    if (showLogoutButton) {
+                        IconButton(
+                            onClick = onLogoutClick,
+                            modifier = Modifier.padding(2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "Одјави се",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }

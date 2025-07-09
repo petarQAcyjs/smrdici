@@ -216,7 +216,7 @@ fun FinanceScreen(
             Column(
                 modifier = modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
+                    .padding(top = paddingValues.calculateTopPadding())
             ) {
                 // Time Period Selector
                 TimePeriodSelector(

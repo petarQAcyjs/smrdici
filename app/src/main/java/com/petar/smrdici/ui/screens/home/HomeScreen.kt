@@ -156,7 +156,7 @@ fun HomeScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(top = paddingValues.calculateTopPadding())
                 .pullRefresh(pullRefreshState)
         ) {
             // Check if user is authenticated
