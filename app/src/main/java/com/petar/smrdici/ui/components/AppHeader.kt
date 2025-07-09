@@ -129,9 +129,11 @@ fun AppHeader(
                 }
             }
             
-            // Title section (centered)
+            // Title section (centered both horizontally and vertically)
             Box(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp), // Match the Surface height for proper vertical centering
                 contentAlignment = Alignment.Center
             ) {
                 Text(
