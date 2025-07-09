@@ -692,8 +692,8 @@ fun ExpenseHistoryCard(
                 }
             } else {
                 // Define fixed grid line values
-                val gridLineValues = listOf(0, 100000, 200000, 300000, 400000, 500000, 600000, 700000)
-                val maxGridValue = 800000.0  // Keep max value for scaling but don't show the line
+                val gridLineValues = listOf(0, 50000, 100000, 150000, 200000, 250000, 300000, 350000)
+                val maxGridValue = 400000.0  // Keep max value for scaling but don't show the line
                 
                 // Use LazyRow to align bars and labels perfectly
                 Column {
