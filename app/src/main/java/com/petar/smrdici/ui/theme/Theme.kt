@@ -80,9 +80,8 @@ fun SmrdiciTheme(
                 colorScheme.background.toArgb()
             }
             
-            // Using setStatusBarColor and setNavigationBarColor methods is not deprecated
-            window.statusBarColor = statusBarColor
-            window.navigationBarColor = navigationBarColor
+            // Use WindowCompat to set status bar and navigation bar colors
+            WindowCompat.setDecorFitsSystemWindows(window, false)
             
             // Set the appearance of the system bars
             WindowCompat.getInsetsController(window, view).apply {

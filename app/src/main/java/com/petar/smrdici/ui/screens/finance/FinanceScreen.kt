@@ -74,6 +74,8 @@ import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
+import com.petar.smrdici.ui.components.CategoryDetailsDialog
+import com.petar.smrdici.ui.components.CategorySummaryCard
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import com.petar.smrdici.utils.LogUtils
@@ -85,7 +87,7 @@ import java.text.NumberFormat
 import java.util.Locale
 import androidx.compose.ui.platform.LocalContext
 import kotlin.math.abs
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.DisposableEffect
@@ -925,9 +927,10 @@ fun TransactionItem(
         Color(savedColorValue)
     } else {
         // Use default colors if no custom color is set
-        when (isExpense) {
-            true -> MaterialTheme.colorScheme.error
-            false -> MaterialTheme.colorScheme.primary
+        if (isExpense) {
+            MaterialTheme.colorScheme.error
+        } else {
+            MaterialTheme.colorScheme.primary
         }
     }
     
@@ -956,9 +959,9 @@ fun TransactionItem(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (transaction.income.category != null) {
+                        transaction.income.category?.let { category ->
                             Text(
-                                text = transaction.income.category,
+                                text = category,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = categoryColor
                             )
@@ -974,9 +977,9 @@ fun TransactionItem(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (transaction.expense.category != null) {
+                        transaction.expense.category?.let { category ->
                             Text(
-                                text = transaction.expense.category,
+                                text = category,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = categoryColor
                             )

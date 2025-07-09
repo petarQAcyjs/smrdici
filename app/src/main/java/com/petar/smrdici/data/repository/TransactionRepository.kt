@@ -502,75 +502,73 @@ class TransactionRepository private constructor() {
 
     // Method to get all transactions (both income and expense)
     fun getAllTransactions(): Flow<List<Transaction>> = flow {
-        try {
-            LogUtils.d("TransactionRepository", "Getting all transactions from unified collection", "transaction")
-            val snapshot = transactionsCollection.get().await()
-            
-            val transactions = snapshot.documents.mapNotNull { doc ->
-                try {
-                    val id = doc.id
-                    val userId = doc.getString("userId") ?: currentUserId
-                    val amount = doc.getDouble("amount") ?: 0.0
-                    val description = doc.getString("description") ?: ""
-                    val category = doc.getString("category") ?: ""
-                    val accountId = doc.getString("accountId") ?: ""
-                    val type = doc.getString("type") ?: ""
-                    val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
-                    val updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
-                    
-                    // Get date from document
-                    val dateField = doc.get("date")
-                    val date = when (dateField) {
-                        is com.google.firebase.Timestamp -> {
-                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            dateFormat.format(dateField.toDate())
-                        }
-                        is String -> dateField
-                        else -> {
-                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                            dateFormat.format(java.util.Date())
-                        }
+        LogUtils.d("TransactionRepository", "Getting all transactions from unified collection", "transaction")
+        val snapshot = transactionsCollection.get().await()
+        
+        val transactions = snapshot.documents.mapNotNull { doc ->
+            try {
+                val id = doc.id
+                val userId = doc.getString("userId") ?: currentUserId
+                val amount = doc.getDouble("amount") ?: 0.0
+                val description = doc.getString("description") ?: ""
+                val category = doc.getString("category") ?: ""
+                val accountId = doc.getString("accountId") ?: ""
+                val type = doc.getString("type") ?: ""
+                val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+                val updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
+                
+                // Get date from document
+                val dateField = doc.get("date")
+                val date = when (dateField) {
+                    is com.google.firebase.Timestamp -> {
+                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        dateFormat.format(dateField.toDate())
                     }
-                    
-                    when (type) {
-                        "INCOME" -> Income(
-                            id = id,
-                            userId = userId,
-                            amount = amount,
-                            description = description,
-                            category = category,
-                            date = date,
-                            accountId = accountId,
-                            createdAt = createdAt,
-                            updatedAt = updatedAt
-                        )
-                        "EXPENSE" -> Expense(
-                            id = id,
-                            userId = userId,
-                            amount = amount,
-                            description = description,
-                            category = category,
-                            date = date,
-                            accountId = accountId,
-                            createdAt = createdAt,
-                            updatedAt = updatedAt
-                        )
-                        else -> null
+                    is String -> dateField
+                    else -> {
+                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        dateFormat.format(java.util.Date())
                     }
-                } catch (e: Exception) {
-                    LogUtils.e("TransactionRepository", "Error parsing transaction document", e, "transaction")
-                    null
                 }
+                
+                when (type) {
+                    "INCOME" -> Income(
+                        id = id,
+                        userId = userId,
+                        amount = amount,
+                        description = description,
+                        category = category,
+                        date = date,
+                        accountId = accountId,
+                        createdAt = createdAt,
+                        updatedAt = updatedAt
+                    )
+                    "EXPENSE" -> Expense(
+                        id = id,
+                        userId = userId,
+                        amount = amount,
+                        description = description,
+                        category = category,
+                        date = date,
+                        accountId = accountId,
+                        createdAt = createdAt,
+                        updatedAt = updatedAt
+                    )
+                    else -> null
+                }
+            } catch (e: Exception) {
+                LogUtils.e("TransactionRepository", "Error parsing transaction document", e, "transaction")
+                null
             }
-            
-            LogUtils.i("TransactionRepository", "Retrieved ${transactions.size} transactions from unified collection", "transaction")
-            emit(transactions)
-        } catch (e: Exception) {
-            LogUtils.e("TransactionRepository", "Error getting all transactions", e, "transaction")
-            emit(emptyList())
         }
+        
+        LogUtils.i("TransactionRepository", "Retrieved ${transactions.size} transactions from unified collection", "transaction")
+        emit(transactions)
+    }.catch { e ->
+        LogUtils.e("TransactionRepository", "Error getting all transactions", e, "transaction")
+        emit(emptyList())
     }
 
     // Method to update all transactions with a specific category name

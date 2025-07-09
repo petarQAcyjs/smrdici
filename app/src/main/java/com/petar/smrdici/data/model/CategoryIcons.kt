@@ -144,7 +144,7 @@ object CategoryIcons {
         Icons.Default.Wallet,
         Icons.Default.CreditScore,
         Icons.Default.Calculate,
-        Icons.Default.ReceiptLong,
+        Icons.Default.Receipt,
         Icons.Default.Insights,
         Icons.Default.Diamond,
         Icons.Default.Agriculture,

@@ -20,6 +20,7 @@ import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.data.repository.EventRepository
 import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.data.repository.SettingsRepository
+import com.petar.smrdici.data.repository.AccountRepository
 import com.petar.smrdici.ui.screens.settings.Period
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -604,21 +605,54 @@ class HomeViewModel(
                             set(Calendar.MILLISECOND, 999)
                         }
                         
-                        // Get transactions for this period
-                        val allTransactions = transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
+                        // Use the SAME logic as FinanceViewModel - get all transactions and filter them
+                        val allTransactions = transactionRepository.getAllTransactions().first()
                         
-                        // Filter to only include expenses
-                        val expenses = allTransactions.filterIsInstance<Expense>()
+                        // Get accounts first to determine filtering
+                        val accountRepository = AccountRepository.getInstance()
+                        val accounts = accountRepository.accounts.first()
                         
-                        // Calculate total for percentages - use absolute values for expenses
-                        val totalAmount = expenses.sumOf { abs(it.amount) }
+                        // Find the main account (either named "main" or the default account)
+                        val mainAccount = accounts.find { account -> 
+                            account.name.equals("main", ignoreCase = true) || account.isDefault 
+                        }
+                        
+                        // Apply the SAME filtering logic as FinanceScreen
+                        val formatter = org.threeten.bp.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                        
+                        val filteredTransactions = allTransactions.filter { transaction ->
+                            // Filter by transaction type (EXPENSE only for this chart)
+                            val isExpense = transaction is Expense
+                            if (!isExpense) return@filter false
+                            
+                            // Filter by date range
+                            val transactionDate = LocalDate.parse(transaction.date, formatter)
+                            val inDateRange = (transactionDate.isEqual(startDate) || transactionDate.isAfter(startDate)) &&
+                                            (transactionDate.isEqual(endDate) || transactionDate.isBefore(endDate))
+                            if (!inDateRange) return@filter false
+                            
+                            // IMPORTANT: Account filtering to match FinanceScreen
+                            // Filter by main account if it exists, otherwise show all
+                            if (mainAccount != null) {
+                                transaction.accountId == mainAccount.id
+                            } else {
+                                true // Show all accounts if no main account found
+                            }
+                        }
+                        
+                        // Convert to expenses and use the same amount calculation as FinanceScreen
+                        val expenses = filteredTransactions.filterIsInstance<Expense>()
+                        
+                        // Calculate total using the SAME logic as FinanceScreen (negative for expenses)
+                        val totalAmount = expenses.sumOf { -it.amount } // Negative because it's an expense
+                        val absoluteTotalAmount = abs(totalAmount) // For display in chart
                         
                         // Group by category and create category expenses
                         val categoryExpenses = expenses
                             .groupBy { it.category ?: "OTHER" }
                             .map { (category, categoryTransactions) ->
                                 val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
-                                val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+                                val percentage = if (absoluteTotalAmount > 0) (categoryAmount / absoluteTotalAmount) * 100 else 0.0
                                 
                                 // Get a consistent color for this category using CategoryManager
                                 val categoryManager = CategoryManager.getInstance(context)
@@ -654,7 +688,7 @@ class HomeViewModel(
                         // Create period expenses object
                         periodExpenses = PeriodExpenses(
                             periodName = periodName,
-                            totalAmount = totalAmount,
+                            totalAmount = absoluteTotalAmount, // Use absolute value for chart display
                             categoryExpenses = categoryExpenses
                         )
                         
