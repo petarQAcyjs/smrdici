@@ -6,20 +6,20 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,7 +55,6 @@ import kotlinx.coroutines.delay
  * @param onTitleLongPress Акција која се извршава приликом дугог притиска на наслов.
  * @param actions Custom actions to be displayed in the top app bar
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppHeader(
     title: String,
@@ -80,98 +79,130 @@ fun AppHeader(
         label = "title scale animation"
     )
 
-    androidx.compose.material3.CenterAlignedTopAppBar(
-        title = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .scale(scale)
-                    .then(
-                        if (onTitleLongPress != null) {
-                            Modifier.pointerInput(Unit) {
-                                detectTapGestures(
-                                    onLongPress = {
-                                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                                        isPressed = true
-                                        scope.launch {
-                                            delay(100)
-                                            isPressed = false
-                                            onTitleLongPress()
-                                        }
-                                    }
-                                )
+    // Custom slim header using Surface instead of TopAppBar for better height control
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp), // 40dp instead of default 64dp (37.5% reduction, close to 40%)
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp), // Reduced padding
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Navigation icon section
+            Box(
+                modifier = Modifier.width(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (showBackButton) {
+                    IconButton(
+                        onClick = { 
+                            if (onBackClick != null) {
+                                onBackClick()
+                            } else if (navController != null) {
+                                navController.navigateUp() 
                             }
-                        } else {
-                            Modifier
-                        }
-                    ),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        },
-        navigationIcon = {
-            if (showBackButton) {
-                IconButton(onClick = { 
-                    if (onBackClick != null) {
-                        onBackClick()
-                    } else if (navController != null) {
-                        navController.navigateUp() 
+                        },
+                        modifier = Modifier.padding(4.dp) // Reduced padding for smaller icon buttons
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Назад",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
-                }) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Назад",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            } else if (showMenu) {
-                IconButton(onClick = onMenuClick) {
-                    Icon(
-                        imageVector = Icons.Default.Menu,
-                        contentDescription = "Мени",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            } else {
-                Spacer(modifier = Modifier.width(48.dp))
-            }
-        },
-        actions = {
-            // Custom actions
-            actions()
-            
-            // Profile icon
-            if (showProfileIcon && navController != null) {
-                IconButton(
-                    onClick = { 
-                        if (user != null) {
-                            navController.navigate(Screen.Profile.route)
-                        }
+                } else if (showMenu) {
+                    IconButton(
+                        onClick = onMenuClick,
+                        modifier = Modifier.padding(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Мени",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Профил",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
                 }
             }
             
-            // Logout button
-            if (showLogoutButton) {
-                IconButton(onClick = onLogoutClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                        contentDescription = "Одјави се",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
+            // Title section (centered)
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium, // Smaller title for slimmer look
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .scale(scale)
+                        .then(
+                            if (onTitleLongPress != null) {
+                                Modifier.pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onLongPress = {
+                                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                            isPressed = true
+                                            scope.launch {
+                                                delay(100)
+                                                isPressed = false
+                                                onTitleLongPress()
+                                            }
+                                        }
+                                    )
+                                }
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            
+            // Actions section
+            Row(
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Custom actions
+                actions()
+                
+                // Profile icon
+                if (showProfileIcon && navController != null) {
+                    IconButton(
+                        onClick = { 
+                            if (user != null) {
+                                navController.navigate(Screen.Profile.route)
+                            }
+                        },
+                        modifier = Modifier.padding(2.dp) // Smaller padding
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Профил",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+                
+                // Logout button
+                if (showLogoutButton) {
+                    IconButton(
+                        onClick = onLogoutClick,
+                        modifier = Modifier.padding(2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = "Одјави се",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
-        },
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface
-        )
-    )
+        }
+    }
 } 
