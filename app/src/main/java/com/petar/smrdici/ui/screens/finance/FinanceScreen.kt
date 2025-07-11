@@ -91,6 +91,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 
 // Define predefined colors for categories
 private val predefinedColors = listOf(
@@ -405,6 +409,12 @@ fun FinanceScreen(
                         }
                     }
                 }
+                
+                // Sort Options Selector
+                SortOptionsSelector(
+                    selectedSort = state.sortOption,
+                    onSortSelected = { viewModel.setSortOption(it) }
+                )
                 
                 // Category Summary Cards
                 if (state.categorySummaries.isNotEmpty()) {
@@ -900,6 +910,84 @@ fun TransactionTypeSelector(
             },
             modifier = Modifier.weight(1f)
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SortOptionsSelector(
+    selectedSort: SortOption,
+    onSortSelected: (SortOption) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Сортирај по:",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        
+        Box {
+            FilterChip(
+                selected = true,
+                onClick = { expanded = true },
+                label = { 
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = when (selectedSort) {
+                                SortOption.DATE_NEWEST -> "Датум (најновији)"
+                                SortOption.DATE_OLDEST -> "Датум (најстарији)"
+                                SortOption.AMOUNT_HIGHEST -> "Износ (највећи)"
+                                SortOption.AMOUNT_LOWEST -> "Износ (најмањи)"
+                                SortOption.CATEGORY_A_Z -> "Категорија (А-Ш)"
+                                SortOption.CATEGORY_Z_A -> "Категорија (Ш-А)"
+                            }
+                        )
+                        Icon(
+                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            )
+            
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                SortOption.values().forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                when (option) {
+                                    SortOption.DATE_NEWEST -> "Датум (најновији)"
+                                    SortOption.DATE_OLDEST -> "Датум (најстарији)"
+                                    SortOption.AMOUNT_HIGHEST -> "Износ (највећи)"
+                                    SortOption.AMOUNT_LOWEST -> "Износ (најмањи)"
+                                    SortOption.CATEGORY_A_Z -> "Категорија (А-Ш)"
+                                    SortOption.CATEGORY_Z_A -> "Категорија (Ш-А)"
+                                }
+                            )
+                        },
+                        onClick = {
+                            onSortSelected(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 
