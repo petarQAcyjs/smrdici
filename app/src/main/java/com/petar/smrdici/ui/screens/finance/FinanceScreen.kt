@@ -95,6 +95,9 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 
 // Define predefined colors for categories
 private val predefinedColors = listOf(
@@ -551,6 +554,9 @@ fun FinanceScreen(
                 } else {
                     LogUtils.d("FinanceScreen", "Displaying ${state.transactions.size} transactions from unified collection", "ui")
                     
+                    // Collapse state for categories section
+                    var categoriesExpanded by remember { mutableStateOf(true) }
+                    
                     // Group transactions by category
                     val transactionsByCategory = remember(state.transactions) {
                         state.transactions.groupBy { transaction ->
@@ -572,83 +578,107 @@ fun FinanceScreen(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Header
+                        // Collapsible Header
                         item {
-                            Text(
-                                text = "Категорије трансакција",
-                                style = MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { categoriesExpanded = !categoriesExpanded }
+                                    .padding(bottom = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Категорије трансакција",
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                                Icon(
+                                    imageVector = if (categoriesExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = if (categoriesExpanded) "Сакриј категорије" else "Прикажи категорије",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         
-                        // Category grid - 2 columns
-                        val categories = transactionsByCategory.keys.toList()
-                        val itemsPerRow = 2
-                        
-                        val rows = categories.chunked(itemsPerRow)
-                        items(rows.size) { rowIndex ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        // Category grid - 2 columns (collapsible)
+                        item {
+                            AnimatedVisibility(
+                                visible = categoriesExpanded,
+                                enter = expandVertically(),
+                                exit = shrinkVertically()
                             ) {
-                                val rowItems = rows[rowIndex]
-                                rowItems.forEach { category ->
-                                    val transactions = transactionsByCategory[category] ?: emptyList()
-                                    val categoryAmount = transactions.sumOf { it.amount }
-                                    val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
-                                    
-                                    // Find icon for this category
-                                    val isExpense = transactions.firstOrNull() is ExpenseTransaction
-                                    // Use a default icon based on transaction type
-                                    val iconName = when {
-                                        isExpense -> "ShoppingCart" // Default expense icon
-                                        else -> "AttachMoney" // Default income icon
-                                    }
-                                    
-                                    val icon = CategoryIcons.findIconByName(iconName)
-                                    
-                                    // Get the saved color from CategoryManager if available
-                                    val categoryManager = CategoryManager.getInstance(LocalContext.current)
-                                    val savedColorValue = categoryManager.getCategoryColor(category, isExpense)
-                                    
-                                    // Use the saved color or fall back to a color based on category hash code
-                                    val color = if (savedColorValue != null) {
-                                        Color(savedColorValue)
-                                    } else {
-                                        // Use a color based on category hash code for consistency
-                                        val colorIndex = abs(category.hashCode() % predefinedColors.size)
-                                        predefinedColors[colorIndex]
-                                    }
-                                    
-                                    if (icon != null) {
-                                        CategoryCard(
-                                            icon = icon,
-                                            backgroundColor = color,
-                                            categoryName = category,
-                                            percentage = String.format("%.1f%%", percentage),
-                                            amount = numberFormat.format(categoryAmount),
-                                            count = transactions.size,
-                                            onClick = {
-                                                // Create a category summary object and select it
-                                                val categorySummary = CategorySummary(
-                                                    categoryName = category,
-                                                    iconName = iconName,
-                                                    color = color,
-                                                    amount = categoryAmount,
-                                                    percentage = percentage
-                                                )
-                                                viewModel.selectCategory(categorySummary)
-                                            },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    } else {
-                                        Spacer(modifier = Modifier.weight(1f))
-                                    }
-                                }
+                                val categories = transactionsByCategory.keys.toList()
+                                val itemsPerRow = 2
+                                val rows = categories.chunked(itemsPerRow)
                                 
-                                // Add spacers for incomplete rows
-                                repeat(itemsPerRow - rowItems.size) {
-                                    Spacer(modifier = Modifier.weight(1f))
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    rows.forEachIndexed { rowIndex, rowItems ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                        ) {
+                                            rowItems.forEach { category ->
+                                                val transactions = transactionsByCategory[category] ?: emptyList()
+                                                val categoryAmount = transactions.sumOf { it.amount }
+                                                val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+                                                
+                                                // Find icon for this category
+                                                val isExpense = transactions.firstOrNull() is ExpenseTransaction
+                                                // Use a default icon based on transaction type
+                                                val iconName = when {
+                                                    isExpense -> "ShoppingCart" // Default expense icon
+                                                    else -> "AttachMoney" // Default income icon
+                                                }
+                                                
+                                                val icon = CategoryIcons.findIconByName(iconName)
+                                                
+                                                // Get the saved color from CategoryManager if available
+                                                val categoryManager = CategoryManager.getInstance(LocalContext.current)
+                                                val savedColorValue = categoryManager.getCategoryColor(category, isExpense)
+                                                
+                                                // Use the saved color or fall back to a color based on category hash code
+                                                val color = if (savedColorValue != null) {
+                                                    Color(savedColorValue)
+                                                } else {
+                                                    // Use a color based on category hash code for consistency
+                                                    val colorIndex = abs(category.hashCode() % predefinedColors.size)
+                                                    predefinedColors[colorIndex]
+                                                }
+                                                
+                                                if (icon != null) {
+                                                    CategoryCard(
+                                                        icon = icon,
+                                                        backgroundColor = color,
+                                                        categoryName = category,
+                                                        percentage = String.format("%.1f%%", percentage),
+                                                        amount = numberFormat.format(categoryAmount),
+                                                        count = transactions.size,
+                                                        onClick = {
+                                                            // Create a category summary object and select it
+                                                            val categorySummary = CategorySummary(
+                                                                categoryName = category,
+                                                                iconName = iconName,
+                                                                color = color,
+                                                                amount = categoryAmount,
+                                                                percentage = percentage
+                                                            )
+                                                            viewModel.selectCategory(categorySummary)
+                                                        },
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                } else {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
+                                            }
+                                            
+                                            // Add spacers for incomplete rows
+                                            repeat(itemsPerRow - rowItems.size) {
+                                                Spacer(modifier = Modifier.weight(1f))
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
