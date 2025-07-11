@@ -93,6 +93,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.animation.AnimatedVisibility
@@ -245,7 +246,7 @@ fun FinanceScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = when (state.selectedTransactionType) {
                             is TransactionType.Income -> MaterialTheme.colorScheme.primaryContainer
@@ -413,14 +414,9 @@ fun FinanceScreen(
                     }
                 }
                 
-                // Sort Options Selector
-                SortOptionsSelector(
-                    selectedSort = state.sortOption,
-                    onSortSelected = { viewModel.setSortOption(it) }
-                )
-                
-                // Category Summary Cards
+                // Category Summary Cards - with reduced spacing
                 if (state.categorySummaries.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -442,8 +438,9 @@ fun FinanceScreen(
                             }
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
+                } else {
+                    // Add minimal spacing when no category summary cards
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
 
                 // Account Selection Dialog
@@ -555,7 +552,7 @@ fun FinanceScreen(
                     LogUtils.d("FinanceScreen", "Displaying ${state.transactions.size} transactions from unified collection", "ui")
                     
                     // Collapse state for categories section
-                    var categoriesExpanded by remember { mutableStateOf(true) }
+                    var categoriesExpanded by remember { mutableStateOf(false) }
                     
                     // Group transactions by category
                     val transactionsByCategory = remember(state.transactions) {
@@ -576,28 +573,16 @@ fun FinanceScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Collapsible Header
+                        // Combined Header with Sort Options
                         item {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { categoriesExpanded = !categoriesExpanded }
-                                    .padding(bottom = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Категорије трансакција",
-                                    style = MaterialTheme.typography.titleLarge
-                                )
-                                Icon(
-                                    imageVector = if (categoriesExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = if (categoriesExpanded) "Сакриј категорије" else "Прикажи категорије",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            CombinedHeaderWithSort(
+                                categoriesExpanded = categoriesExpanded,
+                                onToggleCategories = { categoriesExpanded = !categoriesExpanded },
+                                selectedSort = state.sortOption,
+                                onSortSelected = { viewModel.setSortOption(it) }
+                            )
                         }
                         
                         // Category grid - 2 columns (collapsible)
@@ -612,7 +597,7 @@ fun FinanceScreen(
                                 val rows = categories.chunked(itemsPerRow)
                                 
                                 Column(
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     rows.forEachIndexed { rowIndex, rowItems ->
                                         Row(
@@ -685,13 +670,13 @@ fun FinanceScreen(
                         
                         // Individual transactions header
                         item {
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             HorizontalDivider()
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Text(
                                 text = "Све трансакције",
                                 style = MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.padding(bottom = 8.dp)
+                                modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
                         
@@ -943,6 +928,82 @@ fun TransactionTypeSelector(
     }
 }
 
+@Composable
+fun CombinedHeaderWithSort(
+    categoriesExpanded: Boolean,
+    onToggleCategories: () -> Unit,
+    selectedSort: SortOption,
+    onSortSelected: (SortOption) -> Unit
+) {
+    var showSortDropdown by remember { mutableStateOf(false) }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left side: Categories title with expand/collapse
+        Row(
+            modifier = Modifier
+                .clickable { onToggleCategories() }
+                .weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Категорије трансакција",
+                style = MaterialTheme.typography.titleLarge
+            )
+            Icon(
+                imageVector = if (categoriesExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (categoriesExpanded) "Сакриј категорије" else "Прикажи категорије",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        
+        // Right side: Sort options
+        Box {
+            IconButton(
+                onClick = { showSortDropdown = true }
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Sort,
+                    contentDescription = "Сортирај трансакције",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            DropdownMenu(
+                expanded = showSortDropdown,
+                onDismissRequest = { showSortDropdown = false }
+            ) {
+                SortOption.values().forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                when (option) {
+                                    SortOption.DATE_NEWEST -> "Датум (најновији)"
+                                    SortOption.DATE_OLDEST -> "Датум (најстарији)"
+                                    SortOption.AMOUNT_HIGHEST -> "Износ (највећи)"
+                                    SortOption.AMOUNT_LOWEST -> "Износ (најмањи)"
+                                    SortOption.CATEGORY_A_Z -> "Категорија (А-Ш)"
+                                    SortOption.CATEGORY_Z_A -> "Категорија (Ш-А)"
+                                }
+                            )
+                        },
+                        onClick = {
+                            onSortSelected(option)
+                            showSortDropdown = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SortOptionsSelector(
@@ -955,42 +1016,19 @@ fun SortOptionsSelector(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "Сортирај по:",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        
         Box {
-            FilterChip(
-                selected = true,
-                onClick = { expanded = true },
-                label = { 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = when (selectedSort) {
-                                SortOption.DATE_NEWEST -> "Датум (најновији)"
-                                SortOption.DATE_OLDEST -> "Датум (најстарији)"
-                                SortOption.AMOUNT_HIGHEST -> "Износ (највећи)"
-                                SortOption.AMOUNT_LOWEST -> "Износ (најмањи)"
-                                SortOption.CATEGORY_A_Z -> "Категорија (А-Ш)"
-                                SortOption.CATEGORY_Z_A -> "Категорија (Ш-А)"
-                            }
-                        )
-                        Icon(
-                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            )
+            IconButton(
+                onClick = { expanded = true }
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Sort,
+                    contentDescription = "Сортирај трансакције",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             
             DropdownMenu(
                 expanded = expanded,
