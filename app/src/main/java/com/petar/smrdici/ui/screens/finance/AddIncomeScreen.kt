@@ -288,7 +288,8 @@ fun AddIncomeScreen(
                     title = "Додај приход",
                     user = user,
                     navController = navController,
-                    showBackButton = true
+                    showBackButton = true,
+                    showProfileIcon = false
                 )
             }
         ) { paddingValues ->

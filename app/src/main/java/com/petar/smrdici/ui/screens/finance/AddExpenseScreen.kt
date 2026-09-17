@@ -311,7 +311,8 @@ fun AddExpenseScreen(
                 title = "Додај расход",
                 user = user,
                 navController = navController,
-                showBackButton = true
+                showBackButton = true,
+                showProfileIcon = false
             )
         }
     ) { paddingValues ->
