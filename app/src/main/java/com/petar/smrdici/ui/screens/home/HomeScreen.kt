@@ -2,7 +2,6 @@
 package com.petar.smrdici.ui.screens.home
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.pullrefresh.PullRefreshState
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.Card
@@ -50,17 +48,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -71,8 +65,6 @@ import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
-import com.petar.smrdici.data.model.ExpenseCategory
-import com.petar.smrdici.data.model.getExpenseCategoryColor
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
@@ -81,11 +73,9 @@ import com.petar.smrdici.ui.components.PieChartData
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import kotlin.math.abs
-import kotlin.math.min
+import kotlin.math.ceil
 
 // Data classes for stacked bar chart
 data class CategoryExpense(
@@ -112,20 +102,19 @@ fun HomeScreen(
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(context))
     val todayEvents = homeViewModel.todayEvents.collectAsState().value
     val syncStatus = homeViewModel.syncStatus.collectAsState().value
-    
+
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    
+
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
         onRefresh = {
             isRefreshing = true
-            homeViewModel.syncEvents() // This already calls loadExpenseData() in the updated syncEvents function
+            homeViewModel.syncEvents()
         }
     )
-    
-    // Observe sync status and show messages
+
     LaunchedEffect(syncStatus) {
         when (syncStatus) {
             is SyncStatus.Success -> {
@@ -143,7 +132,7 @@ fun HomeScreen(
             else -> {}
         }
     }
-    
+
     Scaffold(
         topBar = {
             AppHeader(
@@ -159,9 +148,7 @@ fun HomeScreen(
                 .padding(paddingValues)
                 .pullRefresh(pullRefreshState)
         ) {
-            // Check if user is authenticated
             if (authState !is AuthState.Authenticated) {
-                // Show login prompt
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -175,7 +162,6 @@ fun HomeScreen(
                     )
                 }
             } else {
-                // Show content for authenticated user
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -183,8 +169,7 @@ fun HomeScreen(
                         .verticalScroll(rememberScrollState())
                 ) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Today's activities card
+
                     TodayActivitiesCard(
                         events = todayEvents,
                         onEventClick = { event ->
@@ -197,8 +182,7 @@ fun HomeScreen(
                             .height(250.dp)
                             .padding(vertical = 8.dp)
                     )
-                    
-                    // Add Expense Pie Chart Card
+
                     ExpensePieChartCard(
                         expenseData = homeViewModel.expenseChartData.collectAsState().value,
                         isLoading = homeViewModel.isLoadingExpenseData.collectAsState().value,
@@ -210,8 +194,7 @@ fun HomeScreen(
                             .height(350.dp)
                             .padding(vertical = 8.dp)
                     )
-                    
-                    // Add Expense History Card with stacked bar chart
+
                     ExpenseHistoryCard(
                         historyData = homeViewModel.expenseHistoryData.collectAsState().value,
                         isLoading = homeViewModel.isLoadingHistoryData.collectAsState().value,
@@ -223,8 +206,7 @@ fun HomeScreen(
                             .height(350.dp)
                             .padding(vertical = 8.dp)
                     )
-                    
-                    // Refresh expense data when returning to home screen
+
                     val lifecycleOwner = LocalLifecycleOwner.current
                     DisposableEffect(lifecycleOwner) {
                         val observer = LifecycleEventObserver { _, event ->
@@ -237,12 +219,11 @@ fun HomeScreen(
                             lifecycleOwner.lifecycle.removeObserver(observer)
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
-            
-            // Pull to refresh indicator
+
             androidx.compose.material.pullrefresh.PullRefreshIndicator(
                 refreshing = isRefreshing,
                 state = pullRefreshState,
@@ -261,11 +242,11 @@ fun TodayActivitiesCard(
 ) {
     val cardColor = Color(0xFF3F8CFF)
     val textColor = Color.White
-    
+
     val lottieComposition by rememberLottieComposition(
         LottieCompositionSpec.RawRes(lottieResId)
     )
-    
+
     val lottieAnimationState by animateLottieCompositionAsState(
         composition = lottieComposition,
         iterations = LottieConstants.IterateForever,
@@ -300,9 +281,9 @@ fun TodayActivitiesCard(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
-                
+
                 Spacer(modifier = Modifier.height(4.dp))
-                
+
                 if (events.isEmpty()) {
                     Text(
                         text = "Нема активности за данас",
@@ -319,7 +300,7 @@ fun TodayActivitiesCard(
                             textColor = textColor
                         )
                     }
-                    
+
                     if (events.size > 3) {
                         Text(
                             text = "Још ${events.size - 3} догађаја...",
@@ -330,7 +311,7 @@ fun TodayActivitiesCard(
                     }
                 }
             }
-            
+
             Box(
                 modifier = Modifier
                     .weight(0.4f)
@@ -370,9 +351,9 @@ fun EventItemCompact(
                 .clip(CircleShape)
                 .background(Color(event.color.toColorInt()))
         )
-        
+
         Spacer(modifier = Modifier.width(8.dp))
-        
+
         Column(
             modifier = Modifier.weight(1f)
         ) {
@@ -384,7 +365,7 @@ fun EventItemCompact(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            
+
             event.startTime?.let { startTime ->
                 val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
                 val timeText = if (event.allDay) {
@@ -394,14 +375,14 @@ fun EventItemCompact(
                     val endTimeText = event.endTime?.let {
                         timeFormat.format(Date(it.seconds * 1000))
                     } ?: ""
-                    
+
                     if (endTimeText.isNotEmpty()) {
                         "$startTimeText - $endTimeText"
                     } else {
                         startTimeText
                     }
                 }
-                
+
                 Text(
                     text = timeText,
                     style = MaterialTheme.typography.bodySmall,
@@ -420,7 +401,7 @@ fun ExpensePieChartCard(
     modifier: Modifier = Modifier
 ) {
     var expandedCategories by remember { mutableStateOf(false) }
-    
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -435,15 +416,14 @@ fun ExpensePieChartCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Updated title
             Text(
                 text = "Трошкови у тренутном периоду",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             if (isLoading) {
                 Box(
                     modifier = Modifier
@@ -467,10 +447,8 @@ fun ExpensePieChartCard(
                     )
                 }
             } else {
-                // Calculate total expenses
                 val totalExpenses = expenseData.sumOf { it.amount }
-                
-                // Create pie chart data
+
                 val pieChartData = expenseData.map { category ->
                     PieChartData.Slice(
                         value = category.amount.toFloat(),
@@ -478,14 +456,13 @@ fun ExpensePieChartCard(
                         label = category.categoryName
                     )
                 }
-                
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f), // Use weight to fill available space
+                        .weight(1f),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Pie chart on the left - now a donut chart with total in center
                     Box(
                         modifier = Modifier
                             .weight(1.2f)
@@ -499,32 +476,28 @@ fun ExpensePieChartCard(
                             modifier = Modifier.fillMaxSize()
                         )
                     }
-                    
-                    // Compact legend on the right with percentages
+
                     Column(
                         modifier = Modifier
                             .weight(0.8f)
                             .fillMaxHeight()
                             .padding(start = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp) // Evenly space items
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        // Categories section in a scrollable column
                         Column(
                             modifier = Modifier
-                                .weight(1f) // Take all available space
-                                .verticalScroll(rememberScrollState()) // Make scrollable if needed
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState())
                         ) {
-                            // Show categories
                             val categoriesToShow = if (expandedCategories) expenseData else expenseData.take(5)
-                            
+
                             categoriesToShow.forEach { category ->
                                 CompactCategoryLegendItem(
                                     category = category,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
-                            
-                            // Show "View more" if there are more categories
+
                             if (expenseData.size > 5 && !expandedCategories) {
                                 Text(
                                     text = "... и још ${expenseData.size - 5}",
@@ -549,19 +522,16 @@ fun ExpensePieChartCard(
                         }
                     }
                 }
-                
-                // Total section - outside of Row but inside the main Column
+
                 Column {
-                    // Add divider before total
                     HorizontalDivider(
                         thickness = 1.dp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
                         modifier = Modifier.padding(top = 8.dp)
                     )
-                    
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Total expenses
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -572,9 +542,9 @@ fun ExpensePieChartCard(
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        
+
                         Text(
-                            text = String.format("%.2f", totalExpenses),
+                            text = String.format(Locale.getDefault(), "%.2f", totalExpenses),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.error
@@ -596,7 +566,6 @@ private fun CompactCategoryLegendItem(
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Color indicator
         Box(
             modifier = Modifier
                 .size(8.dp)
@@ -605,10 +574,9 @@ private fun CompactCategoryLegendItem(
                     shape = CircleShape
                 )
         )
-        
+
         Spacer(modifier = Modifier.width(4.dp))
-        
-        // Category name and percentage
+
         Column(
             modifier = Modifier.weight(1f)
         ) {
@@ -618,20 +586,20 @@ private fun CompactCategoryLegendItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            
+
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = String.format("%.1f%%", category.percentage),
+                    text = String.format(Locale.getDefault(), "%.1f%%", category.percentage),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold
                 )
-                
+
                 Spacer(modifier = Modifier.width(4.dp))
-                
+
                 Text(
-                    text = String.format("%.0f", category.amount),
+                    text = String.format(Locale.getDefault(), "%.0f", category.amount),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -659,15 +627,14 @@ fun ExpenseHistoryCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Card title
             Text(
                 text = "Историја трошкова",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             if (isLoading) {
                 Box(
                     modifier = Modifier
@@ -691,13 +658,24 @@ fun ExpenseHistoryCard(
                     )
                 }
             } else {
-                // Define fixed grid line values
-                val gridLineValues = listOf(0, 100000, 200000, 300000, 400000, 500000, 600000, 700000)
-                val maxGridValue = 800000.0  // Keep max value for scaling but don't show the line
-                
-                // Use LazyRow to align bars and labels perfectly
+                // Dinamički izračunaj maksimume i skalu na osnovu najvećeg iznosa iz istorije
+                val maxExpenseInHistory = historyData.maxOfOrNull { it.totalAmount } ?: 100000.0
+                val step = when {
+                    maxExpenseInHistory > 1000000 -> 200000
+                    maxExpenseInHistory > 500000 -> 100000
+                    else -> 50000
+                }
+
+                val maxGridValue = (ceil(maxExpenseInHistory / step) * step).coerceAtLeast(100000.0)
+
+                val gridLineValues = mutableListOf<Int>()
+                var currentValue = 0
+                while (currentValue <= maxGridValue) {
+                    gridLineValues.add(currentValue)
+                    currentValue += step
+                }
+
                 Column {
-                    // Y-axis labels and chart area
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -706,45 +684,39 @@ fun ExpenseHistoryCard(
                         // Y-axis labels
                         Column(
                             modifier = Modifier
-                                .width(48.dp)
-                                .fillMaxHeight()
+                                .width(54.dp)
+                                .fillMaxHeight(),
+                            verticalArrangement = Arrangement.SpaceBetween
                         ) {
                             gridLineValues.reversed().forEach { value ->
-                                Box(
+                                Text(
+                                    text = formatNumber(value),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
+                                    color = Color.Gray,
+                                    textAlign = TextAlign.End,
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxWidth(),
-                                    contentAlignment = Alignment.CenterEnd
-                                ) {
-                                    Text(
-                                        text = formatNumber(value),
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
-                                        color = Color.Gray,
-                                        textAlign = TextAlign.End,
-                                        modifier = Modifier.padding(end = 4.dp)
-                                    )
-                                }
+                                        .fillMaxWidth()
+                                        .padding(end = 6.dp)
+                                )
                             }
                         }
-                        
+
                         // Bars container with grid lines
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
                         ) {
-                            // Grid lines
                             Canvas(
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 val chartHeight = size.height
-                                
-                                // Draw horizontal grid lines
                                 val gridLineColor = Color.Gray.copy(alpha = 0.2f)
+
                                 gridLineValues.forEach { value ->
                                     val yRatio = value.toFloat() / maxGridValue.toFloat()
                                     val y = chartHeight - (chartHeight * yRatio)
-                                    
+
                                     drawLine(
                                         color = gridLineColor,
                                         start = Offset(0f, y),
@@ -753,25 +725,22 @@ fun ExpenseHistoryCard(
                                     )
                                 }
                             }
-                            
-                            // Bars - use Row to align bars evenly
+
                             Row(
                                 modifier = Modifier.fillMaxSize(),
                                 horizontalArrangement = Arrangement.SpaceEvenly,
                                 verticalAlignment = Alignment.Bottom
                             ) {
                                 historyData.forEach { periodData ->
-                                    // Calculate bar height as percentage of max value
                                     val heightPercentage = if (maxGridValue > 0) {
-                                        (periodData.totalAmount / maxGridValue).toFloat()
+                                        (periodData.totalAmount / maxGridValue).toFloat().coerceIn(0f, 1f)
                                     } else 0f
-                                    
+
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .padding(horizontal = 8.dp)
+                                            .padding(horizontal = 6.dp)
                                             .fillMaxHeight(heightPercentage)
-                                            .width(24.dp)
                                             .background(
                                                 color = MaterialTheme.colorScheme.primary,
                                                 shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
@@ -781,12 +750,12 @@ fun ExpenseHistoryCard(
                             }
                         }
                     }
-                    
-                    // X-axis labels - aligned with bars using the same Row arrangement
+
+                    // X-axis labels
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 48.dp, top = 4.dp),
+                            .padding(start = 54.dp, top = 4.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         historyData.forEach { periodData ->
@@ -801,7 +770,7 @@ fun ExpenseHistoryCard(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                
+
                                 Text(
                                     text = formatNumber(periodData.totalAmount.toInt()),
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
@@ -819,7 +788,6 @@ fun ExpenseHistoryCard(
     }
 }
 
-// Format numbers with thousands separator
 private fun formatNumber(value: Int): String {
     return if (value >= 1000) {
         val thousands = value / 1000
@@ -832,4 +800,4 @@ private fun formatNumber(value: Int): String {
     } else {
         value.toString()
     }
-} 
+}

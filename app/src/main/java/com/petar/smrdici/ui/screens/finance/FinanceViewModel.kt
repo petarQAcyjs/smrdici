@@ -37,6 +37,15 @@ import java.util.*
 import kotlin.random.Random
 import kotlin.math.abs
 
+enum class SortOption {
+    DATE_NEWEST,
+    DATE_OLDEST,
+    AMOUNT_HIGHEST,
+    AMOUNT_LOWEST,
+    CATEGORY_A_Z,
+    CATEGORY_Z_A
+}
+
 enum class PeriodType {
     YEAR, MONTH, WEEK, DAY, CUSTOM
 }
@@ -126,6 +135,7 @@ data class FinanceScreenState(
     val selectedTimePeriod: TimePeriod = TimePeriod.Month(YearMonth.now()),
     val selectedAccountId: String? = null,
     val selectedTransactionType: TransactionType = TransactionType.Expense,
+    val sortOption: SortOption = SortOption.DATE_NEWEST,
     val transactions: List<UITransaction> = emptyList(),
     val totalAmount: Double = 0.0,
     val totalAmountInEur: Double = 0.0,
@@ -393,6 +403,14 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         refreshData()
     }
 
+    fun setSortOption(sortOption: SortOption) {
+        LogUtils.i("FinanceViewModel", "Setting sort option to: $sortOption", category = "finance")
+        _state.value = _state.value.copy(sortOption = sortOption)
+        // Re-sort existing transactions without refreshing data
+        val sortedTransactions = sortTransactions(_state.value.transactions, sortOption)
+        _state.value = _state.value.copy(transactions = sortedTransactions)
+    }
+
     // Category selection
     fun selectCategory(category: CategorySummary) {
         LogUtils.i("FinanceViewModel", "Selected category: ${category.categoryName}", category = "finance")
@@ -540,19 +558,23 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                     )
                 }
                 
+                // Apply sorting to transactions
+                val sortedTransactions = sortTransactions(transactions, _state.value.sortOption)
+                
                 // Calculate category summaries
-                val categorySummaries = calculateCategorySummaries(transactions)
+                val categorySummaries = calculateCategorySummaries(sortedTransactions)
 
                 LogUtils.i("FinanceViewModel", 
                     "Updated state:" +
-                    "\nTotal transactions: ${transactions.size}" +
+                    "\nTotal transactions: ${sortedTransactions.size}" +
                     "\nTotal amount in EUR: $totalEurAmount" +
                     "\nAccounts with transactions: ${accountBalances.size}" +
-                    "\nCategory summaries: ${categorySummaries.size}", 
+                    "\nCategory summaries: ${categorySummaries.size}" +
+                    "\nSort option: ${_state.value.sortOption}", 
                     category = "finance")
 
                 _state.value = _state.value.copy(
-                    transactions = transactions,
+                    transactions = sortedTransactions,
                     totalAmount = transactions.sumOf { 
                         when (_state.value.selectedTransactionType) {
                             is TransactionType.Income -> it.amount
@@ -574,6 +596,31 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         }
     }
     
+    private fun sortTransactions(transactions: List<UITransaction>, sortOption: SortOption): List<UITransaction> {
+        return when (sortOption) {
+            SortOption.DATE_NEWEST -> transactions.sortedByDescending { 
+                LocalDate.parse(it.date, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            }
+            SortOption.DATE_OLDEST -> transactions.sortedBy { 
+                LocalDate.parse(it.date, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            }
+            SortOption.AMOUNT_HIGHEST -> transactions.sortedByDescending { it.amount }
+            SortOption.AMOUNT_LOWEST -> transactions.sortedBy { it.amount }
+            SortOption.CATEGORY_A_Z -> transactions.sortedBy { transaction ->
+                when (transaction) {
+                    is ExpenseTransaction -> transaction.expense.category ?: ""
+                    is IncomeTransaction -> transaction.income.category ?: ""
+                }
+            }
+            SortOption.CATEGORY_Z_A -> transactions.sortedByDescending { transaction ->
+                when (transaction) {
+                    is ExpenseTransaction -> transaction.expense.category ?: ""
+                    is IncomeTransaction -> transaction.income.category ?: ""
+                }
+            }
+        }
+    }
+
     private fun calculateCategorySummaries(transactions: List<UITransaction>): List<CategorySummary> {
         if (transactions.isEmpty()) return emptyList()
         
