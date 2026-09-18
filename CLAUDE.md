@@ -60,3 +60,4 @@ a POSIX shell. Java home is auto-detected in `build.gradle.kts` (Android Studio 
   repositories, and notifications initialize in a specific sequence other code depends on.
 - There are currently no unit/instrumented tests in `app/src/test` or
   `app/src/androidTest` — don't assume test coverage exists for a feature before changing it.
+- Search Budget Rule: Do not read more than 3 files or execute more than 5 search queries automatically. If you do not find the issue within 3 file lookups, stop and ask me for the target file path.
