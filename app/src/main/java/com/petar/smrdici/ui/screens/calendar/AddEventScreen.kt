@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -91,13 +92,15 @@ fun AddEventScreen(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        AppHeader(
-            title = "Додај догађај",
-            user = user,
-            navController = navController,
-            showBackButton = true
-        )
-        
+        Box(modifier = Modifier.statusBarsPadding()) {
+            AppHeader(
+                title = "Додај догађај",
+                user = user,
+                navController = navController,
+                showBackButton = true
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -98,12 +99,14 @@ fun TransferScreen(
     
     Scaffold(
         topBar = {
-            AppHeader(
-                title = "Трансфер новца",
-                user = user,
-                navController = navController,
-                showBackButton = true
-            )
+            Box(modifier = Modifier.statusBarsPadding()) {
+                AppHeader(
+                    title = "Трансфер новца",
+                    user = user,
+                    navController = navController,
+                    showBackButton = true
+                )
+            }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -117,13 +118,15 @@ fun FinanceSettingsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            AppHeader(
-                title = "Подешавање финансија",
-                user = user,
-                navController = navController,
-                showBackButton = true,
-                showProfileIcon = false
-            )
+            Box(modifier = Modifier.statusBarsPadding()) {
+                AppHeader(
+                    title = "Подешавање финансија",
+                    user = user,
+                    navController = navController,
+                    showBackButton = true,
+                    showProfileIcon = false
+                )
+            }
         }
     ) { paddingValues ->
         Column(

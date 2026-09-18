@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -257,12 +258,14 @@ fun IncomeCategoriesScreen(
     
     Scaffold(
         topBar = {
-            AppHeader(
-                title = "Категорије прихода",
-                navController = navController,
-                showBackButton = true,
-                user = user
-            )
+            Box(modifier = Modifier.statusBarsPadding()) {
+                AppHeader(
+                    title = "Категорије прихода",
+                    navController = navController,
+                    showBackButton = true,
+                    user = user
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->

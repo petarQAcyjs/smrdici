@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -106,13 +107,15 @@ fun EditIncomeScreen(
 
     Scaffold(
         topBar = {
-            AppHeader(
-                title = "Edit Income",
-                navController = navController,
-                showBackButton = true,
-                showProfileIcon = false,
-                user = user
-            )
+            Box(modifier = Modifier.statusBarsPadding()) {
+                AppHeader(
+                    title = "Edit Income",
+                    navController = navController,
+                    showBackButton = true,
+                    showProfileIcon = false,
+                    user = user
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
