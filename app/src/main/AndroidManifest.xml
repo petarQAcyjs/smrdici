@@ -48,8 +48,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
-        
-        <!-- WorkManager provider for scheduling notifications -->
+
+        <!-- Disables default WorkManager initializer for on-demand initialization -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
@@ -57,7 +57,6 @@
             tools:node="merge">
             <meta-data
                 android:name="androidx.work.WorkManagerInitializer"
-                android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
 
