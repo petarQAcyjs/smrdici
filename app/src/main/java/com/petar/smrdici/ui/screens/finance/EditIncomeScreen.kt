@@ -109,7 +109,7 @@ fun EditIncomeScreen(
         topBar = {
             Box(modifier = Modifier.statusBarsPadding()) {
                 AppHeader(
-                    title = "Edit Income",
+                    title = "Измени приход",
                     navController = navController,
                     showBackButton = true,
                     showProfileIcon = false,
@@ -130,7 +130,7 @@ fun EditIncomeScreen(
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it },
-                label = { Text("Amount") },
+                label = { Text("Износ") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -138,7 +138,7 @@ fun EditIncomeScreen(
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text("Description") },
+                label = { Text("Опис") },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -161,7 +161,7 @@ fun EditIncomeScreen(
                 onClick = { showDatePicker = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Date: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedDate))}")
+                Text("Датум: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedDate))}")
             }
 
             Button(
@@ -170,7 +170,7 @@ fun EditIncomeScreen(
                         try {
                             val amountValue = amount.toDoubleOrNull()
                             if (amountValue == null) {
-                                snackbarHostState.showSnackbar("Please enter a valid amount")
+                                snackbarHostState.showSnackbar("Унесите валидан износ")
                                 return@launch
                             }
                             
@@ -196,7 +196,7 @@ fun EditIncomeScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Save Changes")
+                Text("Сачувај измене")
             }
         }
 

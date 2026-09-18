@@ -126,7 +126,7 @@ fun EditExpenseScreen(
         topBar = {
             Box(modifier = Modifier.statusBarsPadding()) {
                 AppHeader(
-                    title = "Edit Expense",
+                    title = "Измени трошак",
                     navController = navController,
                     showBackButton = true,
                     showProfileIcon = false,
@@ -147,7 +147,7 @@ fun EditExpenseScreen(
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it },
-                label = { Text("Amount") },
+                label = { Text("Износ") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -155,7 +155,7 @@ fun EditExpenseScreen(
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text("Description") },
+                label = { Text("Опис") },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -165,7 +165,7 @@ fun EditExpenseScreen(
                 }
             } else {
                 CategoryDropdown(
-                    selectedCategory = if (selectedCategory.isNotEmpty()) selectedCategory else customCategoryName,
+                    selectedCategory = selectedCategory.ifEmpty { customCategoryName },
                     onCategorySelected = { name ->
                         try {
                             // Try to convert the string name to an ExpenseCategory enum
@@ -191,7 +191,7 @@ fun EditExpenseScreen(
             ) {
                 // Format date for display using local timezone
                 val displayFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                Text("Date: ${displayFormat.format(Date(selectedDate))}")
+                Text("Датум: ${displayFormat.format(Date(selectedDate))}")
             }
 
             Button(
@@ -200,7 +200,7 @@ fun EditExpenseScreen(
                         try {
                             val amountValue = amount.toDoubleOrNull()
                             if (amountValue == null) {
-                                snackbarHostState.showSnackbar("Please enter a valid amount")
+                                snackbarHostState.showSnackbar("Унесите валидан износ")
                                 return@launch
                             }
                             
@@ -216,7 +216,7 @@ fun EditExpenseScreen(
                             val updatedExpense = expense?.copy(
                                 amount = amountValue,
                                 description = description,
-                                category = if (selectedCategory.isNotEmpty()) selectedCategory else customCategoryName,
+                                category = selectedCategory.ifEmpty { customCategoryName },
                                 date = dateStr,
                                 accountId = selectedAccountId,
                                 userId = user?.uid ?: ""
@@ -234,7 +234,7 @@ fun EditExpenseScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Save Changes")
+                Text("Сачувај измене")
             }
         }
 
