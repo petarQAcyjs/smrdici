@@ -1,6 +1,5 @@
 package com.petar.smrdici.ui.screens.settings
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,58 +20,58 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Fastfood
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LocalHospital
-import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.LocalCafe
-import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.Pets
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.SmokingRooms
-import androidx.compose.material.icons.filled.LocalGroceryStore
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Celebration
-import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.material.icons.filled.Checkroom
-import androidx.compose.material.icons.filled.Flight
-import androidx.compose.material.icons.filled.SportsBasketball
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.Commute
-import androidx.compose.material.icons.filled.Casino
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Subscriptions
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Handyman
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.filled.Apartment
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Chair
-import androidx.compose.material.icons.filled.Grass
-import androidx.compose.material.icons.filled.LocalBar
-import androidx.compose.material.icons.filled.Work
-import androidx.compose.material.icons.filled.Business
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.CurrencyExchange
-import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.MonetizationOn
-import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material.icons.filled.Chair
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.ChildCare
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Commute
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.CurrencyExchange
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.Grass
+import androidx.compose.material.icons.filled.Handyman
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalBar
+import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.LocalGroceryStore
+import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.SmokingRooms
+import androidx.compose.material.icons.filled.SportsBasketball
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Subscriptions
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -229,7 +227,7 @@ private fun getIncomeCategoryIcon(categoryName: String): ImageVector {
         "bonus", "бонус" -> Icons.Default.MonetizationOn
         "gift", "поклон", "poklon" -> Icons.Default.CardGiftcard
         "investment", "инвестиција", "investicija" -> Icons.AutoMirrored.Filled.TrendingUp
-        "rental", "рентал", "rental" -> Icons.Default.Apartment
+        "rental", "рентал" -> Icons.Default.Apartment
         "business", "бизнис", "biznis" -> Icons.Default.Business
         "freelance", "фриленс", "frilens" -> Icons.Default.Payments
         "interest", "камата", "kamata" -> Icons.Default.AccountBalance
@@ -387,12 +385,12 @@ fun EditCategoryScreen(
     var currentCategoryName by remember { mutableStateOf(categoryName) }
     var isNewCategory by remember { mutableStateOf(categoryName.isEmpty()) }
     var selectedIcon by remember { 
-        mutableStateOf<ImageVector>(
+        mutableStateOf(
             if (categoryType == CategoryType.EXPENSE) Icons.Default.ShoppingCart else Icons.Default.AttachMoney
         ) 
     }
     var selectedColor by remember { 
-        mutableStateOf<Color>(
+        mutableStateOf(
             categoryManager.getAllComposeColors()[0]
         ) 
     }
@@ -421,8 +419,8 @@ fun EditCategoryScreen(
         LaunchedEffect(categoryName) {
             selectedIcon = icon
             selectedColor = color
-            LogUtils.d("EditCategoryScreen", "Initialized with icon: ${selectedIcon?.toString() ?: "null"} for category: $categoryName")
-            LogUtils.d("EditCategoryScreen", "Initialized with color: ${selectedColor?.toString() ?: "null"} for category: $categoryName")
+            LogUtils.d("EditCategoryScreen", "Initialized with icon: $selectedIcon for category: $categoryName")
+            LogUtils.d("EditCategoryScreen", "Initialized with color: $selectedColor for category: $categoryName")
         }
     }
     
@@ -490,22 +488,22 @@ fun EditCategoryScreen(
                                 LogUtils.i("EditCategoryScreen", "Saving category: $currentCategoryName, type: $categoryType, isNew: $isNewCategory")
                                 
                                 // Save the selected color
-                                selectedColor?.let { color ->
+                                selectedColor.let { color ->
                                     // Convert Color to ARGB long value
                                     val alpha = (color.alpha * 255).toInt()
                                     val red = (color.red * 255).toInt()
                                     val green = (color.green * 255).toInt()
                                     val blue = (color.blue * 255).toInt()
-                                    
+
                                     val colorValue = (alpha.toLong() shl 24) or
-                                                    (red.toLong() shl 16) or
-                                                    (green.toLong() shl 8) or
-                                                    blue.toLong()
-                                    
+                                            (red.toLong() shl 16) or
+                                            (green.toLong() shl 8) or
+                                            blue.toLong()
+
                                     val isExpense = categoryType == CategoryType.EXPENSE
-                                    
+
                                     LogUtils.d("EditCategoryScreen", "Saving color: ARGB($alpha,$red,$green,$blue) = $colorValue for category: $currentCategoryName, isExpense: $isExpense")
-                                    
+
                                     // For new category, save with new name
                                     if (isNewCategory) {
                                         categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
@@ -518,19 +516,19 @@ fun EditCategoryScreen(
                                         // For existing category without name change, just save the color
                                         categoryManager.saveCategoryColor(currentCategoryName, colorValue, isExpense)
                                     }
-                                } ?: LogUtils.e("EditCategoryScreen", "No color selected!")
+                                }
                                 
                                 // Save the selected icon
-                                selectedIcon?.let { icon ->
+                                selectedIcon.let { icon ->
                                     // Extract icon name from the icon
                                     val iconFullName = icon.toString()
                                     LogUtils.d("EditCategoryScreen", "Icon full name: $iconFullName")
-                                    
+
                                     // Extract the simple class name of the icon
                                     val iconName = try {
                                         // Use reflection to get the actual field name
                                         var foundName: String? = null
-                                        
+
                                         // Try Icons.Default
                                         val defaultFields = Icons.Default::class.java.declaredFields
                                         for (field in defaultFields) {
@@ -541,7 +539,7 @@ fun EditCategoryScreen(
                                                 break
                                             }
                                         }
-                                        
+
                                         // Try Icons.AutoMirrored.Filled if not found in Default
                                         if (foundName == null) {
                                             val autoMirroredFields = Icons.AutoMirrored.Filled::class.java.declaredFields
@@ -554,7 +552,7 @@ fun EditCategoryScreen(
                                                 }
                                             }
                                         }
-                                        
+
                                         // Try Icons.Filled if not found yet
                                         if (foundName == null) {
                                             val filledFields = Icons.Filled::class.java.declaredFields
@@ -567,13 +565,13 @@ fun EditCategoryScreen(
                                                 }
                                             }
                                         }
-                                        
+
                                         // If still null, try fallback methods
                                         foundName ?: run {
                                             // Fallback to using index in our predefined lists
                                             val isExpense = categoryType == CategoryType.EXPENSE
                                             val icons = if (isExpense) CategoryIcons.expenseIcons else CategoryIcons.incomeIcons
-                                            
+
                                             val index = icons.indexOf(icon)
                                             if (index != -1) {
                                                 if (isExpense) {
@@ -591,11 +589,11 @@ fun EditCategoryScreen(
                                         // Fallback
                                         if (categoryType == CategoryType.EXPENSE) "ShoppingCart" else "AttachMoney"
                                     }
-                                    
+
                                     val isExpense = categoryType == CategoryType.EXPENSE
-                                    
+
                                     LogUtils.d("EditCategoryScreen", "Saving icon: $iconName for category: $currentCategoryName, isExpense: $isExpense (from $iconFullName)")
-                                    
+
                                     // For new category, save with new name
                                     if (isNewCategory) {
                                         categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
@@ -608,7 +606,7 @@ fun EditCategoryScreen(
                                         // For existing category without name change, just save the icon
                                         categoryManager.saveCategoryIcon(currentCategoryName, iconName, isExpense)
                                     }
-                                } ?: LogUtils.e("EditCategoryScreen", "No icon selected!")
+                                }
                                 
                                 if (isNewCategory) {
                                     // Add new category
@@ -874,10 +872,3 @@ fun ColorSelectionItem(
     }
 }
 
-// Get colors from CategoryManager instead of hardcoded list
-@Composable
-private fun getCategoryColors(): List<Color> {
-    val context = LocalContext.current
-    val categoryManager = remember { CategoryManager.getInstance(context) }
-    return categoryManager.getAllComposeColors()
-} 

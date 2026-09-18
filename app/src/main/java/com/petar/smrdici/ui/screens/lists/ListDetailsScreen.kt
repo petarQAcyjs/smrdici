@@ -658,7 +658,7 @@ fun ShoppingItemRow(
                 state = rememberDraggableState { delta ->
                     if (!confirmDelete) {
                         offsetX += delta
-                        if (offsetX > deleteThreshold && !confirmDelete) {
+                        if (offsetX > deleteThreshold) {
                             confirmDelete = true
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         }

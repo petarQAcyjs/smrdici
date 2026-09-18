@@ -289,7 +289,7 @@ class SmrdiciApplication : Application(), Configuration.Provider {
         // Dobavljamo instance repozitorijuma kroz RepositoryManager
         val expenseRepository = RepositoryManager.getExpenseRepositoryForFinance()
         val incomeRepository = RepositoryManager.getIncomeRepositoryForFinance()
-        val accountRepository = RepositoryManager.getAccountRepositoryForFinance(this)
+        val accountRepository = RepositoryManager.getAccountRepositoryForFinance()
         
         // Međusobno povezivanje repozitorijuma (ako je potrebno)
         // Npr. ExpenseRepository zahteva AccountRepository za ažuriranje balansa računa

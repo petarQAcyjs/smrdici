@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.screens.finance
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -112,6 +113,7 @@ private val predefinedColors = listOf(
     Color(0xFFFF8A65)  // Deep Orange
 )
 
+@SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun FinanceScreen(
@@ -556,8 +558,8 @@ fun FinanceScreen(
                     val transactionsByCategory = remember(state.transactions) {
                         state.transactions.groupBy { transaction ->
                             when (transaction) {
-                                is IncomeTransaction -> transaction.income.category ?: "Uncategorized"
-                                is ExpenseTransaction -> transaction.expense.category ?: "Uncategorized"
+                                is IncomeTransaction -> transaction.income.category
+                                is ExpenseTransaction -> transaction.expense.category
                             }
                         }
                     }
@@ -578,7 +580,6 @@ fun FinanceScreen(
                             CombinedHeaderWithSort(
                                 categoriesExpanded = categoriesExpanded,
                                 onToggleCategories = { categoriesExpanded = !categoriesExpanded },
-                                selectedSort = state.sortOption,
                                 onSortSelected = { viewModel.setSortOption(it) }
                             )
                         }
@@ -597,7 +598,7 @@ fun FinanceScreen(
                                 Column(
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    rows.forEachIndexed { rowIndex, rowItems ->
+                                    rows.forEachIndexed { _, rowItems ->
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -838,7 +839,7 @@ fun TimePeriodSelector(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PeriodType.values().forEach { periodType ->
+                    PeriodType.entries.forEach { periodType ->
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -930,7 +931,6 @@ fun TransactionTypeSelector(
 fun CombinedHeaderWithSort(
     categoriesExpanded: Boolean,
     onToggleCategories: () -> Unit,
-    selectedSort: SortOption,
     onSortSelected: (SortOption) -> Unit
 ) {
     var showSortDropdown by remember { mutableStateOf(false) }
@@ -977,7 +977,7 @@ fun CombinedHeaderWithSort(
                 expanded = showSortDropdown,
                 onDismissRequest = { showSortDropdown = false }
             ) {
-                SortOption.values().forEach { option ->
+                SortOption.entries.forEach { option ->
                     DropdownMenuItem(
                         text = {
                             Text(
@@ -1004,61 +1004,6 @@ fun CombinedHeaderWithSort(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SortOptionsSelector(
-    selectedSort: SortOption,
-    onSortSelected: (SortOption) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box {
-            IconButton(
-                onClick = { expanded = true }
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Sort,
-                    contentDescription = "Сортирај трансакције",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                SortOption.values().forEach { option ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                when (option) {
-                                    SortOption.DATE_NEWEST -> "Датум (најновији)"
-                                    SortOption.DATE_OLDEST -> "Датум (најстарији)"
-                                    SortOption.AMOUNT_HIGHEST -> "Износ (највећи)"
-                                    SortOption.AMOUNT_LOWEST -> "Износ (најмањи)"
-                                    SortOption.CATEGORY_A_Z -> "Категорија (А-Ш)"
-                                    SortOption.CATEGORY_Z_A -> "Категорија (Ш-А)"
-                                }
-                            )
-                        },
-                        onClick = {
-                            onSortSelected(option)
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 fun TransactionItem(
     transaction: UITransaction,
     numberFormat: NumberFormat,
@@ -1070,8 +1015,8 @@ fun TransactionItem(
     
     // Get category name and whether it's an expense
     val categoryName = when (transaction) {
-        is IncomeTransaction -> transaction.income.category ?: "Uncategorized"
-        is ExpenseTransaction -> transaction.expense.category ?: "Uncategorized"
+        is IncomeTransaction -> transaction.income.category
+        is ExpenseTransaction -> transaction.expense.category
     }
     val isExpense = transaction is ExpenseTransaction
     
@@ -1105,7 +1050,7 @@ fun TransactionItem(
                 when (transaction) {
                     is IncomeTransaction -> {
                         Text(
-                            text = transaction.income.description ?: "Приход",
+                            text = transaction.income.description,
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
@@ -1113,7 +1058,7 @@ fun TransactionItem(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        transaction.income.category?.let { category ->
+                        transaction.income.category.let { category ->
                             Text(
                                 text = category,
                                 style = MaterialTheme.typography.bodySmall,
@@ -1123,7 +1068,7 @@ fun TransactionItem(
                     }
                     is ExpenseTransaction -> {
                         Text(
-                            text = transaction.expense.description ?: "Расход",
+                            text = transaction.expense.description,
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
@@ -1131,7 +1076,7 @@ fun TransactionItem(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        transaction.expense.category?.let { category ->
+                        transaction.expense.category.let { category ->
                             Text(
                                 text = category,
                                 style = MaterialTheme.typography.bodySmall,
