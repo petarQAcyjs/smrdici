@@ -131,7 +131,6 @@ dependencies {
     implementation(libs.gson)
     
     // Додатне зависности за решавање проблема са Google API
-    implementation(libs.play.services.auth)
     implementation(libs.play.services.base)
     
     // Coroutines sync - za Mutex implementaciju
