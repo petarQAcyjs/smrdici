@@ -17,7 +17,6 @@ class NotificationManager(private val context: Context) {
         private const val KEY_AVATAR_NOTIFICATIONS = "avatar_notifications"
         private const val KEY_DYNAMIC_TIMING = "dynamic_timing"
         private const val KEY_SMART_GROUPING = "smart_grouping"
-        private const val KEY_WEATHER_AWARE = "weather_aware"
         private const val KEY_DAILY_MORNING = "daily_morning"
         
         const val TAG = "NotificationManager"
@@ -61,14 +60,7 @@ class NotificationManager(private val context: Context) {
     var smartGroupingEnabled: Boolean
         get() = prefs.getBoolean(KEY_SMART_GROUPING, false)
         set(value) = prefs.edit { putBoolean(KEY_SMART_GROUPING, value) }
-    
-    var weatherAwareEnabled: Boolean
-        get() = prefs.getBoolean(KEY_WEATHER_AWARE, true)
-        set(value) {
-            prefs.edit { putBoolean(KEY_WEATHER_AWARE, value) }
-            Log.d(TAG, "Weather-aware notifications ${if (value) "enabled" else "disabled"}")
-        }
-    
+
     var dailyMorningEnabled: Boolean
         get() = prefs.getBoolean(KEY_DAILY_MORNING, true)
         set(value) {
@@ -97,7 +89,6 @@ class NotificationManager(private val context: Context) {
             putBoolean(KEY_AVATAR_NOTIFICATIONS, true)
             putBoolean(KEY_DYNAMIC_TIMING, false)
             putBoolean(KEY_SMART_GROUPING, false)
-            putBoolean(KEY_WEATHER_AWARE, true)
             putBoolean(KEY_DAILY_MORNING, true)
             apply()
         }

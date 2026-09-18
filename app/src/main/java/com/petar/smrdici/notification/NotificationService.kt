@@ -31,6 +31,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.Random
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.cos
+import kotlin.math.sin
 
 class NotificationService(private val context: Context) {
 
@@ -111,15 +113,8 @@ class NotificationService(private val context: Context) {
         val notificationManager = SmrdiciApplication.getNotificationManager()
         val useAvatar = notificationManager.avatarNotificationsEnabled
 
-        var notificationMessage = eventData.message
+        val notificationMessage = eventData.message
 
-        if (notificationManager.weatherAwareEnabled) {
-            val weatherPrefs = context.getSharedPreferences("weather_info", Context.MODE_PRIVATE)
-            val weatherInfo = weatherPrefs.getString("weather_advice", null)
-            if (weatherInfo != null) {
-                notificationMessage += "\n\n🌤️ $weatherInfo"
-            }
-        }
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(eventData.title)
@@ -188,20 +183,10 @@ class NotificationService(private val context: Context) {
             messagingStyle.addMessage(messageText, System.currentTimeMillis(), null as Person?)
         }
 
-        val summaryText = "You have multiple events scheduled"
-        var summaryWithWeather = summaryText
-        if (notificationManager.weatherAwareEnabled) {
-            val weatherPrefs = context.getSharedPreferences("weather_info", Context.MODE_PRIVATE)
-            val weatherInfo = weatherPrefs.getString("weather_advice", null)
-            if (weatherInfo != null) {
-                summaryWithWeather += "\n\n🌤️ $weatherInfo"
-            }
-        }
 
         val summaryBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("${events.size} events today")
-            .setContentText(summaryWithWeather)
             .setStyle(messagingStyle)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(summaryPendingIntent)
@@ -308,53 +293,6 @@ class NotificationService(private val context: Context) {
         val date: Date?
     )
 
-    fun showDailyWeatherNotification(title: String, message: String) {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            action = "WEATHER_NOTIFICATION"
-        }
-
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            "daily_weather".hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notificationManager = SmrdiciApplication.getNotificationManager()
-        val translatedMessage = translateWeatherMessage(message)
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(translatedMessage)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(translatedMessage))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setLargeIcon(createWeatherIcon())
-            .setColor("#03A9F4".toColorInt())
-
-        if (notificationManager.notificationSoundEnabled) {
-            builder.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-        }
-
-        if (notificationManager.notificationVibrationEnabled) {
-            builder.setVibrate(longArrayOf(0, 250, 250, 250))
-        }
-
-        val notificationId = 2000
-
-        with(NotificationManagerCompat.from(context)) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                notify(notificationId, builder.build())
-            } else {
-                Log.e("NotificationService", "Notification permission not granted")
-            }
-        }
-    }
-
     fun showDailyMorningNotification(title: String, message: String) {
         val currentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         val source = if (message.contains("[Source:")) {
@@ -371,8 +309,8 @@ class NotificationService(private val context: Context) {
         Log.d("NotificationService", "Message: ${message.lines().first()}")
 
         val cleanMessage = message
-            .replace(Regex("\\[Source:.*?\\]"), "")
-            .replace(Regex("\\[Test:.*?\\]"), "")
+            .replace(Regex("\\[Source:.*?]"), "")
+            .replace(Regex("\\[Test:.*?]"), "")
             .trim()
 
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -440,10 +378,10 @@ class NotificationService(private val context: Context) {
 
         for (i in 0 until 8) {
             val angle = Math.toRadians((i * 45).toDouble())
-            val startX = centerX + (rayLength * 0.4 * Math.cos(angle)).toFloat()
-            val startY = centerY + (rayLength * 0.4 * Math.sin(angle)).toFloat()
-            val endX = centerX + (rayOuterLength * Math.cos(angle)).toFloat()
-            val endY = centerY + (rayOuterLength * Math.sin(angle)).toFloat()
+            val startX = centerX + (rayLength * 0.4 * cos(angle)).toFloat()
+            val startY = centerY + (rayLength * 0.4 * sin(angle)).toFloat()
+            val endX = centerX + (rayOuterLength * cos(angle)).toFloat()
+            val endY = centerY + (rayOuterLength * sin(angle)).toFloat()
             canvas.drawLine(startX, startY, endX, endY, paint)
         }
 
@@ -467,59 +405,4 @@ class NotificationService(private val context: Context) {
         return bitmap
     }
 
-    private fun createWeatherIcon(): Bitmap {
-        val size = 128
-        val bitmap = createBitmap(size, size)
-        val canvas = Canvas(bitmap)
-
-        val paint = Paint().apply {
-            color = Color.rgb(66, 165, 245)
-            style = Paint.Style.FILL
-            isAntiAlias = true
-        }
-
-        canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
-
-        paint.color = Color.YELLOW
-        canvas.drawCircle(size / 2f, size / 2f, size / 3f, paint)
-
-        paint.color = Color.WHITE
-        canvas.drawCircle(size / 2f, size / 2f + 10, size / 4f, paint)
-        canvas.drawCircle((size / 2f + 15), (size / 2f + 5), size / 5f, paint)
-        canvas.drawCircle((size / 2f - 15), (size / 2f + 5), size / 5f, paint)
-
-        return bitmap
-    }
-
-    private fun translateWeatherMessage(message: String): String {
-        var result = message
-        val weatherTerms = listOf(
-            "Sunny" to "Сунчано",
-            "Clear" to "Ведро",
-            "Partly cloudy" to "Делимично облачно",
-            "Cloudy" to "Облачно",
-            "Overcast" to "Тмурно",
-            "Mist" to "Измаглица",
-            "Fog" to "Магла",
-            "Light rain" to "Слаба киша",
-            "Rain" to "Киша",
-            "Heavy rain" to "Јака киша",
-            "Thunderstorm" to "Грмљавина",
-            "Thunder" to "Грмљавина",
-            "Snow" to "Снег",
-            "Light snow" to "Слаб снег",
-            "Heavy snow" to "Јак снег",
-            "Sleet" to "Суснежица",
-            "Freezing" to "Ледено",
-            "Drizzle" to "Росуља",
-            "Hail" to "Град",
-            "Shower" to "Пљусак"
-        )
-
-        weatherTerms.forEach { (english, serbian) ->
-            result = result.replace(english, serbian, ignoreCase = true)
-        }
-
-        return result
-    }
 }

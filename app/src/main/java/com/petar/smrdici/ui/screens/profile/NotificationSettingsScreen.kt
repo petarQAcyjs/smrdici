@@ -32,9 +32,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Vibration
-import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -88,39 +86,39 @@ fun NotificationSettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
-    
+
     // Get the current user
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
-    
+
     // State for notification settings
     var notificationsEnabled by remember { mutableStateOf(notificationManager.notificationsEnabled) }
     var dayBeforeNotificationEnabled by remember { mutableStateOf(notificationManager.dayBeforeNotificationEnabled) }
     var hourBeforeNotificationEnabled by remember { mutableStateOf(notificationManager.hourBeforeNotificationEnabled) }
     var notificationSoundEnabled by remember { mutableStateOf(notificationManager.notificationSoundEnabled) }
     var notificationVibrationEnabled by remember { mutableStateOf(notificationManager.notificationVibrationEnabled) }
-    
+
     // State for new notification features
     var avatarNotificationsEnabled by remember { mutableStateOf(notificationManager.avatarNotificationsEnabled) }
     var dynamicTimingEnabled by remember { mutableStateOf(notificationManager.dynamicTimingEnabled) }
     var smartGroupingEnabled by remember { mutableStateOf(notificationManager.smartGroupingEnabled) }
-    var weatherAwareEnabled by remember { mutableStateOf(notificationManager.weatherAwareEnabled) }
-    
+
     // Check if notification permission is granted
     var notificationPermissionGranted by remember { mutableStateOf(false) }
-    
+
     // Check notification permission
     LaunchedEffect(Unit) {
         notificationPermissionGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permissionChecker = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+            val permissionChecker =
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
             permissionChecker == android.content.pm.PackageManager.PERMISSION_GRANTED
         } else {
             true // Permission not required on Android <13
         }
     }
-    
+
     // Show a message if notification permission is not granted
     LaunchedEffect(notificationPermissionGranted) {
         if (!notificationPermissionGranted) {
@@ -129,7 +127,7 @@ fun NotificationSettingsScreen(
             )
         }
     }
-    
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -167,7 +165,7 @@ fun NotificationSettingsScreen(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
-                    
+
                     // Main notification toggle
                     SwitchSettingsItem(
                         icon = if (notificationsEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
@@ -177,7 +175,7 @@ fun NotificationSettingsScreen(
                         onCheckedChange = { checked ->
                             notificationsEnabled = checked
                             notificationManager.notificationsEnabled = checked
-                            
+
                             // If notifications are disabled, show a message
                             if (!checked) {
                                 coroutineScope.launch {
@@ -189,15 +187,16 @@ fun NotificationSettingsScreen(
                         },
                         enabled = notificationPermissionGranted
                     )
-                    
+
                     // If permission is not granted, show a button to open settings
                     if (!notificationPermissionGranted) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.fromParts("package", context.packageName, null)
-                                }
+                                val intent =
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.fromParts("package", context.packageName, null)
+                                    }
                                 context.startActivity(intent)
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -207,9 +206,9 @@ fun NotificationSettingsScreen(
                     }
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             // Notification timing settings
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -226,7 +225,7 @@ fun NotificationSettingsScreen(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
-                    
+
                     // Day before notification toggle
                     SwitchSettingsItem(
                         icon = Icons.Default.CalendarToday,
@@ -239,7 +238,7 @@ fun NotificationSettingsScreen(
                         },
                         enabled = notificationsEnabled && notificationPermissionGranted
                     )
-                    
+
                     // Hour before notification toggle
                     SwitchSettingsItem(
                         icon = Icons.Default.Bolt,
@@ -252,7 +251,7 @@ fun NotificationSettingsScreen(
                         },
                         enabled = notificationsEnabled && notificationPermissionGranted
                     )
-                    
+
                     // Dynamic timing toggle
                     SwitchSettingsItem(
                         icon = Icons.Default.AccessTime,
@@ -267,9 +266,9 @@ fun NotificationSettingsScreen(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             // Advanced notification features
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -286,7 +285,7 @@ fun NotificationSettingsScreen(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
-                    
+
                     // Avatar notifications toggle
                     SwitchSettingsItem(
                         icon = Icons.Default.Person,
@@ -299,7 +298,7 @@ fun NotificationSettingsScreen(
                         },
                         enabled = notificationsEnabled && notificationPermissionGranted
                     )
-                    
+
                     // Smart grouping toggle
                     SwitchSettingsItem(
                         icon = Icons.AutoMirrored.Filled.Sort,
@@ -312,183 +311,180 @@ fun NotificationSettingsScreen(
                         },
                         enabled = notificationsEnabled && notificationPermissionGranted
                     )
-                    
-                    // Weather-aware notifications toggle
-                    SwitchSettingsItem(
-                        icon = Icons.Default.WbSunny,
-                        title = "Временска прогноза",
-                        subtitle = "Додај информације о времену у обавештења",
-                        checked = weatherAwareEnabled,
-                        onCheckedChange = { checked ->
-                            weatherAwareEnabled = checked
-                            notificationManager.weatherAwareEnabled = checked
+
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Notification style settings
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(
+                                text = "Стил обавештења",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+
+                            // Sound toggle
+                            SwitchSettingsItem(
+                                icon = Icons.AutoMirrored.Filled.VolumeUp,
+                                title = "Звук",
+                                subtitle = "Пуштај звук при обавештењу",
+                                checked = notificationSoundEnabled,
+                                onCheckedChange = { checked ->
+                                    notificationSoundEnabled = checked
+                                    notificationManager.notificationSoundEnabled = checked
+                                },
+                                enabled = notificationsEnabled && notificationPermissionGranted
+                            )
+
+                            // Vibration toggle
+                            SwitchSettingsItem(
+                                icon = Icons.Default.Vibration,
+                                title = "Вибрација",
+                                subtitle = "Вибрирај при обавештењу",
+                                checked = notificationVibrationEnabled,
+                                onCheckedChange = { checked ->
+                                    notificationVibrationEnabled = checked
+                                    notificationManager.notificationVibrationEnabled = checked
+                                },
+                                enabled = notificationsEnabled && notificationPermissionGranted
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Reset button
+                    Button(
+                        onClick = {
+                            notificationManager.resetToDefaults()
+
+                            // Update local state
+                            notificationsEnabled = notificationManager.notificationsEnabled
+                            dayBeforeNotificationEnabled =
+                                notificationManager.dayBeforeNotificationEnabled
+                            hourBeforeNotificationEnabled =
+                                notificationManager.hourBeforeNotificationEnabled
+                            notificationSoundEnabled = notificationManager.notificationSoundEnabled
+                            notificationVibrationEnabled =
+                                notificationManager.notificationVibrationEnabled
+                            avatarNotificationsEnabled =
+                                notificationManager.avatarNotificationsEnabled
+                            dynamicTimingEnabled = notificationManager.dynamicTimingEnabled
+                            smartGroupingEnabled = notificationManager.smartGroupingEnabled
+
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Подешавања враћена на подразумеване вредности"
+                                )
+                            }
                         },
-                        enabled = notificationsEnabled && notificationPermissionGranted
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Notification style settings
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Стил обавештења",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    
-                    // Sound toggle
-                    SwitchSettingsItem(
-                        icon = Icons.AutoMirrored.Filled.VolumeUp,
-                        title = "Звук",
-                        subtitle = "Пуштај звук при обавештењу",
-                        checked = notificationSoundEnabled,
-                        onCheckedChange = { checked ->
-                            notificationSoundEnabled = checked
-                            notificationManager.notificationSoundEnabled = checked
-                        },
-                        enabled = notificationsEnabled && notificationPermissionGranted
-                    )
-                    
-                    // Vibration toggle
-                    SwitchSettingsItem(
-                        icon = Icons.Default.Vibration,
-                        title = "Вибрација",
-                        subtitle = "Вибрирај при обавештењу",
-                        checked = notificationVibrationEnabled,
-                        onCheckedChange = { checked ->
-                            notificationVibrationEnabled = checked
-                            notificationManager.notificationVibrationEnabled = checked
-                        },
-                        enabled = notificationsEnabled && notificationPermissionGranted
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Reset button
-            Button(
-                onClick = {
-                    notificationManager.resetToDefaults()
-                    
-                    // Update local state
-                    notificationsEnabled = notificationManager.notificationsEnabled
-                    dayBeforeNotificationEnabled = notificationManager.dayBeforeNotificationEnabled
-                    hourBeforeNotificationEnabled = notificationManager.hourBeforeNotificationEnabled
-                    notificationSoundEnabled = notificationManager.notificationSoundEnabled
-                    notificationVibrationEnabled = notificationManager.notificationVibrationEnabled
-                    avatarNotificationsEnabled = notificationManager.avatarNotificationsEnabled
-                    dynamicTimingEnabled = notificationManager.dynamicTimingEnabled
-                    smartGroupingEnabled = notificationManager.smartGroupingEnabled
-                    weatherAwareEnabled = notificationManager.weatherAwareEnabled
-                    
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar(
-                            message = "Подешавања враћена на подразумеване вредности"
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Врати на подразумевано"
+                        )
+                        Text(
+                            text = "Врати на подразумевано",
+                            modifier = Modifier.padding(start = 8.dp)
                         )
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Врати на подразумевано"
-                )
-                Text(
-                    text = "Врати на подразумевано",
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-            
-            // Add a button to test FCM notifications directly
-            Button(
-                onClick = {
-                    // Create a test event for today at the current time + 1 minute
-                    val calendar = Calendar.getInstance().apply {
-                        add(Calendar.MINUTE, 1) // 1 minute from now
-                    }
-                    
-                    val testEvent = Event(
-                        id = "test_fcm_${System.currentTimeMillis()}",
-                        title = "Test FCM Notification",
-                        description = "This is a test FCM notification",
-                        startTime = Timestamp(calendar.time),
-                        endTime = Timestamp(Date(calendar.timeInMillis + 3600000)), // 1 hour later
-                        createdBy = SmrdiciApplication.getInstance().getCurrentUserId(),
-                        assignee = "EVERYONE"
-                    )
-                    
-                    // Create a WorkManager job directly instead of using the event notification path
-                    val workData = androidx.work.Data.Builder()
-                        .putString("EVENT_ID", testEvent.id)
-                        .putString("EVENT_TITLE", testEvent.title)
-                        .putString("EVENT_ASSIGNEE", testEvent.assignee)
-                        .putLong("EVENT_START_TIME", calendar.timeInMillis)
-                        .putString("EVENT_LOCATION", "Београд") // Default location
-                        .build()
-                        
-                    val notificationWork = OneTimeWorkRequestBuilder<NotificationWorker>()
-                        .setInputData(workData)
-                        .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
-                        .build()
-                    
-                    // Enqueue the work
-                    val workManager = WorkManager.getInstance(context)
-                    workManager.enqueue(notificationWork)
-                    
-                    // Also try to schedule a local notification as backup
-                    com.petar.smrdici.notification.NotificationHelper.getInstance(context).scheduleTestDynamicNotification()
-                    
-                    // Display scheduled time and job state
-                    val scheduledTimeFormatted = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(calendar.time)
-                    Toast.makeText(
-                        context,
-                        "Test FCM notification scheduled for 1 minute from now at $scheduledTimeFormatted\nJob ID: ${notificationWork.id}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    
-                    // Show additional job info in a snackbar
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar(
-                            message = "Check notification scheduled for $scheduledTimeFormatted. Use Android Studio Logcat to monitor job: ${notificationWork.id.toString().takeLast(8)}"
+
+                    // Add a button to test FCM notifications directly
+                    Button(
+                        onClick = {
+                            // Create a test event for today at the current time + 1 minute
+                            val calendar = Calendar.getInstance().apply {
+                                add(Calendar.MINUTE, 1) // 1 minute from now
+                            }
+
+                            val testEvent = Event(
+                                id = "test_fcm_${System.currentTimeMillis()}",
+                                title = "Test FCM Notification",
+                                description = "This is a test FCM notification",
+                                startTime = Timestamp(calendar.time),
+                                endTime = Timestamp(Date(calendar.timeInMillis + 3600000)), // 1 hour later
+                                createdBy = SmrdiciApplication.getInstance().getCurrentUserId(),
+                                assignee = "EVERYONE"
+                            )
+
+                            // Create a WorkManager job directly instead of using the event notification path
+                            val workData = androidx.work.Data.Builder()
+                                .putString("EVENT_ID", testEvent.id)
+                                .putString("EVENT_TITLE", testEvent.title)
+                                .putString("EVENT_ASSIGNEE", testEvent.assignee)
+                                .putLong("EVENT_START_TIME", calendar.timeInMillis)
+                                .putString("EVENT_LOCATION", "Београд") // Default location
+                                .build()
+
+                            val notificationWork = OneTimeWorkRequestBuilder<NotificationWorker>()
+                                .setInputData(workData)
+                                .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
+                                .build()
+
+                            // Enqueue the work
+                            val workManager = WorkManager.getInstance(context)
+                            workManager.enqueue(notificationWork)
+
+                            // Also try to schedule a local notification as backup
+                            com.petar.smrdici.notification.NotificationHelper.getInstance(context)
+                                .scheduleTestDynamicNotification()
+
+                            // Display scheduled time and job state
+                            val scheduledTimeFormatted = SimpleDateFormat(
+                                "HH:mm:ss",
+                                Locale.getDefault()
+                            ).format(calendar.time)
+                            Toast.makeText(
+                                context,
+                                "Test FCM notification scheduled for 1 minute from now at $scheduledTimeFormatted\nJob ID: ${notificationWork.id}",
+                                Toast.LENGTH_LONG
+                            ).show()
+
+                            // Show additional job info in a snackbar
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Check notification scheduled for $scheduledTimeFormatted. Use Android Studio Logcat to monitor job: ${
+                                        notificationWork.id.toString().takeLast(8)
+                                    }"
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                         )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Test FCM Notification (1 min)")
+                        }
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Notifications,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Test FCM Notification (1 min)")
+
+                    // Add extra space at the bottom to ensure everything is visible
+                    Spacer(modifier = Modifier.height(32.dp))
                 }
             }
-            
-            // Add extra space at the bottom to ensure everything is visible
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
-} 
+}
