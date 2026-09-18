@@ -211,7 +211,11 @@ fun HomeScreen(
                     DisposableEffect(lifecycleOwner) {
                         val observer = LifecycleEventObserver { _, event ->
                             if (event == Lifecycle.Event.ON_RESUME) {
-                                homeViewModel.refreshExpenseData()
+                                // Just re-run the loaders - they already skip Firestore when the
+                                // in-memory cache is still fresh. Actual cache clearing only
+                                // happens on explicit pull-to-refresh (see HomeViewModel.syncEvents).
+                                homeViewModel.loadExpenseData()
+                                homeViewModel.loadExpenseHistoryData()
                             }
                         }
                         lifecycleOwner.lifecycle.addObserver(observer)

@@ -35,10 +35,8 @@ import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Commute
 import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Favorite
@@ -79,7 +77,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -103,8 +100,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryIcons
 import com.petar.smrdici.data.model.CategoryManager
-import com.petar.smrdici.ui.auth.AuthState
-import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
@@ -267,8 +262,7 @@ private fun getCategoryIcon(categoryName: String): ImageVector {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseCategoriesScreen(
-    navController: NavController,
-    authViewModel: AuthViewModel = viewModel()
+    navController: NavController
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -303,10 +297,7 @@ fun ExpenseCategoriesScreen(
     // Stanje za dijaloge
     var showDeleteDialog by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("") }
-    
-    val authState by authViewModel.authState.collectAsState()
-    val user = (authState as? AuthState.Authenticated)?.user
-    
+
     Scaffold(
         topBar = {
             Box(modifier = Modifier.statusBarsPadding()) {
@@ -314,7 +305,7 @@ fun ExpenseCategoriesScreen(
                     title = "Категорије расхода",
                     navController = navController,
                     showBackButton = true,
-                    user = user
+                    showProfileIcon = false
                 )
             }
         },
@@ -399,10 +390,6 @@ fun ExpenseCategoriesScreen(
                             color = getExpenseCategoryColor(category),
                             onEdit = {
                                 navController.navigate(Screen.EditCategory.createRoute(category, "EXPENSE"))
-                            },
-                            onDelete = {
-                                selectedCategory = category
-                                showDeleteDialog = true
                             }
                         )
                     }
@@ -414,7 +401,7 @@ fun ExpenseCategoriesScreen(
                                 .fillMaxWidth()
                                 .aspectRatio(1f)
                                 .clip(CircleShape)
-                                .background(Color(0xFF9E9E9E)) // Grey color for create button
+                                .background(Color(0xFF9E9E9E)) // Gray color for create button
                                 .clickable {
                                     navController.navigate(Screen.EditCategory.createRoute("", "EXPENSE"))
                                 },
@@ -469,8 +456,7 @@ fun ExpenseCategoriesScreen(
 fun CategoryItem(
     name: String,
     color: Color,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onEdit: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,

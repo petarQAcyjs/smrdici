@@ -139,11 +139,6 @@ fun FinanceScreen(
         }
     )
 
-    // Log screen entry and refresh data
-    LaunchedEffect(Unit) {
-        LogUtils.i("FinanceScreen", "Screen entered - using unified transactions collection", "ui")
-        viewModel.refreshOnResume()
-    }
 
     // Add a navigation observer to refresh data when returning from other screens
     val lifecycleOwner = LocalLifecycleOwner.current
