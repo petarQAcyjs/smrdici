@@ -1,6 +1,7 @@
 package com.petar.smrdici.data.model
 
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.PropertyName
 
 data class Event(
     var id: String? = null,
@@ -18,7 +19,8 @@ data class Event(
     val calendarId: String? = null,
     val createdAt: Timestamp? = null,
     val updatedAt: Timestamp? = null,
-    val isRecurringYearly: Boolean = false // Поље за годишње понављање догађаја
+    @get:PropertyName("isRecurringYearly") @set:PropertyName("isRecurringYearly")
+    var isRecurringYearly: Boolean = false // Поље за годишње понављање догађаја
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

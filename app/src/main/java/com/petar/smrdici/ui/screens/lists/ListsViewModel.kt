@@ -112,7 +112,7 @@ class ListsViewModel : ViewModel() {
                             
                             // Филтрирамо листе да искључимо предефинисане листе из главног приказа
                             val filteredLists = lists.filter { list ->
-                                list.title != "Spisak za prodavnicu" && list.title != "Kućni poslovi"
+                                list.title != "Списак за продавницу" && list.title != "Kućni poslovi"
                             }
                             
                             // Дебаг лог за праћење ажурирања
