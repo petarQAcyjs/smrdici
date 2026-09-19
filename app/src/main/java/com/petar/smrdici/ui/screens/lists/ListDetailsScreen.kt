@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -265,6 +266,7 @@ fun ListDetailsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
+            Box(modifier = Modifier.statusBarsPadding()) {
             AppHeader(
                 title = selectedList?.title ?: "Детаљи листе",
                 navController = navController,
@@ -330,6 +332,7 @@ fun ListDetailsScreen(
                     }
                 }
             )
+            }
         },
         floatingActionButton = {
             if (currentEditingItemId == null) {
@@ -655,7 +658,7 @@ fun ShoppingItemRow(
                 state = rememberDraggableState { delta ->
                     if (!confirmDelete) {
                         offsetX += delta
-                        if (offsetX > deleteThreshold && !confirmDelete) {
+                        if (offsetX > deleteThreshold) {
                             confirmDelete = true
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         }

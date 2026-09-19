@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -64,6 +65,7 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.Delete
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,13 +119,15 @@ fun FinanceSettingsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            AppHeader(
-                title = "Подешавање финансија",
-                user = user,
-                navController = navController,
-                showBackButton = true,
-                showProfileIcon = false
-            )
+            Box(modifier = Modifier.statusBarsPadding()) {
+                AppHeader(
+                    title = "Подешавање финансија",
+                    user = user,
+                    navController = navController,
+                    showBackButton = true,
+                    showProfileIcon = false
+                )
+            }
         }
     ) { paddingValues ->
         Column(
@@ -434,6 +438,20 @@ fun FinanceSettingsScreen(
                                                 showSnackbar("${account.name} је сада подразумевани рачун")
                                             }
                                         }
+                                    },
+                                    onDelete = {
+                                        // RESTRIKCIJA: Provera da li je stanje (balance) 0
+                                        if (account.balance == 0.0) {
+                                            accountViewModel.deleteAccount(account.id) { success ->
+                                                if (success) {
+                                                    showSnackbar("Рачун '${account.name}' је успешно обришан")
+                                                } else {
+                                                    showSnackbar("Грешка приликом брисања рачуна")
+                                                }
+                                            }
+                                        } else {
+                                            showSnackbar("Не можете обрисати рачун чије стање није 0")
+                                        }
                                     }
                                 )
                                 
@@ -450,22 +468,7 @@ fun FinanceSettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End
                         ) {
-                            // Дугме за трансфер новца
-                            TextButton(
-                                onClick = {
-                                    navController.navigate(Screen.Transfer.route)
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Трансфер новца")
-                            }
-                            
-                            Spacer(modifier = Modifier.width(8.dp))
-                            
+
                             // Дугме за додавање рачуна
                             TextButton(
                                 onClick = {
@@ -718,7 +721,8 @@ fun QuickDateButton(day: Int, selectedDay: Int, onClick: () -> Unit) {
 private fun AccountItem(
     account: Account,
     onClick: () -> Unit,
-    onSetDefault: () -> Unit
+    onSetDefault: () -> Unit,
+    onDelete: () -> Unit
 ) {
     // Додајте логовање
     android.util.Log.d("AccountItem", "Account ID: ${account.id}")
@@ -787,7 +791,14 @@ private fun AccountItem(
                 )
             }
         }
-        
+        //Избриши рачун дугме
+        IconButton(onClick = onDelete) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Обриши рачун",
+                tint = MaterialTheme.colorScheme.error
+            )
+        }
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
             contentDescription = null,
@@ -799,29 +810,6 @@ private fun AccountItem(
 // Додајте ову функцију за дебаговање
 private fun logAccountDetails(account: Account) {
     android.util.Log.d("BudgetSettings", "Account: ${account.name}, ID: ${account.id}, Default: ${account.isDefault}")
-}
-
-/**
- * Komponenta koja prikazuje naslovljenu sekciju sa sadržajem
- */
-@Composable
-fun Section(
-    title: String,
-    content: @Composable () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        content()
-    }
 }
 
 @Composable

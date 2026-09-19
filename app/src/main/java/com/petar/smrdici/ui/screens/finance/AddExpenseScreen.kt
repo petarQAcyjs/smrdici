@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -307,13 +308,15 @@ fun AddExpenseScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            AppHeader(
-                title = "Додај расход",
-                user = user,
-                navController = navController,
-                showBackButton = true,
-                showProfileIcon = false
-            )
+            Box(modifier = Modifier.statusBarsPadding()) {
+                AppHeader(
+                    title = "Додај расход",
+                    user = user,
+                    navController = navController,
+                    showBackButton = true,
+                    showProfileIcon = false
+                )
+            }
         }
     ) { paddingValues ->
         Column(

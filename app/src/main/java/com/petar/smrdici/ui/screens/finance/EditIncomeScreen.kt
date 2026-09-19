@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -106,13 +107,15 @@ fun EditIncomeScreen(
 
     Scaffold(
         topBar = {
-            AppHeader(
-                title = "Edit Income",
-                navController = navController,
-                showBackButton = true,
-                showProfileIcon = false,
-                user = user
-            )
+            Box(modifier = Modifier.statusBarsPadding()) {
+                AppHeader(
+                    title = "Измени приход",
+                    navController = navController,
+                    showBackButton = true,
+                    showProfileIcon = false,
+                    user = user
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -127,7 +130,7 @@ fun EditIncomeScreen(
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it },
-                label = { Text("Amount") },
+                label = { Text("Износ") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -135,7 +138,7 @@ fun EditIncomeScreen(
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text("Description") },
+                label = { Text("Опис") },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -158,7 +161,7 @@ fun EditIncomeScreen(
                 onClick = { showDatePicker = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Date: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedDate))}")
+                Text("Датум: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedDate))}")
             }
 
             Button(
@@ -167,7 +170,7 @@ fun EditIncomeScreen(
                         try {
                             val amountValue = amount.toDoubleOrNull()
                             if (amountValue == null) {
-                                snackbarHostState.showSnackbar("Please enter a valid amount")
+                                snackbarHostState.showSnackbar("Унесите валидан износ")
                                 return@launch
                             }
                             
@@ -193,7 +196,7 @@ fun EditIncomeScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Save Changes")
+                Text("Сачувај измене")
             }
         }
 

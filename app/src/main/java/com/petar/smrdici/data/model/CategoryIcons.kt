@@ -3,6 +3,7 @@ package com.petar.smrdici.data.model
 import android.util.Log
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -144,7 +145,7 @@ object CategoryIcons {
         Icons.Default.Wallet,
         Icons.Default.CreditScore,
         Icons.Default.Calculate,
-        Icons.Default.ReceiptLong,
+        Icons.AutoMirrored.Filled.ReceiptLong,
         Icons.Default.Insights,
         Icons.Default.Diamond,
         Icons.Default.Agriculture,

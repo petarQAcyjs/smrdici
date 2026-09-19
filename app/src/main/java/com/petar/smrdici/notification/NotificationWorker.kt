@@ -8,13 +8,10 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.petar.smrdici.SmrdiciApplication
-import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
-import com.petar.smrdici.util.ApiKeys
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.launch
 
 class NotificationWorker(
     private val context: Context,
@@ -33,55 +30,17 @@ class NotificationWorker(
         val title = inputData.getString("EVENT_TITLE") ?: return Result.failure()
         val startTimeMillis = inputData.getLong("EVENT_START_TIME", 0)
         val assignee = inputData.getString("EVENT_ASSIGNEE") ?: EventAssignee.EVERYONE.name
-        val location = inputData.getString("EVENT_LOCATION") ?: "Београд" // Default location
-        
+
         if (startTimeMillis == 0L) {
             Log.e(TAG, "Invalid start time for event: $eventId")
             return Result.failure()
-        }
-        
-        // Check if weather-aware notifications are enabled
-        val notificationManager = SmrdiciApplication.getNotificationManager()
-        if (notificationManager.weatherAwareEnabled) {
-            fetchWeatherInfo(location)
         }
         
         scheduleNotification(eventId, title, startTimeMillis, assignee)
         
         return Result.success()
     }
-    
-    /**
-     * Fetch weather information and store it in SharedPreferences
-     */
-    private suspend fun fetchWeatherInfo(location: String) {
-        try {
-            val weatherService = WeatherService(context)
-            val apiKey = ApiKeys.WEATHER_API_KEY
-            
-            val weatherInfo = weatherService.getWeatherInfo(location, apiKey)
-            if (weatherInfo != null) {
-                // Get weather advice
-                val weatherAdvice = weatherService.getWeatherAdvice(weatherInfo)
-                
-                // Store in SharedPreferences for the notification service to use
-                val weatherPrefs = context.getSharedPreferences("weather_info", Context.MODE_PRIVATE)
-                weatherPrefs.edit().apply {
-                    putString("weather_advice", weatherAdvice)
-                    putString("weather_description", weatherInfo.description)
-                    putFloat("weather_temperature", weatherInfo.temperature.toFloat())
-                    apply()
-                }
-                
-                Log.d(TAG, "Weather info fetched: $weatherAdvice")
-            } else {
-                Log.e(TAG, "Failed to fetch weather info")
-            }
-        } catch (exception: Exception) {
-            Log.e(TAG, "Error fetching weather info", exception)
-        }
-    }
-    
+
     private fun scheduleNotification(
         eventId: String,
         title: String,
@@ -302,250 +261,7 @@ class NotificationWorker(
     }
     
     class Builder(private val context: Context) {
-        fun scheduleNotificationForEvent(event: Event) {
-            if (event.id == null || event.startTime == null) {
-                Log.e(TAG, "Cannot schedule notification for event with null id or start time")
-                return
-            }
-            
-            val notificationManager = SmrdiciApplication.getNotificationManager()
-            
-            // Check if weather-aware notifications are enabled
-            if (notificationManager.weatherAwareEnabled) {
-                // Use the application scope instead of GlobalScope
-                SmrdiciApplication.getAppScope().launch {
-                    try {
-                        val weatherService = WeatherService(context)
-                        val apiKey = ApiKeys.WEATHER_API_KEY
-                        
-                        val location = event.location.ifEmpty { "Београд" } // Default location
-                        val weatherInfo = weatherService.getWeatherInfo(location, apiKey)
-                        
-                        if (weatherInfo != null) {
-                            // Get weather advice
-                            val weatherAdvice = weatherService.getWeatherAdvice(weatherInfo)
-                            
-                            // Store in SharedPreferences for the notification service to use
-                            val weatherPrefs = context.getSharedPreferences("weather_info", Context.MODE_PRIVATE)
-                            weatherPrefs.edit().apply {
-                                putString("weather_advice", weatherAdvice)
-                                putString("weather_description", weatherInfo.description)
-                                putFloat("weather_temperature", weatherInfo.temperature.toFloat())
-                                apply()
-                            }
-                            
-                            Log.d(TAG, "Weather info fetched for event: ${event.title}, advice: $weatherAdvice")
-                        }
-                    } catch (exception: Exception) {
-                        Log.e(TAG, "Error fetching weather info for event: ${event.title}", exception)
-                    }
-                }
-            }
-            
-            // Check if dynamic timing is enabled
-            if (notificationManager.dynamicTimingEnabled) {
-                // Schedule dynamic notification
-                scheduleDynamicNotification(event)
-            } else {
-                // Schedule standard notifications (day before)
-                if (notificationManager.dayBeforeNotificationEnabled) {
-                    scheduleDayBeforeNotification(event)
-                }
-                
-                // Schedule hour before notification if enabled
-                if (notificationManager.hourBeforeNotificationEnabled) {
-                    scheduleHourBeforeNotification(event)
-                }
-            }
-        }
-        
-        private fun scheduleDynamicNotification(event: Event) {
-            val startTimeMillis = event.startTime!!.toDate().time
-            
-            // Get the event start time as Calendar
-            val eventTime = Calendar.getInstance().apply {
-                timeInMillis = startTimeMillis
-            }
-            
-            // Create calendar for notification time
-            val notificationTime = Calendar.getInstance().apply {
-                // Set to the same day as the event
-                set(Calendar.YEAR, eventTime.get(Calendar.YEAR))
-                set(Calendar.MONTH, eventTime.get(Calendar.MONTH))
-                set(Calendar.DAY_OF_MONTH, eventTime.get(Calendar.DAY_OF_MONTH))
-                
-                // Check if event is before or after noon
-                if (eventTime.get(Calendar.HOUR_OF_DAY) < 12) {
-                    // Event is before noon, notify at 8:00 AM
-                    set(Calendar.HOUR_OF_DAY, 8)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                } else {
-                    // Event is after noon, notify at 12:00 PM
-                    set(Calendar.HOUR_OF_DAY, 12)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                }
-            }
-            
-            Log.d(TAG, "Dynamic timing calculation: Event at ${Date(startTimeMillis)}, Notification scheduled for ${Date(notificationTime.timeInMillis)}")
-            
-            // Only schedule if the notification time is in the future
-            if (notificationTime.timeInMillis > System.currentTimeMillis()) {
-                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                
-                // Check if we can schedule exact alarms (Android 12+)
-                val canScheduleExact = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                    alarmManager.canScheduleExactAlarms()
-                } else {
-                    true
-                }
-                
-                Log.d(TAG, "Can schedule exact alarms: $canScheduleExact")
-                
-                val intent = Intent(context, NotificationReceiver::class.java).apply {
-                    putExtra("EVENT_ID", event.id)
-                    putExtra("EVENT_TITLE", event.title)
-                    putExtra("EVENT_ASSIGNEE", event.assignee)
-                    
-                    val assigneeName = try {
-                        EventAssignee.valueOf(event.assignee).displayName
-                    } catch (_: Exception) {
-                        "Everyone"
-                    }
-                    
-                    val message = if (eventTime.get(Calendar.HOUR_OF_DAY) < 12) {
-                        "Hey $assigneeName, you have \"${event.title}\" today at ${
-                            formatTime(startTimeMillis)
-                        }"
-                    } else {
-                        "Hey $assigneeName, you have \"${event.title}\" this afternoon at ${
-                            formatTime(startTimeMillis)
-                        }"
-                    }
-                    
-                    putExtra("EVENT_MESSAGE", message)
-                }
-                
-                val uniqueRequestCode = "${event.id}_dynamic".hashCode()
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    uniqueRequestCode,
-                    intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                
-                try {
-                    if (canScheduleExact) {
-                        alarmManager.setExactAndAllowWhileIdle(
-                            AlarmManager.RTC_WAKEUP,
-                            notificationTime.timeInMillis,
-                            pendingIntent
-                        )
-                        Log.d(TAG, "Scheduled exact alarm for dynamic notification: ${Date(notificationTime.timeInMillis)}")
-                    } else {
-                        // Fallback to inexact alarm
-                        alarmManager.setAndAllowWhileIdle(
-                            AlarmManager.RTC_WAKEUP,
-                            notificationTime.timeInMillis,
-                            pendingIntent
-                        )
-                        Log.d(TAG, "Scheduled inexact alarm (fallback) for dynamic notification: ${Date(notificationTime.timeInMillis)}")
-                    }
-                    
-                    Log.d(TAG, "Successfully scheduled dynamic notification for ${Date(notificationTime.timeInMillis)}, event: ${event.title}")
-                } catch (exception: Exception) {
-                    Log.e(TAG, "Error scheduling dynamic notification for event: ${event.title}", exception)
-                }
-            } else {
-                Log.d(TAG, "Skipping dynamic notification for past time: ${Date(notificationTime.timeInMillis)}")
-            }
-        }
-        
-        private fun scheduleDayBeforeNotification(event: Event) {
-            val startTimeMillis = event.startTime!!.toDate().time
-            val notificationTime = startTimeMillis - ONE_DAY_MILLIS
-            
-            // Only schedule if the notification time is in the future
-            if (notificationTime > System.currentTimeMillis()) {
-                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                
-                // Schedule using the direct alarm approach
-                val intent = Intent(context, NotificationReceiver::class.java).apply {
-                    putExtra("EVENT_ID", event.id)
-                    putExtra("EVENT_TITLE", event.title)
-                    putExtra("EVENT_ASSIGNEE", event.assignee)
-                    
-                    val assigneeName = try {
-                        EventAssignee.valueOf(event.assignee).displayName
-                    } catch (_: Exception) {
-                        "Everyone"
-                    }
-                    
-                    val message = "Hey $assigneeName, you have \"${event.title}\" tomorrow at ${
-                        formatTime(event.startTime.toDate().time)
-                    }"
-                    
-                    putExtra("EVENT_MESSAGE", message)
-                }
-                
-                val uniqueRequestCode = "${event.id}_1".hashCode()
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    uniqueRequestCode,
-                    intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    notificationTime,
-                    pendingIntent
-                )
-                
-                Log.d(TAG, "Scheduled day-before notification for event: ${event.title} at ${Date(notificationTime)}")
-            }
-        }
-        
-        private fun scheduleHourBeforeNotification(event: Event) {
-            val startTimeMillis = event.startTime!!.toDate().time
-            val notificationTime = startTimeMillis - (60 * 60 * 1000) // 1 hour before
-            
-            // Only schedule if the notification time is in the future
-            if (notificationTime > System.currentTimeMillis()) {
-                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                
-                // Schedule using the direct alarm approach
-                val intent = Intent(context, NotificationReceiver::class.java).apply {
-                    putExtra("EVENT_ID", event.id)
-                    putExtra("EVENT_TITLE", event.title)
-                    putExtra("EVENT_ASSIGNEE", event.assignee)
-                    
-                    val message = "Reminder: \"${event.title}\" starts in 1 hour at ${
-                        formatTime(event.startTime.toDate().time)
-                    }"
-                    
-                    putExtra("EVENT_MESSAGE", message)
-                }
-                
-                val uniqueRequestCode = "${event.id}_2".hashCode()
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    uniqueRequestCode,
-                    intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    notificationTime,
-                    pendingIntent
-                )
-                
-                Log.d(TAG, "Scheduled hour-before notification for event: ${event.title} at ${Date(notificationTime)}")
-            }
-        }
-        
+
         fun cancelNotificationsForEvent(eventId: String) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             

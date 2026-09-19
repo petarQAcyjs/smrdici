@@ -31,10 +31,12 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
         }
         debug {
             buildConfigField("Boolean", "DEBUG_VISUALIZATION", "false")
@@ -130,7 +132,6 @@ dependencies {
     implementation(libs.gson)
     
     // Додатне зависности за решавање проблема са Google API
-    implementation(libs.play.services.auth)
     implementation(libs.play.services.base)
     
     // Coroutines sync - za Mutex implementaciju

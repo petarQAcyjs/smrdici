@@ -1,5 +1,6 @@
 package com.petar.smrdici.ui.screens.home
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -9,7 +10,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.auth.FirebaseAuth
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.ExpenseCategory
@@ -51,68 +51,71 @@ data class ExpenseCacheKey(
 )
 
 class HomeViewModel(
-    private val context: Context,
+    context: Context,
     private val settingsRepository: SettingsRepository = SettingsRepository.getInstance(context)
 ) : ViewModel() {
+    // Чувамо само application context да бисмо избегли referencing уништене Activity
+    // (нпр. приликом рекреације Activity-ја при промени теме у ProfileScreen)
+    @SuppressLint("StaticFieldLeak")
+    private val context: Context = context.applicationContext
+
     // Лења иницијализација EventRepository
     private val eventRepository = EventRepository.getInstance()
-    
+
     private val _events = MutableStateFlow<List<Event>>(emptyList())
     val events: StateFlow<List<Event>> = _events
-    
+
     private val _todayEvents = MutableStateFlow<List<Event>>(emptyList())
     val todayEvents: StateFlow<List<Event>> = _todayEvents
-    
+
     private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.Initial)
     val syncStatus: StateFlow<SyncStatus> = _syncStatus
-    
-    private val auth = FirebaseAuth.getInstance()
-    
+
     // Кеш за учитане догађаје
     private val loadedEventsCache = mutableMapOf<String, List<Event>>()
-    
+
     // Cache for expense chart data
     private val expenseChartCache = mutableMapOf<ExpenseCacheKey, List<CategorySummary>>()
-    
+
     // Cache for expense history data
     private val expenseHistoryCache = mutableMapOf<ExpenseCacheKey, List<PeriodExpenses>>()
-    
+
     // Cache expiration time in milliseconds (10 minutes)
     private val cacheExpirationTime = 10 * 60 * 1000L
-    
+
     // Map to track when each cache entry was last updated
     private val cacheTimestamps = mutableMapOf<ExpenseCacheKey, Long>()
-    
+
     // Mutex for thread-safe cache access
     private val cacheMutex = Mutex()
-    
+
     // Застава за спречавање вишеструких истовремених учитавања
     var isLoadingEvents by mutableStateOf(false)
         private set
-    
+
     // Job за праћење текућег учитавања
     private var currentLoadJob: Job? = null
-    
+
     // Expense chart data
     private val _expenseChartData = MutableStateFlow<List<CategorySummary>>(emptyList())
     val expenseChartData: StateFlow<List<CategorySummary>> = _expenseChartData
-    
+
     // Stacked bar chart data for multiple periods
     private val _expenseHistoryData = MutableStateFlow<List<PeriodExpenses>>(emptyList())
     val expenseHistoryData: StateFlow<List<PeriodExpenses>> = _expenseHistoryData
-    
+
     private val _isLoadingExpenseData = MutableStateFlow(false)
     val isLoadingExpenseData: StateFlow<Boolean> = _isLoadingExpenseData
-    
+
     private val _isLoadingHistoryData = MutableStateFlow(false)
     val isLoadingHistoryData: StateFlow<Boolean> = _isLoadingHistoryData
-    
+
     // Lazy initialization of TransactionRepository
     private val transactionRepository = TransactionRepository.getInstance()
-    
+
     // Number of previous periods to show in the stacked bar chart
     private val numPeriodsToShow = 8 // Current period + 7 previous periods
-    
+
     // Predefined colors for category cards - same as in FinanceViewModel
     private val categoryColors = listOf(
         Color(0xFFFF5252),  // Red
@@ -129,7 +132,7 @@ class HomeViewModel(
         Color(0xFF00BCD4),  // Cyan
         Color(0xFF3F51B5)   // Indigo
     )
-    
+
     // Category icon mapping - same as in FinanceViewModel
     private val categoryIconMapping = mapOf(
         "GROCERIES" to "LocalGroceryStore",
@@ -169,18 +172,21 @@ class HomeViewModel(
         "PARKING" to "DirectionsCar",
         "OTHER" to "Receipt"
     )
-    
+
     companion object {
         private const val TAG = "HomeViewModel"
     }
-    
+
     init {
         loadTodayEvents()
         loadExpenseData()
         loadExpenseHistoryData()
     }
-    
-    // Function to refresh expense data (similar to FinanceViewModel's refreshData)
+
+    // Force a fresh reload of expense data by clearing the caches first.
+    // Only call this for an explicit user action (pull-to-refresh) - ON_RESUME
+    // should call loadExpenseData()/loadExpenseHistoryData() directly instead,
+    // since those already skip Firestore when the cache is still fresh.
     fun refreshExpenseData() {
         viewModelScope.launch {
             // Clear the caches when explicitly refreshing
@@ -193,13 +199,13 @@ class HomeViewModel(
             loadExpenseHistoryData()
         }
     }
-    
+
     private fun loadTodayEvents() {
         // Cancel any previous job
         currentLoadJob?.cancel()
-        
+
         isLoadingEvents = true
-        
+
         currentLoadJob = viewModelScope.launch {
             try {
                 // Постављамо почетак и крај дана
@@ -210,20 +216,22 @@ class HomeViewModel(
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
                 }.time
-                
+
                 val endOfDay = calendar.apply {
                     set(Calendar.HOUR_OF_DAY, 23)
                     set(Calendar.MINUTE, 59)
                     set(Calendar.SECOND, 59)
                     set(Calendar.MILLISECOND, 999)
                 }.time
-                
-                Log.d("HomeViewModel", """
+
+                Log.d(
+                    "HomeViewModel", """
                     Тражим догађаје за данас:
                     - Почетак дана: ${formatDate(today)}
                     - Крај дана: ${formatDate(endOfDay)}
-                """.trimIndent())
-                
+                """.trimIndent()
+                )
+
                 // Проверавамо кеш
                 val cacheKey = "${formatDate(today)}_${formatDate(endOfDay)}"
                 if (loadedEventsCache.containsKey(cacheKey)) {
@@ -232,15 +240,15 @@ class HomeViewModel(
                     updateTodayEvents(cachedEvents)
                     return@launch
                 }
-                
+
                 // Учитавамо све догађаје за данас
                 eventRepository.getEvents(today, endOfDay)
                     .collect { events ->
                         Log.d("HomeViewModel", "Учитано ${events.size} догађаја")
-                        
+
                         // Кеширамо учитане догађаје
                         loadedEventsCache[cacheKey] = events
-                        
+
                         // Филтрирамо и приказујемо само данашње догађаје
                         updateTodayEvents(events)
                     }
@@ -255,10 +263,10 @@ class HomeViewModel(
             }
         }.also { currentLoadJob = it }
     }
-    
+
     private fun updateTodayEvents(allEvents: List<Event>) {
         val currentTime = Calendar.getInstance().time
-        
+
         // Постављамо почетак и крај дана
         val calendar = Calendar.getInstance()
         calendar.set(Calendar.HOUR_OF_DAY, 0)
@@ -266,19 +274,20 @@ class HomeViewModel(
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
         val startOfDay = calendar.time
-        
+
         calendar.set(Calendar.HOUR_OF_DAY, 23)
         calendar.set(Calendar.MINUTE, 59)
         calendar.set(Calendar.SECOND, 59)
         calendar.set(Calendar.MILLISECOND, 999)
         val endOfDay = calendar.time
-        
+
         val todayEvents = allEvents.filter { event ->
             val eventDate = event.startTime?.toDate() ?: return@filter false
             val eventEndTime = event.endTime?.toDate() ?: eventDate
-            
+
             // Додајемо детаљно логовање за сваки догађај
-            Log.d("HomeViewModel", """
+            Log.d(
+                "HomeViewModel", """
                 Проверавам догађај:
                 - Наслов: ${event.title}
                 - Време почетка: ${formatDate(eventDate)}
@@ -287,11 +296,12 @@ class HomeViewModel(
                 - Крај дана: ${formatDate(endOfDay)}
                 - Тренутно време: ${formatDate(currentTime)}
                 - Целодневни догађај: ${event.allDay}
-            """.trimIndent())
-            
+            """.trimIndent()
+            )
+
             // Проверавамо да ли је догађај данас
             val isToday = !eventDate.before(startOfDay) && !eventDate.after(endOfDay)
-            
+
             // За целодневне догађаје, проверавамо само да ли су данас
             // За остале догађаје, проверавамо да ли су данас и још нису завршени
             val isValid = if (event.allDay) {
@@ -299,116 +309,125 @@ class HomeViewModel(
             } else {
                 isToday && eventEndTime >= currentTime
             }
-            
-            Log.d("HomeViewModel", """
+
+            Log.d(
+                "HomeViewModel", """
                 Резултат провере за догађај ${event.title}:
                 - Је данас: $isToday
                 - Је активан: ${eventEndTime >= currentTime}
                 - Је валидан: $isValid
-            """.trimIndent())
-            
+            """.trimIndent()
+            )
+
             isValid
         }.sortedBy { it.startTime?.toDate() }
-        
-        Log.d("HomeViewModel", """
+
+        Log.d(
+            "HomeViewModel", """
             Филтрирање догађаја:
             - Укупно догађаја: ${allEvents.size}
             - Данашњих активних догађаја: ${todayEvents.size}
             - Тренутно време: ${formatDate(currentTime)}
             - Детаљи догађаја:
             ${todayEvents.joinToString("\n") { "- ${it.title} (${formatDate(it.startTime?.toDate())})" }}
-        """.trimIndent())
-        
+        """.trimIndent()
+        )
+
         // Обавезно проверавамо да ли је листа заиста различита пре ажурирања
         if (_todayEvents.value != todayEvents) {
             _todayEvents.value = todayEvents
         }
     }
-    
+
     private fun formatDate(date: Date?): String {
-        return date?.let { 
-            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(it) 
+        return date?.let {
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(it)
         } ?: "null"
     }
-    
+
     // Функција за синхронизацију догађаја
     fun syncEvents() {
         if (_syncStatus.value == SyncStatus.Syncing) {
             return
         }
-        
+
         _syncStatus.value = SyncStatus.Syncing
-        
+
         viewModelScope.launch {
             try {
                 // Sync events from the event repository
                 loadTodayEvents()
-                
-                // Also refresh expense data when syncing
-                loadExpenseData()
-                
+
+                // Explicit pull-to-refresh is the one place that should force a fresh reload
+                refreshExpenseData()
+
                 _syncStatus.value = SyncStatus.Success("Подаци успешно синхронизовани")
             } catch (e: Exception) {
                 _syncStatus.value = SyncStatus.Error("Грешка при синхронизацији: ${e.message}")
             }
         }
     }
-    
+
     // Function to load expense data for the current period
     fun loadExpenseData() {
         viewModelScope.launch {
             try {
                 _isLoadingExpenseData.value = true
-                
+
                 // Get the period setting from SettingsRepository
                 val configuredPeriod = settingsRepository.period.first()
                 val now = LocalDate.now()
                 val customStartDay = settingsRepository.customPeriodStartDay.first()
-                
+
                 // Calculate start and end dates based on the configured period
                 val (startDate, endDate) = when (configuredPeriod) {
                     Period.DAILY -> {
                         // Daily - just today
                         Pair(now, now)
                     }
+
                     Period.WEEKLY -> {
                         // Weekly - current week (starting Monday)
                         val currentWeekStart = now.minusDays(now.dayOfWeek.value.toLong() - 1)
                         Pair(currentWeekStart, currentWeekStart.plusDays(6))
                     }
+
                     Period.MONTHLY -> {
                         // Monthly - current month
                         val currentMonth = YearMonth.from(now)
                         Pair(currentMonth.atDay(1), currentMonth.atEndOfMonth())
                     }
+
                     Period.YEARLY -> {
                         // Yearly - current year
                         Pair(LocalDate.of(now.year, 1, 1), LocalDate.of(now.year, 12, 31))
                     }
+
                     Period.CUSTOM -> {
                         // Custom period based on start day setting
                         val startDay = customStartDay
                         val currentMonth = YearMonth.from(now)
-                        
+
                         // Calculate the current period's start date
                         val periodStartDate = if (now.dayOfMonth >= startDay) {
                             currentMonth.atDay(startDay)
                         } else {
                             currentMonth.minusMonths(1).atDay(startDay)
                         }
-                        
+
                         // End date is the day before start day in the next month
                         val periodEndDate = periodStartDate.plusMonths(1).minusDays(1)
-                        
+
                         Pair(periodStartDate, periodEndDate)
                     }
+
                     else -> {
                         // Default to current month for "ALL" or any other case
                         val currentMonth = YearMonth.from(now)
                         Pair(currentMonth.atDay(1), currentMonth.atEndOfMonth())
                     }
                 }
-                
+
                 // Create cache key
                 val cacheKey = ExpenseCacheKey(
                     periodType = configuredPeriod,
@@ -416,58 +435,59 @@ class HomeViewModel(
                     endDate = endDate,
                     customStartDay = if (configuredPeriod == Period.CUSTOM) customStartDay else 1
                 )
-                
+
                 // Check if we have a valid cached result
                 val currentTime = System.currentTimeMillis()
                 var categorySummaries: List<CategorySummary>? = null
-                
+
                 cacheMutex.withLock {
                     val cacheTimestamp = cacheTimestamps[cacheKey] ?: 0L
                     val isCacheValid = currentTime - cacheTimestamp < cacheExpirationTime
-                    
+
                     if (isCacheValid && expenseChartCache.containsKey(cacheKey)) {
                         Log.d(TAG, "Using cached expense data for period: $configuredPeriod")
                         categorySummaries = expenseChartCache[cacheKey]
                     }
                 }
-                
+
                 // If we don't have a valid cached result, load the data
                 if (categorySummaries == null) {
                     Log.d(TAG, "Loading expenses from $startDate to $endDate with period setting: $configuredPeriod")
-                    
+
                     // Convert LocalDate to Calendar for the repository
                     val startCalendar = Calendar.getInstance().apply {
                         set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
                         set(Calendar.MILLISECOND, 0)
                     }
-                    
+
                     val endCalendar = Calendar.getInstance().apply {
                         set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
                         set(Calendar.MILLISECOND, 999)
                     }
-                    
+
                     // Get transactions from the unified TransactionRepository
-                    val allTransactions = transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
-                    
+                    val allTransactions =
+                        transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
+
                     // Filter to only include expenses
                     val expenses = allTransactions.filterIsInstance<Expense>()
-                    
+
                     // Calculate total for percentages - use absolute values for expenses
                     val totalAmount = expenses.sumOf { abs(it.amount) }
-                    
+
                     Log.d(TAG, "Found ${expenses.size} expense transactions with total amount: $totalAmount")
-                    
+
                     // Group by category and create summaries (exactly as in FinanceViewModel)
                     categorySummaries = expenses
-                        .groupBy { it.category ?: "OTHER" }
+                        .groupBy { it.category }
                         .map { (category, categoryTransactions) ->
                             val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
                             val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
-                            
+
                             // Get a consistent color for this category using CategoryManager
                             val categoryManager = CategoryManager.getInstance(context)
                             val savedColorValue = categoryManager.getCategoryColor(category, true)
-                            
+
                             // Use the saved color or fall back to the hash-based approach
                             val color = if (savedColorValue != null) {
                                 Color(savedColorValue)
@@ -476,19 +496,19 @@ class HomeViewModel(
                                 val colorIndex = abs(category.hashCode()) % categoryColors.size
                                 categoryColors[colorIndex]
                             }
-                            
+
                             // Get icon name for this category using the mapping
                             val iconName = categoryIconMapping[category] ?: "Receipt"
-                            
+
                             // Get display name for the category - IMPORTANT: Use the exact same logic as FinanceViewModel
                             val displayName = try {
                                 // Try to get the enum value and its display name
                                 ExpenseCategory.valueOf(category).getDisplayName()
-                            } catch (e: Exception) {
+                            } catch (_: Exception) {
                                 // If not a standard category, just use the category string directly
                                 category
                             }
-                            
+
                             CategorySummary(
                                 categoryName = displayName,
                                 iconName = iconName,
@@ -498,17 +518,17 @@ class HomeViewModel(
                             )
                         }
                         .sortedByDescending { it.amount }
-                    
+
                     // Cache the result
                     cacheMutex.withLock {
-                        expenseChartCache[cacheKey] = categorySummaries!!
+                        expenseChartCache[cacheKey] = categorySummaries
                         cacheTimestamps[cacheKey] = currentTime
                     }
-                    
-                    Log.d(TAG, "Created and cached ${categorySummaries!!.size} category summaries")
+
+                    Log.d(TAG, "Created and cached ${categorySummaries.size} category summaries")
                 }
-                
-                _expenseChartData.value = categorySummaries!!
+
+                _expenseChartData.value = categorySummaries
                 _isLoadingExpenseData.value = false
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading expense data", e)
@@ -517,18 +537,18 @@ class HomeViewModel(
             }
         }
     }
-    
+
     // Function to load expense history data for multiple periods
     fun loadExpenseHistoryData() {
         viewModelScope.launch {
             try {
                 _isLoadingHistoryData.value = true
-                
+
                 // Get the period setting from SettingsRepository
                 val configuredPeriod = settingsRepository.period.first()
                 val now = LocalDate.now()
                 val customStartDay = settingsRepository.customPeriodStartDay.first()
-                
+
                 // Create cache key for history data
                 val cacheKey = ExpenseCacheKey(
                     periodType = configuredPeriod,
@@ -536,146 +556,120 @@ class HomeViewModel(
                     endDate = now,
                     customStartDay = if (configuredPeriod == Period.CUSTOM) customStartDay else 1
                 )
-                
-                // Calculate periods based on the configured period type
-                val periods = calculatePeriods(configuredPeriod, now, numPeriodsToShow)
-                
-                // Create a list to hold all period expense data
-                val newPeriodExpensesList = mutableListOf<PeriodExpenses>()
-                
-                // Current time for cache timestamps
+
                 val currentTime = System.currentTimeMillis()
-                
-                // Process each period - with optimized caching strategy
-                for ((index, period) in periods.withIndex()) {
-                    val (startDate, endDate, periodName) = period
-                    
-                    // Create individual period cache key
-                    val periodCacheKey = ExpenseCacheKey(
-                        periodType = configuredPeriod,
-                        startDate = startDate,
-                        endDate = endDate,
-                        customStartDay = if (configuredPeriod == Period.CUSTOM) customStartDay else 1
+
+                // Check the full-set cache before touching Firestore at all
+                cacheMutex.withLock {
+                    val cacheTimestamp = cacheTimestamps[cacheKey] ?: 0L
+                    if (currentTime - cacheTimestamp < cacheExpirationTime && expenseHistoryCache.containsKey(cacheKey)) {
+                        Log.d(TAG, "Using cached full expense history")
+                        _expenseHistoryData.value = expenseHistoryCache[cacheKey]!!
+                        _isLoadingHistoryData.value = false
+                        return@launch
+                    }
+                }
+
+                // Calculate periods based on the configured period type (no runBlocking - customStartDay is already resolved)
+                val periods = calculatePeriods(configuredPeriod, now, numPeriodsToShow, customStartDay)
+                if (periods.isEmpty()) {
+                    _isLoadingHistoryData.value = false
+                    return@launch
+                }
+
+                // Fetch the whole span (oldest period start to newest period end) in a single query,
+                // then bucket transactions into periods in memory instead of one query per period
+                val oldestStartDate = periods.last().first
+                val newestEndDate = periods.first().second
+
+                val startCalendar = Calendar.getInstance().apply {
+                    set(oldestStartDate.year, oldestStartDate.monthValue - 1, oldestStartDate.dayOfMonth, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                val endCalendar = Calendar.getInstance().apply {
+                    set(newestEndDate.year, newestEndDate.monthValue - 1, newestEndDate.dayOfMonth, 23, 59, 59)
+                    set(Calendar.MILLISECOND, 999)
+                }
+
+                val allTransactions = transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
+                val allExpenses = allTransactions.filterIsInstance<Expense>()
+
+                val categoryManager = CategoryManager.getInstance(context)
+
+                val newPeriodExpensesList = periods.map { (startDate, endDate, periodName) ->
+                    val periodStartMillis = Calendar.getInstance().apply {
+                        set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+
+                    val periodEndMillis = Calendar.getInstance().apply {
+                        set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
+                        set(Calendar.MILLISECOND, 999)
+                    }.timeInMillis
+
+                    val expensesForPeriod = allExpenses.filter { expense ->
+                        val expenseTime = expense.getDateObject()?.time ?: 0L
+                        expenseTime in periodStartMillis..periodEndMillis
+                    }
+
+                    val totalAmount = expensesForPeriod.sumOf { abs(it.amount) }
+
+                    val categoryExpenses = expensesForPeriod
+                        .groupBy { it.category }
+                        .map { (category, categoryTransactions) ->
+                            val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
+                            val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+
+                            // Get a consistent color for this category using CategoryManager
+                            val savedColorValue = categoryManager.getCategoryColor(category, true)
+
+                            // Use the saved color or fall back to the hash-based approach
+                            val color = if (savedColorValue != null) {
+                                Color(savedColorValue)
+                            } else {
+                                // Use a color based on category hash code for consistency
+                                val colorIndex = abs(category.hashCode()) % categoryColors.size
+                                categoryColors[colorIndex]
+                            }
+
+                            // Get display name for the category
+                            val displayName = try {
+                                // Try to get the enum value and its display name
+                                ExpenseCategory.valueOf(category).getDisplayName()
+                            } catch (_: Exception) {
+                                // If not a standard category, just use the category string directly
+                                category
+                            }
+
+                            CategoryExpense(
+                                categoryName = displayName,
+                                color = color,
+                                amount = categoryAmount,
+                                percentage = percentage
+                            )
+                        }
+                        .sortedByDescending { it.amount }
+
+                    PeriodExpenses(
+                        periodName = periodName,
+                        totalAmount = totalAmount,
+                        categoryExpenses = categoryExpenses
                     )
-                    
-                    // Determine if we should use cached data for this period
-                    // Only recalculate for current period (index == 0) and previous period (index == 1)
-                    val shouldRecalculate = index < 2
-                    var periodExpenses: PeriodExpenses? = null
-                    
-                    if (!shouldRecalculate) {
-                        // Try to get cached data for older periods
-                        cacheMutex.withLock {
-                            if (expenseHistoryCache.containsKey(periodCacheKey)) {
-                                Log.d(TAG, "Using cached expense data for period: $periodName")
-                                val cachedPeriodsList = expenseHistoryCache[periodCacheKey]
-                                if (cachedPeriodsList != null && cachedPeriodsList.isNotEmpty()) {
-                                    periodExpenses = cachedPeriodsList[0]
-                                }
-                            }
-                        }
-                    }
-                    
-                    // If we need to calculate this period (current, previous, or no cache)
-                    if (periodExpenses == null) {
-                        Log.d(TAG, "Calculating expense data for period: $periodName")
-                        
-                        // Convert LocalDate to Calendar for the repository
-                        val startCalendar = Calendar.getInstance().apply {
-                            set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
-                            set(Calendar.MILLISECOND, 0)
-                        }
-                        
-                        val endCalendar = Calendar.getInstance().apply {
-                            set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
-                            set(Calendar.MILLISECOND, 999)
-                        }
-                        
-                        // Get transactions for this period
-                        val allTransactions = transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
-                        
-                        // Filter to only include expenses
-                        val expenses = allTransactions.filterIsInstance<Expense>()
-                        
-                        // Calculate total for percentages - use absolute values for expenses
-                        val totalAmount = expenses.sumOf { abs(it.amount) }
-                        
-                        // Group by category and create category expenses
-                        val categoryExpenses = expenses
-                            .groupBy { it.category ?: "OTHER" }
-                            .map { (category, categoryTransactions) ->
-                                val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
-                                val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
-                                
-                                // Get a consistent color for this category using CategoryManager
-                                val categoryManager = CategoryManager.getInstance(context)
-                                val savedColorValue = categoryManager.getCategoryColor(category, true)
-                                
-                                // Use the saved color or fall back to the hash-based approach
-                                val color = if (savedColorValue != null) {
-                                    Color(savedColorValue)
-                                } else {
-                                    // Use a color based on category hash code for consistency
-                                    val colorIndex = abs(category.hashCode()) % categoryColors.size
-                                    categoryColors[colorIndex]
-                                }
-                                
-                                // Get display name for the category
-                                val displayName = try {
-                                    // Try to get the enum value and its display name
-                                    ExpenseCategory.valueOf(category).getDisplayName()
-                                } catch (e: Exception) {
-                                    // If not a standard category, just use the category string directly
-                                    category
-                                }
-                                
-                                CategoryExpense(
-                                    categoryName = displayName,
-                                    color = color,
-                                    amount = categoryAmount,
-                                    percentage = percentage
-                                )
-                            }
-                            .sortedByDescending { it.amount }
-                        
-                        // Create period expenses object
-                        periodExpenses = PeriodExpenses(
-                            periodName = periodName,
-                            totalAmount = totalAmount,
-                            categoryExpenses = categoryExpenses
-                        )
-                        
-                        // Cache individual period data
-                        cacheMutex.withLock {
-                            // Store as a list with one item to maintain compatibility with existing code
-                            expenseHistoryCache[periodCacheKey] = listOf(periodExpenses!!)
-                            cacheTimestamps[periodCacheKey] = currentTime
-                        }
-                    }
-                    
-                    // Add this period's data to our list
-                    newPeriodExpensesList.add(periodExpenses!!)
                 }
-                
-                // Clean up old cache entries (older than 9 periods)
-                viewModelScope.launch {
-                    cleanupOldCacheEntries(configuredPeriod, now, customStartDay)
-                }
-                
+
                 // Reverse the list so most recent period is last (rightmost in chart)
                 val periodExpensesList = newPeriodExpensesList.reversed()
-                
-                // Cache the complete result for the main cache key
+
                 cacheMutex.withLock {
                     expenseHistoryCache[cacheKey] = periodExpensesList
                     cacheTimestamps[cacheKey] = currentTime
                 }
-                
-                Log.d(TAG, "Finalized expense history data for ${periodExpensesList.size} periods")
-                
+
+                Log.d(TAG, "Finalized expense history data for ${periodExpensesList.size} periods in a single query")
+
                 _expenseHistoryData.value = periodExpensesList
                 _isLoadingHistoryData.value = false
-                
+
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading expense history data", e)
                 _expenseHistoryData.value = emptyList()
@@ -683,68 +677,18 @@ class HomeViewModel(
             }
         }
     }
-    
-    // Helper function to clean up old cache entries
-    private suspend fun cleanupOldCacheEntries(periodType: Period, currentDate: LocalDate, customStartDay: Int) {
-        cacheMutex.withLock {
-            // Find cache keys that are for individual periods (not aggregate results)
-            val keysToRemove = mutableListOf<ExpenseCacheKey>()
-            
-            for (key in expenseHistoryCache.keys) {
-                // Skip keys that represent aggregate results (those with large date ranges)
-                if (key.startDate.until(key.endDate).months >= 1) {
-                    continue
-                }
-                
-                // Calculate how old this period is compared to the current date
-                val periodAge = when (periodType) {
-                    Period.DAILY -> currentDate.toEpochDay() - key.startDate.toEpochDay()
-                    Period.WEEKLY -> {
-                        val currentWeek = currentDate.toEpochDay() / 7
-                        val keyWeek = key.startDate.toEpochDay() / 7
-                        currentWeek - keyWeek
-                    }
-                    Period.MONTHLY -> {
-                        val currentMonth = currentDate.year * 12 + currentDate.monthValue
-                        val keyMonth = key.startDate.year * 12 + key.startDate.monthValue
-                        (currentMonth - keyMonth).toLong()
-                    }
-                    Period.YEARLY -> (currentDate.year - key.startDate.year).toLong()
-                    Period.CUSTOM -> {
-                        // For custom periods, approximate by months
-                        val currentMonth = currentDate.year * 12 + currentDate.monthValue
-                        val keyMonth = key.startDate.year * 12 + key.startDate.monthValue
-                        (currentMonth - keyMonth).toLong()
-                    }
-                    else -> 0L // Default case, don't remove
-                }
-                
-                // If period is older than 9 periods, mark for removal
-                if (periodAge > 9L) {
-                    keysToRemove.add(key)
-                }
-            }
-            
-            // Remove old entries
-            for (key in keysToRemove) {
-                expenseHistoryCache.remove(key)
-                cacheTimestamps.remove(key)
-                Log.d(TAG, "Removed old cache entry for period: ${key.startDate} to ${key.endDate}")
-            }
-        }
-    }
-    
+
     // Helper function to calculate period ranges based on the period type
     private fun calculatePeriods(
         periodType: Period,
         currentDate: LocalDate,
-        count: Int
+        count: Int,
+        customStartDay: Int
     ): List<Triple<LocalDate, LocalDate, String>> {
         val periods = mutableListOf<Triple<LocalDate, LocalDate, String>>()
         val dateFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
         val monthFormatter = DateTimeFormatter.ofPattern("MMM", Locale.getDefault())
-        val customStartDay = runBlocking { settingsRepository.customPeriodStartDay.first() }
-        
+
         for (i in 0 until count) {
             val (startDate, endDate, periodName) = when (periodType) {
                 Period.DAILY -> {
@@ -752,6 +696,7 @@ class HomeViewModel(
                     val name = if (i == 0) "Данас" else if (i == 1) "Јуче" else date.format(dateFormatter)
                     Triple(date, date, name)
                 }
+
                 Period.WEEKLY -> {
                     val weekStart = currentDate.minusWeeks(i.toLong())
                         .minusDays((currentDate.dayOfWeek.value - 1).toLong())
@@ -759,59 +704,54 @@ class HomeViewModel(
                     val name = if (i == 0) "Ова недеља" else weekStart.format(dateFormatter)
                     Triple(weekStart, weekEnd, name)
                 }
+
                 Period.MONTHLY -> {
                     val month = YearMonth.from(currentDate).minusMonths(i.toLong())
                     val name = if (i == 0) "Овај месец" else month.format(monthFormatter)
                     Triple(month.atDay(1), month.atEndOfMonth(), name)
                 }
+
                 Period.YEARLY -> {
                     val year = currentDate.year - i
                     val name = if (i == 0) "Ова година" else year.toString()
                     Triple(LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31), name)
                 }
+
                 Period.CUSTOM -> {
                     // Calculate custom periods based on start day
                     val referenceDate = currentDate.minusMonths(i.toLong())
                     val currentMonth = YearMonth.from(referenceDate)
-                    
+
                     val periodStartDate = if (referenceDate.dayOfMonth >= customStartDay) {
                         currentMonth.atDay(customStartDay)
                     } else {
                         currentMonth.minusMonths(1).atDay(customStartDay)
                     }
-                    
+
                     val periodEndDate = periodStartDate.plusMonths(1).minusDays(1)
                     val name = if (i == 0) "Овај период" else periodStartDate.format(dateFormatter)
-                    
+
                     Triple(periodStartDate, periodEndDate, name)
                 }
+
                 else -> {
                     // Default to monthly for "ALL" or any other case
                     val month = YearMonth.from(currentDate).minusMonths(i.toLong())
                     Triple(month.atDay(1), month.atEndOfMonth(), month.format(monthFormatter))
                 }
             }
-            
+
             periods.add(Triple(startDate, endDate, periodName))
         }
-        
+
         return periods
     }
-    
-    // Add missing runBlocking import at the top
-    private fun runBlocking(block: suspend () -> Int): Int {
-        var result = 1 // Default value
-        kotlinx.coroutines.runBlocking {
-            result = block()
-        }
-        return result
-    }
-    
+
     // Clear caches when ViewModel is cleared
     override fun onCleared() {
         super.onCleared()
         currentLoadJob?.cancel()
-        
+
         viewModelScope.launch {
             cacheMutex.withLock {
                 expenseChartCache.clear()
@@ -820,7 +760,7 @@ class HomeViewModel(
             }
         }
     }
-    
+
     // Додајемо Factory класу за креирање HomeViewModel са Context параметром
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
@@ -839,8 +779,7 @@ class HomeViewModel(
 // Класа за праћење статуса синхронизације
 sealed class SyncStatus {
     data object Initial : SyncStatus()
-    data object Idle : SyncStatus()
     data object Syncing : SyncStatus()
     data class Success(val message: String) : SyncStatus()
     data class Error(val message: String) : SyncStatus()
-} 
+}

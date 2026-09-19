@@ -3,7 +3,7 @@ package com.petar.smrdici.notification
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
-import com.petar.smrdici.data.model.Event
+import androidx.core.content.edit
 
 class NotificationManager(private val context: Context) {
     
@@ -17,7 +17,6 @@ class NotificationManager(private val context: Context) {
         private const val KEY_AVATAR_NOTIFICATIONS = "avatar_notifications"
         private const val KEY_DYNAMIC_TIMING = "dynamic_timing"
         private const val KEY_SMART_GROUPING = "smart_grouping"
-        private const val KEY_WEATHER_AWARE = "weather_aware"
         private const val KEY_DAILY_MORNING = "daily_morning"
         
         const val TAG = "NotificationManager"
@@ -29,74 +28,46 @@ class NotificationManager(private val context: Context) {
     var notificationsEnabled: Boolean
         get() = prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
         set(value) {
-            prefs.edit().putBoolean(KEY_NOTIFICATIONS_ENABLED, value).apply()
+            prefs.edit { putBoolean(KEY_NOTIFICATIONS_ENABLED, value) }
             Log.d(TAG, "Notifications ${if (value) "enabled" else "disabled"}")
         }
     
     var dayBeforeNotificationEnabled: Boolean
         get() = prefs.getBoolean(KEY_DAY_BEFORE_NOTIFICATION, true)
-        set(value) = prefs.edit().putBoolean(KEY_DAY_BEFORE_NOTIFICATION, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_DAY_BEFORE_NOTIFICATION, value) }
     
     var hourBeforeNotificationEnabled: Boolean
         get() = prefs.getBoolean(KEY_HOUR_BEFORE_NOTIFICATION, true)
-        set(value) = prefs.edit().putBoolean(KEY_HOUR_BEFORE_NOTIFICATION, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_HOUR_BEFORE_NOTIFICATION, value) }
     
     var notificationSoundEnabled: Boolean
         get() = prefs.getBoolean(KEY_NOTIFICATION_SOUND, true)
-        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_SOUND, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_NOTIFICATION_SOUND, value) }
     
     var notificationVibrationEnabled: Boolean
         get() = prefs.getBoolean(KEY_NOTIFICATION_VIBRATION, true)
-        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_VIBRATION, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_NOTIFICATION_VIBRATION, value) }
     
     // New notification features
     var avatarNotificationsEnabled: Boolean
         get() = prefs.getBoolean(KEY_AVATAR_NOTIFICATIONS, true)
-        set(value) = prefs.edit().putBoolean(KEY_AVATAR_NOTIFICATIONS, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_AVATAR_NOTIFICATIONS, value) }
     
     var dynamicTimingEnabled: Boolean
         get() = prefs.getBoolean(KEY_DYNAMIC_TIMING, false)
-        set(value) = prefs.edit().putBoolean(KEY_DYNAMIC_TIMING, value).apply()
+        set(value) = prefs.edit { putBoolean(KEY_DYNAMIC_TIMING, value) }
     
     var smartGroupingEnabled: Boolean
         get() = prefs.getBoolean(KEY_SMART_GROUPING, false)
-        set(value) = prefs.edit().putBoolean(KEY_SMART_GROUPING, value).apply()
-    
-    var weatherAwareEnabled: Boolean
-        get() = prefs.getBoolean(KEY_WEATHER_AWARE, true)
-        set(value) {
-            prefs.edit().putBoolean(KEY_WEATHER_AWARE, value).apply()
-            Log.d(TAG, "Weather-aware notifications ${if (value) "enabled" else "disabled"}")
-        }
-    
+        set(value) = prefs.edit { putBoolean(KEY_SMART_GROUPING, value) }
+
     var dailyMorningEnabled: Boolean
         get() = prefs.getBoolean(KEY_DAILY_MORNING, true)
         set(value) {
-            prefs.edit().putBoolean(KEY_DAILY_MORNING, value).apply()
+            prefs.edit { putBoolean(KEY_DAILY_MORNING, value) }
             Log.d(TAG, "Daily morning notifications ${if (value) "enabled" else "disabled"}")
         }
-    
-    /**
-     * Schedule notifications for an event based on current preferences
-     */
-    fun scheduleEventNotification(event: Event) {
-        if (!notificationsEnabled) {
-            Log.d(TAG, "Notifications are disabled, not scheduling for event: ${event.title}")
-            return
-        }
-        
-        if (event.id == null || event.startTime == null) {
-            Log.e(TAG, "Cannot schedule notification for event with null id or start time")
-            return
-        }
-        
-        // Use the Builder to schedule notifications
-        val builder = NotificationWorker.Builder(context)
-        builder.scheduleNotificationForEvent(event)
-        
-        Log.d(TAG, "Scheduled notifications for event: ${event.title}")
-    }
-    
+
     /**
      * Cancel all notifications for an event
      */
@@ -118,7 +89,6 @@ class NotificationManager(private val context: Context) {
             putBoolean(KEY_AVATAR_NOTIFICATIONS, true)
             putBoolean(KEY_DYNAMIC_TIMING, false)
             putBoolean(KEY_SMART_GROUPING, false)
-            putBoolean(KEY_WEATHER_AWARE, true)
             putBoolean(KEY_DAILY_MORNING, true)
             apply()
         }
@@ -162,30 +132,20 @@ class NotificationManager(private val context: Context) {
                     intent,
                     android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
                 )
-                
+
                 // Check if we can schedule exact alarms
                 val canScheduleExact = NotificationHelper.canScheduleExactAlarms(context)
-                
+
                 // Schedule the alarm to repeat daily
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                    if (canScheduleExact) {
-                        // Use exact alarm for more reliable timing
-                        alarmManager.setExactAndAllowWhileIdle(
-                            android.app.AlarmManager.RTC_WAKEUP,
-                            morningCalendar.timeInMillis,
-                            pendingIntent
-                        )
-                    } else {
-                        // Fall back to repeating alarm
-                        alarmManager.setRepeating(
-                            android.app.AlarmManager.RTC_WAKEUP,
-                            morningCalendar.timeInMillis,
-                            android.app.AlarmManager.INTERVAL_DAY,
-                            pendingIntent
-                        )
-                    }
+                if (canScheduleExact) {
+                    // Use exact alarm for more reliable timing
+                    alarmManager.setExactAndAllowWhileIdle(
+                        android.app.AlarmManager.RTC_WAKEUP,
+                        morningCalendar.timeInMillis,
+                        pendingIntent
+                    )
                 } else {
-                    // For older Android versions
+                    // Fall back to repeating alarm
                     alarmManager.setRepeating(
                         android.app.AlarmManager.RTC_WAKEUP,
                         morningCalendar.timeInMillis,
@@ -193,7 +153,7 @@ class NotificationManager(private val context: Context) {
                         pendingIntent
                     )
                 }
-                
+
                 Log.d(TAG, "Daily notifications scheduled for 8:00 AM, starting at ${java.util.Date(morningCalendar.timeInMillis)}")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize daily notifications", e)
@@ -202,12 +162,5 @@ class NotificationManager(private val context: Context) {
             Log.d(TAG, "Daily notifications not initialized: enabled=${notificationsEnabled}, dailyMorning=${dailyMorningEnabled}")
         }
     }
-    
-    /**
-     * Request notification permissions if needed
-     */
-    fun requestNotificationPermissionIfNeeded() {
-        // Permission handling is done through the activity
-        // This is just a placeholder for future implementation
-    }
-} 
+
+}

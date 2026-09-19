@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -123,13 +124,15 @@ fun EditExpenseScreen(
 
     Scaffold(
         topBar = {
-            AppHeader(
-                title = "Edit Expense",
-                navController = navController,
-                showBackButton = true,
-                showProfileIcon = false,
-                user = user
-            )
+            Box(modifier = Modifier.statusBarsPadding()) {
+                AppHeader(
+                    title = "Измени трошак",
+                    navController = navController,
+                    showBackButton = true,
+                    showProfileIcon = false,
+                    user = user
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -144,7 +147,7 @@ fun EditExpenseScreen(
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it },
-                label = { Text("Amount") },
+                label = { Text("Износ") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -152,7 +155,7 @@ fun EditExpenseScreen(
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text("Description") },
+                label = { Text("Опис") },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -162,7 +165,7 @@ fun EditExpenseScreen(
                 }
             } else {
                 CategoryDropdown(
-                    selectedCategory = if (selectedCategory.isNotEmpty()) selectedCategory else customCategoryName,
+                    selectedCategory = selectedCategory.ifEmpty { customCategoryName },
                     onCategorySelected = { name ->
                         try {
                             // Try to convert the string name to an ExpenseCategory enum
@@ -188,7 +191,7 @@ fun EditExpenseScreen(
             ) {
                 // Format date for display using local timezone
                 val displayFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                Text("Date: ${displayFormat.format(Date(selectedDate))}")
+                Text("Датум: ${displayFormat.format(Date(selectedDate))}")
             }
 
             Button(
@@ -197,7 +200,7 @@ fun EditExpenseScreen(
                         try {
                             val amountValue = amount.toDoubleOrNull()
                             if (amountValue == null) {
-                                snackbarHostState.showSnackbar("Please enter a valid amount")
+                                snackbarHostState.showSnackbar("Унесите валидан износ")
                                 return@launch
                             }
                             
@@ -213,7 +216,7 @@ fun EditExpenseScreen(
                             val updatedExpense = expense?.copy(
                                 amount = amountValue,
                                 description = description,
-                                category = if (selectedCategory.isNotEmpty()) selectedCategory else customCategoryName,
+                                category = selectedCategory.ifEmpty { customCategoryName },
                                 date = dateStr,
                                 accountId = selectedAccountId,
                                 userId = user?.uid ?: ""
@@ -231,7 +234,7 @@ fun EditExpenseScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Save Changes")
+                Text("Сачувај измене")
             }
         }
 

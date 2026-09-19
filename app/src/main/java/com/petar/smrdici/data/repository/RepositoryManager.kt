@@ -1,17 +1,10 @@
 package com.petar.smrdici.data.repository
 
-import android.content.Context
-
 /**
  * Centralno mesto za dobijanje instanci repozitorijuma
  * Koristi se za rešavanje problema sa privatnim konstruktorima
  */
 object RepositoryManager {
-    // Dummy instance klase ExpenseRepository za potrebe inicijalizacije
-    private var expenseRepositoryInstance: ExpenseRepository? = null
-
-    // Dummy instance klase IncomeRepository za potrebe inicijalizacije
-    private var incomeRepositoryInstance: IncomeRepository? = null
 
     /**
      * Vraća instancu ExpenseRepository za potrebe finance funkcionalnosti
@@ -33,7 +26,7 @@ object RepositoryManager {
      * Vraća instancu AccountRepository za potrebe finance funkcionalnosti
      * Radi samo za čitanje podataka
      */
-    fun getAccountRepositoryForFinance(context: Context): AccountRepository {
+    fun getAccountRepositoryForFinance(): AccountRepository {
         return AccountRepository.getInstance()
     }
     
@@ -51,7 +44,7 @@ object RepositoryManager {
     }
     
     @Deprecated("Use getAccountRepositoryForFinance() instead", ReplaceWith("getAccountRepositoryForFinance(context)"))
-    fun getAccountRepositoryForBudget(context: Context): AccountRepository {
-        return getAccountRepositoryForFinance(context)
+    fun getAccountRepositoryForBudget(): AccountRepository {
+        return getAccountRepositoryForFinance()
     }
 }

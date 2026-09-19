@@ -33,7 +33,6 @@ import com.petar.smrdici.ui.screens.settings.EditCategoryScreen
 import com.petar.smrdici.ui.screens.settings.ExpenseCategoriesScreen
 import com.petar.smrdici.ui.screens.settings.FinanceSettingsScreen
 import com.petar.smrdici.ui.screens.settings.IncomeCategoriesScreen
-import com.petar.smrdici.ui.screens.transfer.TransferScreen
 
 @Composable
 fun NavGraph(
@@ -209,10 +208,7 @@ fun NavGraph(
             )
         }
         
-        composable(Screen.Transfer.route) {
-            TransferScreen(navController = navController)
-        }
-        
+
         composable(
             route = Screen.EditExpense.route,
             arguments = listOf(

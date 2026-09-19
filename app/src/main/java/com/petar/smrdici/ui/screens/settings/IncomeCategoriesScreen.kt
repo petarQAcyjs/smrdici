@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -31,8 +32,6 @@ import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Copyright
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.EventSeat
 import androidx.compose.material.icons.filled.FamilyRestroom
@@ -62,7 +61,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -82,10 +80,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.data.model.CategoryIcons
-import com.petar.smrdici.ui.auth.AuthState
-import com.petar.smrdici.ui.auth.AuthViewModel
+import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
@@ -215,8 +211,7 @@ private fun getIncomeCategoryIcon(categoryName: String): ImageVector {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IncomeCategoriesScreen(
-    navController: NavController,
-    authViewModel: AuthViewModel = viewModel()
+    navController: NavController
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -251,18 +246,17 @@ fun IncomeCategoriesScreen(
     // Stanje za dijaloge
     var showDeleteDialog by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("") }
-    
-    val authState by authViewModel.authState.collectAsState()
-    val user = (authState as? AuthState.Authenticated)?.user
-    
+
     Scaffold(
         topBar = {
-            AppHeader(
-                title = "Категорије прихода",
-                navController = navController,
-                showBackButton = true,
-                user = user
-            )
+            Box(modifier = Modifier.statusBarsPadding()) {
+                AppHeader(
+                    title = "Категорије прихода",
+                    navController = navController,
+                    showBackButton = true,
+                    showProfileIcon = false
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
@@ -345,10 +339,6 @@ fun IncomeCategoriesScreen(
                             color = getIncomeCategoryColor(category),
                             onEdit = {
                                 navController.navigate(Screen.EditCategory.createRoute(category, "INCOME"))
-                            },
-                            onDelete = {
-                                selectedCategory = category
-                                showDeleteDialog = true
                             }
                         )
                     }
@@ -360,7 +350,7 @@ fun IncomeCategoriesScreen(
                                 .fillMaxWidth()
                                 .aspectRatio(1f)
                                 .clip(CircleShape)
-                                .background(Color(0xFF9E9E9E)) // Grey color for create button
+                                .background(Color(0xFF9E9E9E)) // Gray color for create button
                                 .clickable {
                                     navController.navigate(Screen.EditCategory.createRoute("", "INCOME"))
                                 },
@@ -415,8 +405,7 @@ fun IncomeCategoriesScreen(
 fun IncomeCategoryItem(
     name: String,
     color: Color,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onEdit: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,

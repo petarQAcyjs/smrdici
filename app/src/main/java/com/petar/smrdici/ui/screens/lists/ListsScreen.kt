@@ -91,6 +91,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import androidx.compose.foundation.gestures.detectTapGestures
 import kotlin.random.Random
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Generates a unique key for a list that won't conflict even after deletion and restoration
@@ -123,7 +124,7 @@ fun ListsScreen(
             coroutineScope.launch {
                 isRefreshing = true
                 listsViewModel.loadLists()
-                delay(500)
+                delay(500.milliseconds)
                 isRefreshing = false
             }
         }
@@ -189,12 +190,12 @@ fun ListsScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             PredefinedListCard(
-                                title = "Spisak za prodavnicu",
+                                title = "Списак за продавницу",
                                 iconResId = R.drawable.ic_shopping,
                                 backgroundColor = Color(0xFF30C9C9),
                                 onClick = {
                                     listsViewModel.getOrCreatePredefinedList(
-                                        title = "Spisak za prodavnicu",
+                                        title = "Списак за продавницу",
                                         onSuccess = { listId ->
                                             navController.navigate(Screen.ListDetails.createRoute(listId))
                                         },
@@ -207,7 +208,7 @@ fun ListsScreen(
                             )
                             
                             PredefinedListCard(
-                                title = "Kućni poslovi",
+                                title = "Кућни послови",
                                 iconResId = R.drawable.ic_home,
                                 backgroundColor = Color(0xFF9ED36A),
                                 onClick = {
@@ -286,7 +287,7 @@ fun ListsScreen(
                                                 lastDeletedList?.let { deletedList ->
                                                     // Add a short delay before restoring
                                                     coroutineScope.launch {
-                                                        delay(300) // 300ms delay
+                                                        delay(300.milliseconds) // 300ms delay
                                                         listsViewModel.restoreList(deletedList)
                                                     }
                                                 }
@@ -495,7 +496,7 @@ fun SwipeToDeleteListItem(
             
             isDeleted = true
             show = false
-            delay(300)
+            delay(300.milliseconds)
             onDelete()
         }
     }
@@ -505,7 +506,7 @@ fun SwipeToDeleteListItem(
             try {
                 localCompletedState = !localCompletedState
                 Log.d("SwipeToDeleteListItem", "Променили смо чекбокс за листу: ${list.id}, ново стање: $localCompletedState")
-                delay(100)
+                delay(100.milliseconds)
                 list.id?.let { listId ->
                     try {
                         listsViewModel.toggleListStatus(listId)
