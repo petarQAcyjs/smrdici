@@ -101,66 +101,92 @@ class NotificationManager(private val context: Context) {
      * Call this from the Application class or MainActivity onCreate
      */
     fun initializeDailyNotifications() {
-        if (notificationsEnabled && dailyMorningEnabled) {
-            try {
-                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-                
-                // Create calendar for 8:00 AM
-                val morningCalendar = java.util.Calendar.getInstance().apply {
-                    set(java.util.Calendar.HOUR_OF_DAY, 8)
-                    set(java.util.Calendar.MINUTE, 0)
-                    set(java.util.Calendar.SECOND, 0)
-                    set(java.util.Calendar.MILLISECOND, 0)
-                    
-                    // If it's already past 8 AM today, schedule for tomorrow
-                    if (timeInMillis < System.currentTimeMillis()) {
-                        add(java.util.Calendar.DAY_OF_YEAR, 1)
-                    }
-                }
-                
-                // Create intent for daily notification
-                val intent = android.content.Intent(context, NotificationReceiver::class.java).apply {
-                    putExtra("NOTIFICATION_TYPE", "DAILY_SUMMARY")
-                    putExtra("EVENT_TITLE", "Дневни преглед догађаја")
-                    putExtra("EVENT_MESSAGE", "Доброј јутро! Проверите данашње догађаје.")
-                }
-                
-                // Create pending intent with unique ID for daily notifications
-                val pendingIntent = android.app.PendingIntent.getBroadcast(
-                    context,
-                    "DAILY_MORNING_NOTIFICATION".hashCode(),
-                    intent,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-                )
-
-                // Check if we can schedule exact alarms
-                val canScheduleExact = NotificationHelper.canScheduleExactAlarms(context)
-
-                // Schedule the alarm to repeat daily
-                if (canScheduleExact) {
-                    // Use exact alarm for more reliable timing
-                    alarmManager.setExactAndAllowWhileIdle(
-                        android.app.AlarmManager.RTC_WAKEUP,
-                        morningCalendar.timeInMillis,
-                        pendingIntent
-                    )
-                } else {
-                    // Fall back to repeating alarm
-                    alarmManager.setRepeating(
-                        android.app.AlarmManager.RTC_WAKEUP,
-                        morningCalendar.timeInMillis,
-                        android.app.AlarmManager.INTERVAL_DAY,
-                        pendingIntent
-                    )
-                }
-
-                Log.d(TAG, "Daily notifications scheduled for 8:00 AM, starting at ${java.util.Date(morningCalendar.timeInMillis)}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize daily notifications", e)
-            }
-        } else {
+        if (!(notificationsEnabled && dailyMorningEnabled)) {
             Log.d(TAG, "Daily notifications not initialized: enabled=${notificationsEnabled}, dailyMorning=${dailyMorningEnabled}")
+            return
         }
+
+        // The alarm lives in system_server, not our process, so it survives app restarts -
+        // skip re-registering it on every cold start. A real device reboot wipes
+        // system_server's alarm/PendingIntent state, so this still finds nothing and
+        // correctly re-arms the very first time the app runs after a reboot.
+        val existingPendingIntent = buildDailyNotificationPendingIntent(
+            android.app.PendingIntent.FLAG_NO_CREATE or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        if (existingPendingIntent != null) {
+            Log.d(TAG, "Daily notification alarm already scheduled, skipping re-initialization")
+            return
+        }
+
+        scheduleNextDailyAlarm()
+    }
+
+    /**
+     * Schedules the next occurrence of the 8 AM daily notification.
+     * Exact alarms fire only once, so [NotificationReceiver] calls this again right after each
+     * firing to arm the next day's alarm - the alarm keeps recurring on its own without
+     * depending on the app being reopened. The inexact fallback below uses setRepeating, which
+     * the OS keeps recurring by itself, so re-arming it here is a harmless no-op resync.
+     */
+    fun scheduleNextDailyAlarm() {
+        if (!(notificationsEnabled && dailyMorningEnabled)) return
+
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+
+            // Create calendar for 8:00 AM
+            val morningCalendar = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, 8)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+
+                // If it's already past 8 AM today, schedule for tomorrow
+                if (timeInMillis < System.currentTimeMillis()) {
+                    add(java.util.Calendar.DAY_OF_YEAR, 1)
+                }
+            }
+
+            val pendingIntent = buildDailyNotificationPendingIntent(
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )!!
+
+            // Schedule the alarm to repeat daily
+            if (NotificationHelper.canScheduleExactAlarms(context)) {
+                // Use exact alarm for more reliable timing
+                alarmManager.setExactAndAllowWhileIdle(
+                    android.app.AlarmManager.RTC_WAKEUP,
+                    morningCalendar.timeInMillis,
+                    pendingIntent
+                )
+            } else {
+                // Fall back to repeating alarm
+                alarmManager.setRepeating(
+                    android.app.AlarmManager.RTC_WAKEUP,
+                    morningCalendar.timeInMillis,
+                    android.app.AlarmManager.INTERVAL_DAY,
+                    pendingIntent
+                )
+            }
+
+            Log.d(TAG, "Daily notification alarm scheduled for ${java.util.Date(morningCalendar.timeInMillis)}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule daily notification alarm", e)
+        }
+    }
+
+    private fun buildDailyNotificationPendingIntent(flags: Int): android.app.PendingIntent? {
+        val intent = android.content.Intent(context, NotificationReceiver::class.java).apply {
+            putExtra("NOTIFICATION_TYPE", "DAILY_SUMMARY")
+            putExtra("EVENT_TITLE", "Дневни преглед догађаја")
+            putExtra("EVENT_MESSAGE", "Доброј јутро! Проверите данашње догађаје.")
+        }
+        return android.app.PendingIntent.getBroadcast(
+            context,
+            "DAILY_MORNING_NOTIFICATION".hashCode(),
+            intent,
+            flags
+        )
     }
 
 }

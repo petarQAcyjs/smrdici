@@ -18,10 +18,12 @@ import com.petar.smrdici.data.repository.EventRepository
 import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.data.repository.SettingsRepository
 import com.petar.smrdici.ui.screens.settings.Period
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -452,80 +454,83 @@ class HomeViewModel(
 
                 // If we don't have a valid cached result, load the data
                 if (categorySummaries == null) {
-                    Log.d(TAG, "Loading expenses from $startDate to $endDate with period setting: $configuredPeriod")
+                    categorySummaries = withContext(Dispatchers.Default) {
+                        Log.d(TAG, "Loading expenses from $startDate to $endDate with period setting: $configuredPeriod")
 
-                    // Convert LocalDate to Calendar for the repository
-                    val startCalendar = Calendar.getInstance().apply {
-                        set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }
-
-                    val endCalendar = Calendar.getInstance().apply {
-                        set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
-                        set(Calendar.MILLISECOND, 999)
-                    }
-
-                    // Get transactions from the unified TransactionRepository
-                    val allTransactions =
-                        transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
-
-                    // Filter to only include expenses
-                    val expenses = allTransactions.filterIsInstance<Expense>()
-
-                    // Calculate total for percentages - use absolute values for expenses
-                    val totalAmount = expenses.sumOf { abs(it.amount) }
-
-                    Log.d(TAG, "Found ${expenses.size} expense transactions with total amount: $totalAmount")
-
-                    // Group by category and create summaries (exactly as in FinanceViewModel)
-                    categorySummaries = expenses
-                        .groupBy { it.category }
-                        .map { (category, categoryTransactions) ->
-                            val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
-                            val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
-
-                            // Get a consistent color for this category using CategoryManager
-                            val categoryManager = CategoryManager.getInstance(context)
-                            val savedColorValue = categoryManager.getCategoryColor(category, true)
-
-                            // Use the saved color or fall back to the hash-based approach
-                            val color = if (savedColorValue != null) {
-                                Color(savedColorValue)
-                            } else {
-                                // Use a color based on category hash code for consistency
-                                val colorIndex = abs(category.hashCode()) % categoryColors.size
-                                categoryColors[colorIndex]
-                            }
-
-                            // Get icon name for this category using the mapping
-                            val iconName = categoryIconMapping[category] ?: "Receipt"
-
-                            // Get display name for the category - IMPORTANT: Use the exact same logic as FinanceViewModel
-                            val displayName = try {
-                                // Try to get the enum value and its display name
-                                ExpenseCategory.valueOf(category).getDisplayName()
-                            } catch (_: Exception) {
-                                // If not a standard category, just use the category string directly
-                                category
-                            }
-
-                            CategorySummary(
-                                categoryName = displayName,
-                                iconName = iconName,
-                                color = color,
-                                amount = categoryAmount,
-                                percentage = percentage
-                            )
+                        // Convert LocalDate to Calendar for the repository
+                        val startCalendar = Calendar.getInstance().apply {
+                            set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
+                            set(Calendar.MILLISECOND, 0)
                         }
-                        .sortedByDescending { it.amount }
 
-                    // Cache the result
-                    cacheMutex.withLock {
-                        expenseChartCache[cacheKey] = categorySummaries
-                        cacheTimestamps[cacheKey] = currentTime
+                        val endCalendar = Calendar.getInstance().apply {
+                            set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
+                            set(Calendar.MILLISECOND, 999)
+                        }
+
+                        // Get transactions from the unified TransactionRepository
+                        val allTransactions =
+                            transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
+
+                        // Filter to only include expenses
+                        val expenses = allTransactions.filterIsInstance<Expense>()
+
+                        // Calculate total for percentages - use absolute values for expenses
+                        val totalAmount = expenses.sumOf { abs(it.amount) }
+
+                        Log.d(TAG, "Found ${expenses.size} expense transactions with total amount: $totalAmount")
+
+                        // Group by category and create summaries (exactly as in FinanceViewModel)
+                        val summaries = expenses
+                            .groupBy { it.category }
+                            .map { (category, categoryTransactions) ->
+                                val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
+                                val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+
+                                // Get a consistent color for this category using CategoryManager
+                                val categoryManager = CategoryManager.getInstance(context)
+                                val savedColorValue = categoryManager.getCategoryColor(category, true)
+
+                                // Use the saved color or fall back to the hash-based approach
+                                val color = if (savedColorValue != null) {
+                                    Color(savedColorValue)
+                                } else {
+                                    // Use a color based on category hash code for consistency
+                                    val colorIndex = abs(category.hashCode()) % categoryColors.size
+                                    categoryColors[colorIndex]
+                                }
+
+                                // Get icon name for this category using the mapping
+                                val iconName = categoryIconMapping[category] ?: "Receipt"
+
+                                // Get display name for the category - IMPORTANT: Use the exact same logic as FinanceViewModel
+                                val displayName = try {
+                                    // Try to get the enum value and its display name
+                                    ExpenseCategory.valueOf(category).getDisplayName()
+                                } catch (_: Exception) {
+                                    // If not a standard category, just use the category string directly
+                                    category
+                                }
+
+                                CategorySummary(
+                                    categoryName = displayName,
+                                    iconName = iconName,
+                                    color = color,
+                                    amount = categoryAmount,
+                                    percentage = percentage
+                                )
+                            }
+                            .sortedByDescending { it.amount }
+
+                        // Cache the result
+                        cacheMutex.withLock {
+                            expenseChartCache[cacheKey] = summaries
+                            cacheTimestamps[cacheKey] = currentTime
+                        }
+
+                        Log.d(TAG, "Created and cached ${summaries.size} category summaries")
+                        summaries
                     }
-
-                    Log.d(TAG, "Created and cached ${categorySummaries.size} category summaries")
                 }
 
                 _expenseChartData.value = categorySummaries
@@ -578,94 +583,98 @@ class HomeViewModel(
                 }
 
                 // Fetch the whole span (oldest period start to newest period end) in a single query,
-                // then bucket transactions into periods in memory instead of one query per period
-                val oldestStartDate = periods.last().first
-                val newestEndDate = periods.first().second
+                // then bucket transactions into periods in memory instead of one query per period,
+                // off the main thread since this is CPU-bound work over potentially hundreds of transactions
+                val periodExpensesList = withContext(Dispatchers.Default) {
+                    val oldestStartDate = periods.last().first
+                    val newestEndDate = periods.first().second
 
-                val startCalendar = Calendar.getInstance().apply {
-                    set(oldestStartDate.year, oldestStartDate.monthValue - 1, oldestStartDate.dayOfMonth, 0, 0, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                val endCalendar = Calendar.getInstance().apply {
-                    set(newestEndDate.year, newestEndDate.monthValue - 1, newestEndDate.dayOfMonth, 23, 59, 59)
-                    set(Calendar.MILLISECOND, 999)
-                }
-
-                val allTransactions = transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
-                val allExpenses = allTransactions.filterIsInstance<Expense>()
-
-                val categoryManager = CategoryManager.getInstance(context)
-
-                val newPeriodExpensesList = periods.map { (startDate, endDate, periodName) ->
-                    val periodStartMillis = Calendar.getInstance().apply {
-                        set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
+                    val startCalendar = Calendar.getInstance().apply {
+                        set(oldestStartDate.year, oldestStartDate.monthValue - 1, oldestStartDate.dayOfMonth, 0, 0, 0)
                         set(Calendar.MILLISECOND, 0)
-                    }.timeInMillis
-
-                    val periodEndMillis = Calendar.getInstance().apply {
-                        set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
+                    }
+                    val endCalendar = Calendar.getInstance().apply {
+                        set(newestEndDate.year, newestEndDate.monthValue - 1, newestEndDate.dayOfMonth, 23, 59, 59)
                         set(Calendar.MILLISECOND, 999)
-                    }.timeInMillis
-
-                    val expensesForPeriod = allExpenses.filter { expense ->
-                        val expenseTime = expense.getDateObject()?.time ?: 0L
-                        expenseTime in periodStartMillis..periodEndMillis
                     }
 
-                    val totalAmount = expensesForPeriod.sumOf { abs(it.amount) }
+                    val allTransactions = transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
+                    val allExpenses = allTransactions.filterIsInstance<Expense>()
 
-                    val categoryExpenses = expensesForPeriod
-                        .groupBy { it.category }
-                        .map { (category, categoryTransactions) ->
-                            val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
-                            val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+                    val categoryManager = CategoryManager.getInstance(context)
 
-                            // Get a consistent color for this category using CategoryManager
-                            val savedColorValue = categoryManager.getCategoryColor(category, true)
+                    val newPeriodExpensesList = periods.map { (startDate, endDate, periodName) ->
+                        val periodStartMillis = Calendar.getInstance().apply {
+                            set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }.timeInMillis
 
-                            // Use the saved color or fall back to the hash-based approach
-                            val color = if (savedColorValue != null) {
-                                Color(savedColorValue)
-                            } else {
-                                // Use a color based on category hash code for consistency
-                                val colorIndex = abs(category.hashCode()) % categoryColors.size
-                                categoryColors[colorIndex]
-                            }
+                        val periodEndMillis = Calendar.getInstance().apply {
+                            set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
+                            set(Calendar.MILLISECOND, 999)
+                        }.timeInMillis
 
-                            // Get display name for the category
-                            val displayName = try {
-                                // Try to get the enum value and its display name
-                                ExpenseCategory.valueOf(category).getDisplayName()
-                            } catch (_: Exception) {
-                                // If not a standard category, just use the category string directly
-                                category
-                            }
-
-                            CategoryExpense(
-                                categoryName = displayName,
-                                color = color,
-                                amount = categoryAmount,
-                                percentage = percentage
-                            )
+                        val expensesForPeriod = allExpenses.filter { expense ->
+                            val expenseTime = expense.getDateObject()?.time ?: 0L
+                            expenseTime in periodStartMillis..periodEndMillis
                         }
-                        .sortedByDescending { it.amount }
 
-                    PeriodExpenses(
-                        periodName = periodName,
-                        totalAmount = totalAmount,
-                        categoryExpenses = categoryExpenses
-                    )
+                        val totalAmount = expensesForPeriod.sumOf { abs(it.amount) }
+
+                        val categoryExpenses = expensesForPeriod
+                            .groupBy { it.category }
+                            .map { (category, categoryTransactions) ->
+                                val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
+                                val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+
+                                // Get a consistent color for this category using CategoryManager
+                                val savedColorValue = categoryManager.getCategoryColor(category, true)
+
+                                // Use the saved color or fall back to the hash-based approach
+                                val color = if (savedColorValue != null) {
+                                    Color(savedColorValue)
+                                } else {
+                                    // Use a color based on category hash code for consistency
+                                    val colorIndex = abs(category.hashCode()) % categoryColors.size
+                                    categoryColors[colorIndex]
+                                }
+
+                                // Get display name for the category
+                                val displayName = try {
+                                    // Try to get the enum value and its display name
+                                    ExpenseCategory.valueOf(category).getDisplayName()
+                                } catch (_: Exception) {
+                                    // If not a standard category, just use the category string directly
+                                    category
+                                }
+
+                                CategoryExpense(
+                                    categoryName = displayName,
+                                    color = color,
+                                    amount = categoryAmount,
+                                    percentage = percentage
+                                )
+                            }
+                            .sortedByDescending { it.amount }
+
+                        PeriodExpenses(
+                            periodName = periodName,
+                            totalAmount = totalAmount,
+                            categoryExpenses = categoryExpenses
+                        )
+                    }
+
+                    // Reverse the list so most recent period is last (rightmost in chart)
+                    val reversed = newPeriodExpensesList.reversed()
+
+                    cacheMutex.withLock {
+                        expenseHistoryCache[cacheKey] = reversed
+                        cacheTimestamps[cacheKey] = currentTime
+                    }
+
+                    Log.d(TAG, "Finalized expense history data for ${reversed.size} periods in a single query")
+                    reversed
                 }
-
-                // Reverse the list so most recent period is last (rightmost in chart)
-                val periodExpensesList = newPeriodExpensesList.reversed()
-
-                cacheMutex.withLock {
-                    expenseHistoryCache[cacheKey] = periodExpensesList
-                    cacheTimestamps[cacheKey] = currentTime
-                }
-
-                Log.d(TAG, "Finalized expense history data for ${periodExpensesList.size} periods in a single query")
 
                 _expenseHistoryData.value = periodExpensesList
                 _isLoadingHistoryData.value = false

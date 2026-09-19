@@ -95,6 +95,10 @@ class NotificationReceiver : BroadcastReceiver() {
             Log.e(TAG, "Error creating morning notification", e)
             val notificationService = NotificationService(context)
             notificationService.showDailyMorningNotification(title, defaultMessage)
+        } finally {
+            // Exact alarms are one-shot, so re-arm tomorrow's alarm right here instead of
+            // relying on the app being reopened to do it
+            NotificationManager(context).scheduleNextDailyAlarm()
         }
     }
     
