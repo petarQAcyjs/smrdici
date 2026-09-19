@@ -4,9 +4,11 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import androidx.core.content.edit
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -24,7 +26,8 @@ import java.util.Locale
 class NotificationHelper(private val context: Context) {
     companion object {
         private const val TAG = "NotificationHelper"
-        
+        private const val SCHEDULED_TIMES_PREFS_NAME = "scheduled_notification_times"
+
         // Time constants
         private const val ONE_DAY_MILLIS = 24 * 60 * 60 * 1000L
         private const val ONE_HOUR_MILLIS = 60 * 60 * 1000L
@@ -68,46 +71,58 @@ class NotificationHelper(private val context: Context) {
             }
         }
     }
-    
+
+    // Persists the trigger time we last actually armed for each alarm's request code, so we can
+    // tell "already scheduled for this exact time" apart from "event was edited to a new time"
+    private val scheduledTimesPrefs: SharedPreferences =
+        context.getSharedPreferences(SCHEDULED_TIMES_PREFS_NAME, Context.MODE_PRIVATE)
+
     /**
-     * Schedule notifications for an event (day before and hour before)
+     * Schedule notifications for an event (day before and hour before).
+     * Safe to call repeatedly for the same event (e.g. on every app start, or restoring alarms
+     * after a reboot) - each alarm is only actually (re)armed if it isn't already scheduled for
+     * that exact trigger time, see [scheduleNotification].
      */
     fun scheduleNotificationsForEvent(event: Event) {
         Log.d(TAG, "Scheduling notifications for event: ${event.title}")
-        
+
         // Validation check
         if (event.id == null || event.startTime == null) {
             Log.e(TAG, "Cannot schedule notifications: event has null id or start time")
             return
         }
-        
+
         val eventStartTime = event.startTime.toDate().time
         val currentTime = System.currentTimeMillis()
-        
+
         // Schedule day-before notification if applicable
         val dayBeforeTime = eventStartTime - ONE_DAY_MILLIS
         if (dayBeforeTime > currentTime) {
-            scheduleNotification(
+            val scheduled = scheduleNotification(
                 event.id,
                 event.title,
                 "Сутра имате догађај: ${event.title}",
                 dayBeforeTime,
                 1
             )
-            Log.d(TAG, "Scheduled day-before notification for ${event.title} at ${Date(dayBeforeTime)}")
+            if (scheduled) {
+                Log.d(TAG, "Scheduled day-before notification for ${event.title} at ${Date(dayBeforeTime)}")
+            }
         }
-        
+
         // Schedule hour-before notification if applicable
         val hourBeforeTime = eventStartTime - ONE_HOUR_MILLIS
         if (hourBeforeTime > currentTime) {
-            scheduleNotification(
+            val scheduled = scheduleNotification(
                 event.id,
                 event.title,
                 "За 1 сат почиње: ${event.title}",
                 hourBeforeTime,
                 2
             )
-            Log.d(TAG, "Scheduled hour-before notification for ${event.title} at ${Date(hourBeforeTime)}")
+            if (scheduled) {
+                Log.d(TAG, "Scheduled hour-before notification for ${event.title} at ${Date(hourBeforeTime)}")
+            }
         }
     }
     
@@ -141,15 +156,45 @@ class NotificationHelper(private val context: Context) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             alarmManager.cancel(pendingIntent2)
-            
+
+            // Clear the persisted trigger times too, so a future re-schedule for this event
+            // isn't mistaken for "already armed for this time" by scheduleNotification()
+            scheduledTimesPrefs.edit {
+                remove(scheduledTimeKey(eventId, 1))
+                remove(scheduledTimeKey(eventId, 2))
+            }
+
             Log.d(TAG, "Cancelled all notifications for event ID: $eventId")
         } catch (e: Exception) {
             Log.e(TAG, "Error cancelling notifications for event $eventId", e)
         }
     }
-    
+
+    private fun scheduledTimeKey(eventId: String?, notificationType: Int) = "${eventId}_$notificationType"
+
     /**
-     * Schedule a specific notification using AlarmManager
+     * Checks whether the OS still has an alarm armed for the given request code/intent,
+     * using FLAG_NO_CREATE so this never creates a new PendingIntent as a side effect.
+     * A real device reboot wipes system_server's alarm state, so this correctly returns
+     * false right after a reboot even if it returned true right before it.
+     */
+    private fun isAlarmAlreadyArmed(requestCode: Int, intent: Intent): Boolean {
+        return PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        ) != null
+    }
+
+    /**
+     * Schedule a specific notification using AlarmManager.
+     * Returns true if an alarm was (re)scheduled, false if it was left untouched or failed.
+     *
+     * Skips re-arming when the OS still has this exact alarm registered AND it was last armed
+     * for this exact [triggerAtMillis] - so a no-op call (e.g. app reopened, or a boot-restore
+     * pass that changed nothing) is a cheap no-op, while an edited event's new time, or an alarm
+     * a real reboot actually wiped, both still get (re)scheduled correctly.
      */
     private fun scheduleNotification(
         eventId: String?,
@@ -157,19 +202,26 @@ class NotificationHelper(private val context: Context) {
         message: String,
         triggerAtMillis: Long,
         notificationType: Int
-    ) {
+    ): Boolean {
         try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            
+
             val intent = Intent(context, NotificationReceiver::class.java).apply {
                 putExtra("EVENT_ID", eventId)
                 putExtra("EVENT_TITLE", title)
                 putExtra("EVENT_MESSAGE", message)
             }
-            
+
             // Create a unique request code based on the event ID and notification type
             val requestCode = "${eventId}_$notificationType".hashCode()
-            
+            val timeKey = scheduledTimeKey(eventId, notificationType)
+
+            val lastScheduledTime = scheduledTimesPrefs.getLong(timeKey, -1L)
+            if (lastScheduledTime == triggerAtMillis && isAlarmAlreadyArmed(requestCode, intent)) {
+                Log.d(TAG, "Notification for event $eventId (type $notificationType) already scheduled for this time, skipping")
+                return false
+            }
+
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
                 requestCode,
@@ -232,9 +284,13 @@ class NotificationHelper(private val context: Context) {
                 }
             }
             
+            scheduledTimesPrefs.edit { putLong(timeKey, triggerAtMillis) }
+
             Log.d(TAG, "Successfully scheduled notification at ${Date(triggerAtMillis)}: $title")
+            return true
         } catch (e: Exception) {
             Log.e(TAG, "Error scheduling notification", e)
+            return false
         }
     }
     

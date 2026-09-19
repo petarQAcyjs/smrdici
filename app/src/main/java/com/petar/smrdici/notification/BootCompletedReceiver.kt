@@ -51,8 +51,11 @@ class BootCompletedReceiver : BroadcastReceiver() {
                     futureEvents.forEach { event ->
                         if (event.id != null) {
                             val notificationHelper = NotificationHelper.getInstance(context)
+                            // scheduleNotificationsForEvent leaves still-armed alarms alone on
+                            // its own, so this only actually reschedules when they're genuinely
+                            // gone (i.e. after a real reboot) or the event's time has changed
                             notificationHelper.scheduleNotificationsForEvent(event)
-                            Log.d(TAG, "Rescheduled notifications for event: ${event.title}")
+                            Log.d(TAG, "Checked notifications for event: ${event.title}")
                         }
                     }
                     
