@@ -411,7 +411,9 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
 
                 val startDate = _state.value.selectedTimePeriod.calculateStartDate()
                 val endDate = _state.value.selectedTimePeriod.calculateEndDate()
-                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
+                val defaultAccount = _state.value.accounts.find { it.isDefault } ?: _state.value.accounts.firstOrNull()
+                val targetAccountId = _state.value.selectedAccountId ?: defaultAccount?.id
 
                 transactionRepository.getAllTransactions().collect { allTransactions ->
                     val filteredTransactions = withContext(Dispatchers.Default) {
@@ -422,12 +424,25 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                             }
                             if (!matchesType) return@filter false
 
-                            val transactionDate = LocalDate.parse(transaction.date, formatter)
-                            val inDateRange = (transactionDate.isEqual(startDate) || transactionDate.isAfter(startDate)) &&
-                                    (transactionDate.isEqual(endDate) || transactionDate.isBefore(endDate))
-                            if (!inDateRange) return@filter false
+                            // Match account filter cleanly
+                            if (targetAccountId != null && transaction.accountId != targetAccountId) {
+                                return@filter false
+                            }
 
-                            _state.value.selectedAccountId == null || transaction.accountId == _state.value.selectedAccountId
+                            // Robust Date Parsing
+                            val transactionDate = try {
+                                val parts = transaction.date.split("-")
+                                if (parts.size == 3) {
+                                    LocalDate.of(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+                                } else {
+                                    LocalDate.parse(transaction.date)
+                                }
+                            } catch (_: Exception) {
+                                null
+                            } ?: return@filter false
+
+                            (transactionDate.isEqual(startDate) || transactionDate.isAfter(startDate)) &&
+                                    (transactionDate.isEqual(endDate) || transactionDate.isBefore(endDate))
                         }
                     }
 

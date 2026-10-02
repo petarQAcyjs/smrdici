@@ -1,16 +1,15 @@
 package com.petar.smrdici.data.repository
 
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.auth.FirebaseAuth
-import com.petar.smrdici.data.model.Transaction
+import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.Income
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.tasks.await
+import com.petar.smrdici.data.model.Transaction
 import com.petar.smrdici.utils.LogUtils
-import com.petar.smrdici.data.repository.AccountRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.tasks.await
 
 class TransactionRepository private constructor() {
     private val firestore = FirebaseFirestore.getInstance()
@@ -192,100 +191,6 @@ class TransactionRepository private constructor() {
         }
     }
 
-    fun getExpenses(): Flow<List<Expense>> = flow {
-        val snapshot = transactionsCollection.whereEqualTo("type", "EXPENSE").get().await()
-        val expenses = snapshot.documents.mapNotNull { doc ->
-            try {
-                val id = doc.id
-                val userId = doc.getString("userId") ?: currentUserId
-                val amount = doc.getDouble("amount") ?: 0.0
-                val description = doc.getString("description") ?: ""
-                val category = doc.getString("category") ?: ""
-                val accountId = doc.getString("accountId") ?: ""
-                
-                // Get date from document
-                val dateField = doc.get("date")
-                val date = when (dateField) {
-                    is com.google.firebase.Timestamp -> {
-                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                        dateFormat.format(dateField.toDate())
-                    }
-                    is String -> dateField
-                    else -> {
-                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                        dateFormat.format(java.util.Date())
-                    }
-                }
-                
-                Expense(
-                    id = id,
-                    userId = userId,
-                    amount = amount,
-                    description = description,
-                    category = category,
-                    date = date,
-                    accountId = accountId
-                )
-            } catch (e: Exception) {
-                LogUtils.e("TransactionRepository", "Error parsing expense document", e, "transaction")
-                null
-            }
-        }
-        emit(expenses)
-    }.catch { e ->
-        LogUtils.e("TransactionRepository", "Error getting expenses", e, "transaction")
-        emit(emptyList())
-    }
-
-    fun getIncomes(): Flow<List<Income>> = flow {
-        val snapshot = transactionsCollection.whereEqualTo("type", "INCOME").get().await()
-        val incomes = snapshot.documents.mapNotNull { doc ->
-            try {
-                val id = doc.id
-                val userId = doc.getString("userId") ?: currentUserId
-                val amount = doc.getDouble("amount") ?: 0.0
-                val description = doc.getString("description") ?: ""
-                val category = doc.getString("category") ?: ""
-                val accountId = doc.getString("accountId") ?: ""
-                
-                // Get date from document
-                val dateField = doc.get("date")
-                val date = when (dateField) {
-                    is com.google.firebase.Timestamp -> {
-                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                        dateFormat.format(dateField.toDate())
-                    }
-                    is String -> dateField
-                    else -> {
-                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                        dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                        dateFormat.format(java.util.Date())
-                    }
-                }
-                
-                Income(
-                    id = id,
-                    userId = userId,
-                    amount = amount,
-                    description = description,
-                    category = category,
-                    date = date,
-                    accountId = accountId
-                )
-            } catch (e: Exception) {
-                LogUtils.e("TransactionRepository", "Error parsing income document", e, "transaction")
-                null
-            }
-        }
-        emit(incomes)
-    }.catch { e ->
-        LogUtils.e("TransactionRepository", "Error getting incomes", e, "transaction")
-        emit(emptyList())
-    }
-
     // Helper method to convert Expense to Map
     private fun Expense.toMap(): Map<String, Any> {
         return mapOf(
@@ -328,8 +233,7 @@ class TransactionRepository private constructor() {
         val accountId = doc.getString("accountId") ?: ""
         
         // Get date from document
-        val dateField = doc.get("date")
-        val date = when (dateField) {
+        val date = when (val dateField = doc.get("date")) {
             is com.google.firebase.Timestamp -> {
                 val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                 dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
@@ -375,8 +279,7 @@ class TransactionRepository private constructor() {
         val accountId = doc.getString("accountId") ?: ""
         
         // Get date from document
-        val dateField = doc.get("date")
-        val date = when (dateField) {
+        val date = when (val dateField = doc.get("date")) {
             is com.google.firebase.Timestamp -> {
                 val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                 dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
@@ -406,100 +309,6 @@ class TransactionRepository private constructor() {
         emit(null)
     }
 
-    // Direct suspend function to get expense by ID without using Flow
-    suspend fun getExpenseByIdDirect(expenseId: String): Expense? {
-        return try {
-            val doc = transactionsCollection.document(expenseId).get().await()
-            
-            if (!doc.exists() || doc.getString("type") != "EXPENSE") {
-                return null
-            }
-            
-            val id = doc.id
-            val userId = doc.getString("userId") ?: currentUserId
-            val amount = doc.getDouble("amount") ?: 0.0
-            val description = doc.getString("description") ?: ""
-            val category = doc.getString("category") ?: ""
-            val accountId = doc.getString("accountId") ?: ""
-            
-            // Get date from document
-            val dateField = doc.get("date")
-            val date = when (dateField) {
-                is com.google.firebase.Timestamp -> {
-                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                    dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    dateFormat.format(dateField.toDate())
-                }
-                is String -> dateField
-                else -> {
-                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                    dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    dateFormat.format(java.util.Date())
-                }
-            }
-            
-            Expense(
-                id = id,
-                userId = userId,
-                amount = amount,
-                description = description,
-                category = category,
-                date = date,
-                accountId = accountId
-            )
-        } catch (e: Exception) {
-            LogUtils.e("TransactionRepository", "Error getting expense by ID directly: $expenseId", e, "transaction")
-            null
-        }
-    }
-
-    // Direct suspend function to get income by ID without using Flow
-    suspend fun getIncomeByIdDirect(incomeId: String): Income? {
-        return try {
-            val doc = transactionsCollection.document(incomeId).get().await()
-            
-            if (!doc.exists() || doc.getString("type") != "INCOME") {
-                return null
-            }
-            
-            val id = doc.id
-            val userId = doc.getString("userId") ?: currentUserId
-            val amount = doc.getDouble("amount") ?: 0.0
-            val description = doc.getString("description") ?: ""
-            val category = doc.getString("category") ?: ""
-            val accountId = doc.getString("accountId") ?: ""
-            
-            // Get date from document
-            val dateField = doc.get("date")
-            val date = when (dateField) {
-                is com.google.firebase.Timestamp -> {
-                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                    dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    dateFormat.format(dateField.toDate())
-                }
-                is String -> dateField
-                else -> {
-                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                    dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                    dateFormat.format(java.util.Date())
-                }
-            }
-            
-            Income(
-                id = id,
-                userId = userId,
-                amount = amount,
-                description = description,
-                category = category,
-                date = date,
-                accountId = accountId
-            )
-        } catch (e: Exception) {
-            LogUtils.e("TransactionRepository", "Error getting income by ID directly: $incomeId", e, "transaction")
-            null
-        }
-    }
-
     // Method to get all transactions (both income and expense)
     fun getAllTransactions(): Flow<List<Transaction>> = flow {
         try {
@@ -519,8 +328,7 @@ class TransactionRepository private constructor() {
                     val updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
                     
                     // Get date from document
-                    val dateField = doc.get("date")
-                    val date = when (dateField) {
+                    val date = when (val dateField = doc.get("date")) {
                         is com.google.firebase.Timestamp -> {
                             val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                             dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
@@ -601,26 +409,46 @@ class TransactionRepository private constructor() {
         }
     }
 
-    // Method to get transactions between two dates
+    // Method to get transactions between two dates (Optimized with Firestore filtering)
     suspend fun getTransactionsBetween(startDate: java.util.Date, endDate: java.util.Date): List<Transaction> {
         try {
-            LogUtils.d("TransactionRepository", "Getting transactions between $startDate and $endDate", "transaction")
-            
-            // Convert dates to Firestore timestamp format
+            LogUtils.d("TransactionRepository", "Getting transactions between $startDate and $endDate with Firestore index filtering", "transaction")
+
             val startTimestamp = com.google.firebase.Timestamp(startDate)
             val endTimestamp = com.google.firebase.Timestamp(endDate)
-            
-            // Format dates for string comparison if dates are stored as strings
+
             val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
             dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
             val startDateStr = dateFormat.format(startDate)
             val endDateStr = dateFormat.format(endDate)
-            
-            // Get all transactions first (we'll filter them after)
-            val snapshot = transactionsCollection.get().await()
-            
-            // Filter transactions by date (handling both Timestamp and String date formats)
-            val transactions = snapshot.documents.mapNotNull { doc ->
+
+            // 1. Probaj upit sa Timestamp filtriranjem na nivou baze
+            val timestampSnapshot = try {
+                transactionsCollection
+                    .whereGreaterThanOrEqualTo("date", startTimestamp)
+                    .whereLessThanOrEqualTo("date", endTimestamp)
+                    .get()
+                    .await()
+            } catch (_: Exception) {
+                null
+            }
+
+            // 2. Probaj upit sa String date (yyyy-MM-dd) filtriranjem na nivou baze
+            val stringSnapshot = try {
+                transactionsCollection
+                    .whereGreaterThanOrEqualTo("date", startDateStr)
+                    .whereLessThanOrEqualTo("date", endDateStr)
+                    .get()
+                    .await()
+            } catch (_: Exception) {
+                null
+            }
+
+            // Kombinuj dokumete iz oba upita ako postoje razliciti formati u bazi
+            val allDocuments = ((timestampSnapshot?.documents ?: emptyList()) + (stringSnapshot?.documents ?: emptyList()))
+                .distinctBy { it.id }
+
+            val transactions = allDocuments.mapNotNull { doc ->
                 try {
                     val id = doc.id
                     val userId = doc.getString("userId") ?: currentUserId
@@ -629,12 +457,11 @@ class TransactionRepository private constructor() {
                     val category = doc.getString("category") ?: ""
                     val accountId = doc.getString("accountId") ?: ""
                     val type = doc.getString("type") ?: ""
-                    
-                    // Get date from document
+
                     val dateField = doc.get("date")
                     val date: String
                     val dateObj: java.util.Date
-                    
+
                     when (dateField) {
                         is com.google.firebase.Timestamp -> {
                             dateObj = dateField.toDate()
@@ -643,23 +470,14 @@ class TransactionRepository private constructor() {
                         is String -> {
                             date = dateField
                             try {
-                                dateObj = dateFormat.parse(date) ?: java.util.Date()
-                            } catch (e: Exception) {
-                                LogUtils.e("TransactionRepository", "Error parsing date string: $date", e, "transaction")
+                                dateFormat.parse(date) ?: java.util.Date()
+                            } catch (_: Exception) {
                                 return@mapNotNull null
                             }
                         }
-                        else -> {
-                            return@mapNotNull null
-                        }
+                        else -> return@mapNotNull null
                     }
-                    
-                    // Check if the transaction date is within the range
-                    if (dateObj.before(startDate) || dateObj.after(endDate)) {
-                        return@mapNotNull null
-                    }
-                    
-                    // Create the appropriate transaction object based on type
+
                     when (type) {
                         "INCOME" -> Income(
                             id = id,
@@ -673,7 +491,7 @@ class TransactionRepository private constructor() {
                         "EXPENSE" -> Expense(
                             id = id,
                             userId = userId,
-                            amount = -amount, // Make expense amount negative for easier handling
+                            amount = amount,
                             description = description,
                             category = category,
                             date = date,
@@ -686,8 +504,8 @@ class TransactionRepository private constructor() {
                     null
                 }
             }
-            
-            LogUtils.i("TransactionRepository", "Retrieved ${transactions.size} transactions between $startDate and $endDate", "transaction")
+
+            LogUtils.i("TransactionRepository", "Retrieved ${transactions.size} filtered transactions between $startDate and $endDate", "transaction")
             return transactions
         } catch (e: Exception) {
             LogUtils.e("TransactionRepository", "Error getting transactions between dates", e, "transaction")

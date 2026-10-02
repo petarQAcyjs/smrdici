@@ -7,33 +7,36 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.Expense
 import com.petar.smrdici.data.model.ExpenseCategory
-import com.petar.smrdici.data.model.CategoryManager
+import com.petar.smrdici.data.repository.AccountRepository
 import com.petar.smrdici.data.repository.EventRepository
-import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.data.repository.SettingsRepository
+import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.ui.screens.settings.Period
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import kotlinx.coroutines.Job
-import kotlin.math.abs
 import org.threeten.bp.LocalDate
 import org.threeten.bp.YearMonth
 import org.threeten.bp.format.DateTimeFormatter
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import kotlin.math.abs
 
 // Data class for expense category summaries
 data class CategorySummary(
@@ -52,6 +55,13 @@ data class ExpenseCacheKey(
     val customStartDay: Int = 1
 )
 
+sealed class SyncStatus {
+    data object Initial : SyncStatus()
+    data object Syncing : SyncStatus()
+    data class Success(val message: String) : SyncStatus()
+    data class Error(val message: String) : SyncStatus()
+}
+
 class HomeViewModel(
     context: Context,
     private val settingsRepository: SettingsRepository = SettingsRepository.getInstance(context)
@@ -61,6 +71,8 @@ class HomeViewModel(
     private val context: Context = context.applicationContext
 
     private val eventRepository = EventRepository.getInstance()
+    private val transactionRepository = TransactionRepository.getInstance()
+    private val accountRepository = AccountRepository.getInstance()
 
     private val _events = MutableStateFlow<List<Event>>(emptyList())
     val events: StateFlow<List<Event>> = _events
@@ -96,10 +108,7 @@ class HomeViewModel(
     private val _isLoadingHistoryData = MutableStateFlow(false)
     val isLoadingHistoryData: StateFlow<Boolean> = _isLoadingHistoryData
 
-    private val transactionRepository = TransactionRepository.getInstance()
-
-    private val numPeriodsToShow = 8 // Ukupno perioda za prikaz
-    private val freshPeriodsCount = 2 // Samo 2 najnovija perioda se uvlače sveže sa Firestore-a
+    private val freshPeriodsCount = 2
 
     private val prefs = context.getSharedPreferences("expense_history_cache", Context.MODE_PRIVATE)
 
@@ -129,6 +138,7 @@ class HomeViewModel(
 
     companion object {
         private const val TAG = "HomeViewModel"
+        private const val NUM_PERIODS_TO_SHOW = 8
     }
 
     init {
@@ -137,13 +147,8 @@ class HomeViewModel(
 
     private fun loadDashboardDataSequentially() {
         viewModelScope.launch {
-            // 1. Prvo učitaj današnje događaje (vrh ekrana)
             loadTodayEvents()
-
-            // 2. Kada se događaji učitaju, pređi na pita dijagram
             loadExpenseData()
-
-            // 3. Na kraju učitaj istoriju troškova (dno ekrana)
             loadExpenseHistoryData()
         }
     }
@@ -155,9 +160,7 @@ class HomeViewModel(
                 expenseHistoryCache.clear()
                 cacheTimestamps.clear()
             }
-            // Obriši i trajni disk keš prilikom ručnog osvežavanja (Pull-to-Refresh)
-            // kako bi se osiguralo da svi uređaji povuku identične sveže podatke
-            prefs.edit().clear().apply()
+            prefs.edit { clear() }
 
             loadExpenseData()
             loadExpenseHistoryData()
@@ -238,7 +241,7 @@ class HomeViewModel(
 
     private fun formatDate(date: Date?): String {
         return date?.let {
-            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(it)
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(it)
         } ?: "null"
     }
 
@@ -265,6 +268,15 @@ class HomeViewModel(
                 val configuredPeriod = settingsRepository.period.first()
                 val now = LocalDate.now()
                 val customStartDay = settingsRepository.customPeriodStartDay.first()
+
+                val allAccounts = try {
+                    accountRepository.accounts.first()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+
+                val defaultAccount = allAccounts.find { acc -> acc.isDefault } ?: allAccounts.firstOrNull()
+                val defaultAccountId = defaultAccount?.id
 
                 val (startDate, endDate) = when (configuredPeriod) {
                     Period.DAILY -> Pair(now, now)
@@ -312,26 +324,47 @@ class HomeViewModel(
 
                 if (categorySummaries == null) {
                     categorySummaries = withContext(Dispatchers.Default) {
-                        val startCalendar = Calendar.getInstance().apply {
+                        // Ciljani opseg za Firestore upit uz tampon od 2 dana radi vremenskih zona
+                        val queryStart = Calendar.getInstance().apply {
                             set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
                             set(Calendar.MILLISECOND, 0)
-                        }
+                            add(Calendar.DAY_OF_MONTH, -2)
+                        }.time
 
-                        val endCalendar = Calendar.getInstance().apply {
+                        val queryEnd = Calendar.getInstance().apply {
                             set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
                             set(Calendar.MILLISECOND, 999)
-                        }
+                            add(Calendar.DAY_OF_MONTH, 2)
+                        }.time
 
-                        val allTransactions = transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
-                        val expenses = allTransactions.filterIsInstance<Expense>()
-                        val totalAmount = expenses.sumOf { abs(it.amount) }
+                        val allTransactions = transactionRepository.getTransactionsBetween(queryStart, queryEnd)
+
+                        val expenses = allTransactions
+                            .filterIsInstance<Expense>()
+                            .filter { expense -> defaultAccountId == null || expense.accountId == defaultAccountId }
+                            .filter { expense ->
+                                val expDate = try {
+                                    val parts = expense.date.split("-")
+                                    if (parts.size == 3) {
+                                        LocalDate.of(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+                                    } else {
+                                        LocalDate.parse(expense.date)
+                                    }
+                                } catch (_: Exception) {
+                                    null
+                                }
+                                expDate != null && (expDate.isEqual(startDate) || expDate.isAfter(startDate)) &&
+                                        (expDate.isEqual(endDate) || expDate.isBefore(endDate))
+                            }
+
+                        val totalAmount = expenses.sumOf { expense -> expense.amount }
 
                         val categoryManager = CategoryManager.getInstance(context)
 
                         val summaries = expenses
-                            .groupBy { it.category }
+                            .groupBy { expense -> expense.category }
                             .map { (category, categoryTransactions) ->
-                                val categoryAmount = categoryTransactions.sumOf { abs(it.amount) }
+                                val categoryAmount = categoryTransactions.sumOf { exp -> exp.amount }
                                 val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
 
                                 val savedColorValue = categoryManager.getCategoryColor(category, true)
@@ -357,7 +390,7 @@ class HomeViewModel(
                                     percentage = percentage
                                 )
                             }
-                            .sortedByDescending { it.amount }
+                            .sortedByDescending { summary -> summary.amount }
 
                         cacheMutex.withLock {
                             expenseChartCache[cacheKey] = summaries
@@ -378,7 +411,6 @@ class HomeViewModel(
         }
     }
 
-    // Učitava zadnja 2 perioda sveže sa Firestore-a, a preostalih 6 najstarijih čita iz SharedPreferences diskovnog keša
     fun loadExpenseHistoryData() {
         viewModelScope.launch {
             try {
@@ -388,9 +420,18 @@ class HomeViewModel(
                 val now = LocalDate.now()
                 val customStartDay = settingsRepository.customPeriodStartDay.first()
 
+                val allAccounts = try {
+                    accountRepository.accounts.first()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+
+                val defaultAccount = allAccounts.find { acc -> acc.isDefault } ?: allAccounts.firstOrNull()
+                val defaultAccountId = defaultAccount?.id
+
                 val cacheKey = ExpenseCacheKey(
                     periodType = configuredPeriod,
-                    startDate = now.minusMonths((numPeriodsToShow - 1).toLong()),
+                    startDate = now.minusMonths((NUM_PERIODS_TO_SHOW - 1).toLong()),
                     endDate = now,
                     customStartDay = if (configuredPeriod == Period.CUSTOM) customStartDay else 1
                 )
@@ -406,7 +447,7 @@ class HomeViewModel(
                     }
                 }
 
-                val periods = calculatePeriods(configuredPeriod, now, numPeriodsToShow, customStartDay)
+                val periods = calculatePeriods(configuredPeriod, now, NUM_PERIODS_TO_SHOW, customStartDay)
                 if (periods.isEmpty()) {
                     _isLoadingHistoryData.value = false
                     return@launch
@@ -419,19 +460,21 @@ class HomeViewModel(
                     val olderPeriodsToFetch = mutableListOf<Triple<LocalDate, LocalDate, String>>()
                     val olderResultsMap = mutableMapOf<String, Double>()
 
-                    olderPeriods.forEach { (startDate, endDate, periodName) ->
+                    olderPeriods.forEach { (startDate, endDate, _) ->
                         val prefKey = "history_total_${configuredPeriod.name}_${startDate}_${endDate}"
                         if (prefs.contains(prefKey)) {
                             olderResultsMap[prefKey] = prefs.getFloat(prefKey, 0f).toDouble()
                         } else {
-                            olderPeriodsToFetch.add(Triple(startDate, endDate, periodName))
+                            olderPeriodsToFetch.add(Triple(startDate, endDate, ""))
                         }
                     }
 
                     val periodsNeedingFetch = freshPeriods + olderPeriodsToFetch
                     val fetchedExpenses = if (periodsNeedingFetch.isNotEmpty()) {
-                        val oldestStart = periodsNeedingFetch.map { it.first }.minOrNull() ?: now
-                        val newestEnd = periodsNeedingFetch.map { it.second }.maxOrNull() ?: now
+                        val oldestStart = periodsNeedingFetch.minOfOrNull { triple -> triple.first }
+                            ?: now
+                        val newestEnd = periodsNeedingFetch.maxOfOrNull { triple -> triple.second }
+                            ?: now
 
                         val startCalendar = Calendar.getInstance().apply {
                             set(oldestStart.year, oldestStart.monthValue - 1, oldestStart.dayOfMonth, 0, 0, 0)
@@ -443,7 +486,9 @@ class HomeViewModel(
                         }
 
                         val allTransactions = transactionRepository.getTransactionsBetween(startCalendar.time, endCalendar.time)
-                        allTransactions.filterIsInstance<Expense>()
+                        allTransactions
+                            .filterIsInstance<Expense>()
+                            .filter { expense -> defaultAccountId == null || expense.accountId == defaultAccountId }
                     } else {
                         emptyList()
                     }
@@ -454,26 +499,25 @@ class HomeViewModel(
                         val totalAmount = if (olderResultsMap.containsKey(prefKey)) {
                             olderResultsMap[prefKey] ?: 0.0
                         } else {
-                            val periodStartMillis = Calendar.getInstance().apply {
-                                set(startDate.year, startDate.monthValue - 1, startDate.dayOfMonth, 0, 0, 0)
-                                set(Calendar.MILLISECOND, 0)
-                            }.timeInMillis
-
-                            val periodEndMillis = Calendar.getInstance().apply {
-                                set(endDate.year, endDate.monthValue - 1, endDate.dayOfMonth, 23, 59, 59)
-                                set(Calendar.MILLISECOND, 999)
-                            }.timeInMillis
-
                             val expensesForPeriod = fetchedExpenses.filter { expense ->
-                                val expenseTime = expense.getDateObject()?.time ?: 0L
-                                expenseTime in periodStartMillis..periodEndMillis
+                                val expDate = try {
+                                    val parts = expense.date.split("-")
+                                    if (parts.size == 3) {
+                                        LocalDate.of(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+                                    } else {
+                                        LocalDate.parse(expense.date)
+                                    }
+                                } catch (_: Exception) {
+                                    null
+                                }
+                                expDate != null && (expDate.isEqual(startDate) || expDate.isAfter(startDate)) &&
+                                        (expDate.isEqual(endDate) || expDate.isBefore(endDate))
                             }
 
-                            val calculatedSum = expensesForPeriod.sumOf { abs(it.amount) }
+                            val calculatedSum = expensesForPeriod.sumOf { expense -> expense.amount }
 
-                            if (olderPeriods.any { it.first == startDate && it.second == endDate }) {
-                                prefs.edit().putFloat(prefKey, calculatedSum.toFloat()).apply()
-                                Log.d(TAG, "Cached older period $periodName ($startDate to $endDate) to disk: $calculatedSum")
+                            if (olderPeriods.any { triple -> triple.first == startDate && triple.second == endDate }) {
+                                prefs.edit { putFloat(prefKey, calculatedSum.toFloat()) }
                             }
 
                             calculatedSum
@@ -493,7 +537,6 @@ class HomeViewModel(
                         cacheTimestamps[cacheKey] = currentTime
                     }
 
-                    Log.d(TAG, "Loaded expense history (${freshPeriodsCount} fresh from Firestore, ${olderResultsMap.size} from Disk Cache)")
                     reversed
                 }
 
@@ -599,11 +642,4 @@ class HomeViewModel(
             throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
-}
-
-sealed class SyncStatus {
-    data object Initial : SyncStatus()
-    data object Syncing : SyncStatus()
-    data class Success(val message: String) : SyncStatus()
-    data class Error(val message: String) : SyncStatus()
 }
