@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -66,6 +65,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,6 +90,7 @@ import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import com.petar.smrdici.utils.LogUtils
+import com.petar.smrdici.utils.rememberWindowInfo
 import kotlinx.coroutines.launch
 import org.threeten.bp.LocalDate
 import org.threeten.bp.format.DateTimeFormatter
@@ -97,7 +98,6 @@ import org.threeten.bp.temporal.ChronoUnit
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.abs
-import androidx.compose.runtime.rememberCoroutineScope
 
 private val predefinedColors = listOf(
     Color(0xFFE57373), Color(0xFFFFB74D), Color(0xFFFFF176),
@@ -119,8 +119,14 @@ fun FinanceScreen(
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
 
+    // Detekcija veličine ekrana
+    val windowInfo = rememberWindowInfo()
+    val screenHorizontalPadding = if (windowInfo.isSmallWidth) 8.dp else 16.dp
+    val cardContentPadding = if (windowInfo.isSmallWidth) 10.dp else 16.dp
+    val listSpacing = if (windowInfo.isSmallHeight) 8.dp else 12.dp
+
     var isRefreshing by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope() // <-- Dodato '= rememberCoroutineScope()'
+    val coroutineScope = rememberCoroutineScope()
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
         onRefresh = {
@@ -221,13 +227,14 @@ fun FinanceScreen(
 
                 TransactionTypeSelector(
                     selectedType = state.selectedTransactionType,
-                    onTypeSelected = { viewModel.setTransactionType(it) }
+                    onTypeSelected = { viewModel.setTransactionType(it) },
+                    horizontalPadding = screenHorizontalPadding
                 )
 
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                        .padding(start = screenHorizontalPadding, end = screenHorizontalPadding, top = 8.dp, bottom = 4.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = when (state.selectedTransactionType) {
                             is TransactionType.Income -> MaterialTheme.colorScheme.primaryContainer
@@ -238,7 +245,7 @@ fun FinanceScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(cardContentPadding),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Button(
@@ -246,15 +253,16 @@ fun FinanceScreen(
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.surface,
                                 contentColor = MaterialTheme.colorScheme.onSurface
-                            )
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = state.accounts.find { it.id == state.selectedAccountId }?.name ?: "Сви рачуни",
-                                style = MaterialTheme.typography.titleMedium
+                                style = if (windowInfo.isSmallWidth) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         if (state.selectedAccountId != null) {
                             val accountBalance = state.accountBalances[state.selectedAccountId]
@@ -266,7 +274,7 @@ fun FinanceScreen(
                                         is TransactionType.Income -> "Укупни приходи за период:"
                                         is TransactionType.Expense -> "Укупни расходи за период:"
                                     },
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = when (state.selectedTransactionType) {
                                         is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
                                         is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
@@ -276,7 +284,8 @@ fun FinanceScreen(
                                 Text(
                                     text = nativeCurrencyFormatter?.format(accountBalance.transactionTotal)
                                         ?: "${accountBalance.transactionTotal} ${accountBalance.nativeCurrency}",
-                                    style = MaterialTheme.typography.headlineMedium,
+                                    style = if (windowInfo.isSmallWidth) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
                                     color = when (state.selectedTransactionType) {
                                         is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
                                         is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
@@ -285,16 +294,16 @@ fun FinanceScreen(
 
                                 val account = state.accounts.find { it.id == state.selectedAccountId }
                                 if (account != null) {
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     HorizontalDivider(
-                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        modifier = Modifier.padding(vertical = 4.dp),
                                         thickness = 1.dp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                                     )
 
                                     Text(
                                         text = "Тренутно стање рачуна:",
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
 
@@ -308,7 +317,8 @@ fun FinanceScreen(
 
                                     Text(
                                         text = currentBalance,
-                                        style = MaterialTheme.typography.titleLarge,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -321,7 +331,7 @@ fun FinanceScreen(
                                     is TransactionType.Income -> "Укупни приходи за период (EUR):"
                                     is TransactionType.Expense -> "Укупни расходи за период (EUR):"
                                 },
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = when (state.selectedTransactionType) {
                                     is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
                                     is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
@@ -330,7 +340,8 @@ fun FinanceScreen(
 
                             Text(
                                 text = eurFormatter?.format(state.totalAmountInEur) ?: "${state.totalAmountInEur} EUR",
-                                style = MaterialTheme.typography.headlineMedium,
+                                style = if (windowInfo.isSmallWidth) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
                                 color = when (state.selectedTransactionType) {
                                     is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
                                     is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
@@ -338,25 +349,25 @@ fun FinanceScreen(
                             )
 
                             if (state.accountBalances.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
                                 HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    modifier = Modifier.padding(vertical = 4.dp),
                                     thickness = 1.dp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                                 )
 
                                 Text(
                                     text = "По рачунима:",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.align(Alignment.Start)
                                 )
 
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
 
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     state.accounts.forEach { account ->
                                         val balance = state.accountBalances[account.id]
@@ -369,13 +380,13 @@ fun FinanceScreen(
                                             ) {
                                                 Text(
                                                     text = account.name,
-                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                                 Text(
                                                     text = formatter?.format(balance.transactionTotal)
                                                         ?: "${balance.transactionTotal} ${balance.nativeCurrency}",
-                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
@@ -388,9 +399,9 @@ fun FinanceScreen(
                 }
 
                 if (state.categorySummaries.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        contentPadding = PaddingValues(horizontal = screenHorizontalPadding),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(state.categorySummaries.take(5)) { category ->
@@ -404,34 +415,26 @@ fun FinanceScreen(
                                     percentage = "${String.format("%.1f", category.percentage)}%",
                                     amount = numberFormat.format(category.amount),
                                     onClick = { viewModel.selectCategory(category) },
-                                    modifier = Modifier.width(280.dp)
+                                    modifier = Modifier.width(if (windowInfo.isSmallWidth) 220.dp else 280.dp)
                                 )
                             }
                         }
                     }
-                } else {
-                    Spacer(modifier = Modifier.height(4.dp))
                 }
 
                 if (showAccountSelector) {
-                    LogUtils.d("FinanceScreen", "Opening account selector dialog", "ui")
                     AlertDialog(
-                        onDismissRequest = {
-                            LogUtils.d("FinanceScreen", "Account selector dialog dismissed", "ui")
-                            showAccountSelector = false
-                        },
+                        onDismissRequest = { showAccountSelector = false },
                         title = { Text("Изаберите рачун") },
                         text = {
                             Column(
-                                modifier = Modifier
-                                    .verticalScroll(rememberScrollState()),
+                                modifier = Modifier.verticalScroll(rememberScrollState()),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            LogUtils.i("FinanceScreen", "Selected: All accounts", "ui")
                                             viewModel.setSelectedAccount(null)
                                             showAccountSelector = false
                                         },
@@ -441,7 +444,7 @@ fun FinanceScreen(
                                 ) {
                                     Text(
                                         text = "Сви рачуни",
-                                        modifier = Modifier.padding(16.dp),
+                                        modifier = Modifier.padding(12.dp),
                                         style = MaterialTheme.typography.bodyLarge
                                     )
                                 }
@@ -451,7 +454,6 @@ fun FinanceScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
-                                                LogUtils.i("FinanceScreen", "Selected account: ${account.name}", "ui")
                                                 viewModel.setSelectedAccount(account.id)
                                                 showAccountSelector = false
                                             },
@@ -461,7 +463,7 @@ fun FinanceScreen(
                                     ) {
                                         Text(
                                             text = account.name,
-                                            modifier = Modifier.padding(16.dp),
+                                            modifier = Modifier.padding(12.dp),
                                             style = MaterialTheme.typography.bodyLarge
                                         )
                                     }
@@ -493,7 +495,6 @@ fun FinanceScreen(
                 }
 
                 if (state.isLoading) {
-                    LogUtils.d("FinanceScreen", "Loading transactions...", "ui")
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -501,7 +502,6 @@ fun FinanceScreen(
                         CircularProgressIndicator()
                     }
                 } else if (state.transactions.isEmpty()) {
-                    LogUtils.i("FinanceScreen", "No transactions found for selected period", "ui")
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -514,8 +514,6 @@ fun FinanceScreen(
                         )
                     }
                 } else {
-                    LogUtils.d("FinanceScreen", "Displaying ${state.transactions.size} transactions from unified collection", "ui")
-
                     var categoriesExpanded by remember { mutableStateOf(false) }
 
                     val transactionsByCategory = remember(state.transactions) {
@@ -533,14 +531,15 @@ fun FinanceScreen(
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        contentPadding = PaddingValues(horizontal = screenHorizontalPadding, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(listSpacing)
                     ) {
                         item {
                             CombinedHeaderWithSort(
                                 categoriesExpanded = categoriesExpanded,
                                 onToggleCategories = { categoriesExpanded = !categoriesExpanded },
-                                onSortSelected = { viewModel.setSortOption(it) }
+                                onSortSelected = { viewModel.setSortOption(it) },
+                                isSmall = windowInfo.isSmallWidth
                             )
                         }
 
@@ -557,12 +556,12 @@ fun FinanceScreen(
                                 val rows = categories.chunked(itemsPerRow)
 
                                 Column(
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     rows.forEachIndexed { _, rowItems ->
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             rowItems.forEach { category ->
                                                 val transactions = transactionsByCategory[category] ?: emptyList()
@@ -605,7 +604,8 @@ fun FinanceScreen(
                                                             )
                                                             viewModel.selectCategory(categorySummary)
                                                         },
-                                                        modifier = Modifier.weight(1f)
+                                                        modifier = Modifier.weight(1f),
+                                                        isSmall = windowInfo.isSmallWidth
                                                     )
                                                 } else {
                                                     Spacer(modifier = Modifier.weight(1f))
@@ -622,13 +622,13 @@ fun FinanceScreen(
                         }
 
                         item {
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             HorizontalDivider()
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "Све трансакције",
-                                style = MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.padding(bottom = 4.dp)
+                                style = if (windowInfo.isSmallWidth) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.padding(bottom = 2.dp)
                             )
                         }
 
@@ -636,28 +636,17 @@ fun FinanceScreen(
                             TransactionItem(
                                 transaction = transaction,
                                 numberFormat = numberFormat,
+                                isSmall = windowInfo.isSmallWidth,
                                 onEdit = {
                                     when (transaction) {
-                                        is IncomeTransaction -> {
-                                            LogUtils.i("FinanceScreen", "Editing income: ${transaction.income.id}", "ui")
-                                            navController.navigate("edit_income/${transaction.income.id}")
-                                        }
-                                        is ExpenseTransaction -> {
-                                            LogUtils.i("FinanceScreen", "Editing expense: ${transaction.expense.id}", "ui")
-                                            navController.navigate("edit_expense/${transaction.expense.id}")
-                                        }
+                                        is IncomeTransaction -> navController.navigate("edit_income/${transaction.income.id}")
+                                        is ExpenseTransaction -> navController.navigate("edit_expense/${transaction.expense.id}")
                                     }
                                 },
                                 onDelete = {
                                     when (transaction) {
-                                        is IncomeTransaction -> {
-                                            LogUtils.i("FinanceScreen", "Deleting income: ${transaction.income.id}", "ui")
-                                            viewModel.deleteIncome(transaction.income.id)
-                                        }
-                                        is ExpenseTransaction -> {
-                                            LogUtils.i("FinanceScreen", "Deleting expense: ${transaction.expense.id}", "ui")
-                                            viewModel.deleteExpense(transaction.expense.id)
-                                        }
+                                        is IncomeTransaction -> viewModel.deleteIncome(transaction.income.id)
+                                        is ExpenseTransaction -> viewModel.deleteExpense(transaction.expense.id)
                                     }
                                 }
                             )
@@ -700,16 +689,11 @@ fun TimePeriodSelector(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(
-                onClick = {
-                    LogUtils.i("FinanceScreen", "Navigating to previous period", "ui")
-                    onNavigatePrevious()
-                }
-            ) {
+            IconButton(onClick = onNavigatePrevious) {
                 Icon(
                     Icons.Default.ChevronLeft,
                     contentDescription = "Претходни период",
@@ -736,18 +720,10 @@ fun TimePeriodSelector(
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable {
-                    LogUtils.d("FinanceScreen", "Opening period type selector", "ui")
-                    showPeriodTypeDialog = true
-                }
+                modifier = Modifier.clickable { showPeriodTypeDialog = true }
             )
 
-            IconButton(
-                onClick = {
-                    LogUtils.i("FinanceScreen", "Navigating to next period", "ui")
-                    onNavigateNext()
-                }
-            ) {
+            IconButton(onClick = onNavigateNext) {
                 Icon(
                     Icons.Default.ChevronRight,
                     contentDescription = "Следећи период",
@@ -765,14 +741,11 @@ fun TimePeriodSelector(
                     is TimePeriod.Year -> "Врати се на тренутну годину"
                     is TimePeriod.Custom -> "Врати се на тренутни период"
                 },
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .clickable {
-                        LogUtils.i("FinanceScreen", "Resetting to current period", "ui")
-                        onResetToCurrentPeriod()
-                    }
-                    .padding(bottom = 8.dp),
+                    .clickable { onResetToCurrentPeriod() }
+                    .padding(bottom = 4.dp),
                 textDecoration = TextDecoration.Underline
             )
         }
@@ -780,29 +753,18 @@ fun TimePeriodSelector(
 
     if (showPeriodTypeDialog) {
         AlertDialog(
-            onDismissRequest = {
-                LogUtils.d("FinanceScreen", "Period type selector dismissed", "ui")
-                showPeriodTypeDialog = false
-            },
+            onDismissRequest = { showPeriodTypeDialog = false },
             title = { Text("Изаберите период") },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     PeriodType.entries.forEach { periodType ->
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    val periodName = when (periodType) {
-                                        PeriodType.YEAR -> "Year"
-                                        PeriodType.MONTH -> "Month"
-                                        PeriodType.WEEK -> "Week"
-                                        PeriodType.DAY -> "Day"
-                                        PeriodType.CUSTOM -> "Custom"
-                                    }
-                                    LogUtils.i("FinanceScreen", "Selected period type: $periodName", "ui")
                                     onPeriodTypeSelected(periodType)
                                     showPeriodTypeDialog = false
                                 },
@@ -816,7 +778,7 @@ fun TimePeriodSelector(
                                     PeriodType.DAY -> "Дан"
                                     PeriodType.CUSTOM -> "Прилагођени период"
                                 },
-                                modifier = Modifier.padding(16.dp)
+                                modifier = Modifier.padding(12.dp)
                             )
                         }
                     }
@@ -834,20 +796,18 @@ fun TimePeriodSelector(
 @Composable
 fun TransactionTypeSelector(
     selectedType: TransactionType,
-    onTypeSelected: (TransactionType) -> Unit
+    onTypeSelected: (TransactionType) -> Unit,
+    horizontalPadding: androidx.compose.ui.unit.Dp
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = horizontalPadding, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         FilterChip(
             selected = selectedType is TransactionType.Income,
-            onClick = {
-                LogUtils.i("FinanceScreen", "Selected transaction type: Income", "ui")
-                onTypeSelected(TransactionType.Income)
-            },
+            onClick = { onTypeSelected(TransactionType.Income) },
             label = { Text("Приходи") },
             leadingIcon = {
                 Icon(
@@ -861,10 +821,7 @@ fun TransactionTypeSelector(
 
         FilterChip(
             selected = selectedType is TransactionType.Expense,
-            onClick = {
-                LogUtils.i("FinanceScreen", "Selected transaction type: Expense", "ui")
-                onTypeSelected(TransactionType.Expense)
-            },
+            onClick = { onTypeSelected(TransactionType.Expense) },
             label = { Text("Расходи") },
             leadingIcon = {
                 Icon(
@@ -882,14 +839,14 @@ fun TransactionTypeSelector(
 fun CombinedHeaderWithSort(
     categoriesExpanded: Boolean,
     onToggleCategories: () -> Unit,
-    onSortSelected: (SortOption) -> Unit
+    onSortSelected: (SortOption) -> Unit,
+    isSmall: Boolean
 ) {
     var showSortDropdown by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 4.dp),
+            .fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -898,11 +855,11 @@ fun CombinedHeaderWithSort(
                 .clickable { onToggleCategories() }
                 .weight(1f),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
                 text = "Категорије трансакција",
-                style = MaterialTheme.typography.titleLarge
+                style = if (isSmall) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge
             )
             Icon(
                 imageVector = if (categoriesExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -912,9 +869,7 @@ fun CombinedHeaderWithSort(
         }
 
         Box {
-            IconButton(
-                onClick = { showSortDropdown = true }
-            ) {
+            IconButton(onClick = { showSortDropdown = true }) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Sort,
                     contentDescription = "Сортирај трансакције",
@@ -956,6 +911,7 @@ fun CombinedHeaderWithSort(
 fun TransactionItem(
     transaction: UITransaction,
     numberFormat: NumberFormat,
+    isSmall: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -979,6 +935,8 @@ fun TransactionItem(
         }
     }
 
+    val itemPadding = if (isSmall) 10.dp else 14.dp
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -988,7 +946,7 @@ fun TransactionItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(itemPadding),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -997,65 +955,72 @@ fun TransactionItem(
                     is IncomeTransaction -> {
                         Text(
                             text = transaction.income.description,
-                            style = MaterialTheme.typography.titleMedium
+                            style = if (isSmall) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
                         )
                         Text(
                             text = transaction.date,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        transaction.income.category.let { category ->
-                            Text(
-                                text = category,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = categoryColor
-                            )
-                        }
+                        Text(
+                            text = transaction.income.category,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = categoryColor
+                        )
                     }
                     is ExpenseTransaction -> {
                         Text(
                             text = transaction.expense.description,
-                            style = MaterialTheme.typography.titleMedium
+                            style = if (isSmall) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
                         )
                         Text(
                             text = transaction.date,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        transaction.expense.category.let { category ->
-                            Text(
-                                text = category,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = categoryColor
-                            )
-                        }
+                        Text(
+                            text = transaction.expense.category,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = categoryColor
+                        )
                     }
                 }
             }
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = numberFormat.format(transaction.amount),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = if (isSmall) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                     color = categoryColor
                 )
 
-                IconButton(onClick = onEdit) {
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier.size(if (isSmall) 32.dp else 40.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
                         contentDescription = "Измени",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(if (isSmall) 18.dp else 22.dp)
                     )
                 }
 
-                IconButton(onClick = onDelete) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(if (isSmall) 32.dp else 40.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Обриши",
-                        tint = MaterialTheme.colorScheme.error
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(if (isSmall) 18.dp else 22.dp)
                     )
                 }
             }
@@ -1072,27 +1037,28 @@ fun CategoryCard(
     amount: String,
     count: Int,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSmall: Boolean = false
 ) {
     Card(
         modifier = modifier
-            .heightIn(min = 160.dp)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(if (isSmall) 8.dp else 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (isSmall) 8.dp else 12.dp)
         ) {
+            // Ikonica kategorije
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(if (isSmall) 32.dp else 40.dp)
+                    .clip(RoundedCornerShape(8.dp))
                     .background(backgroundColor),
                 contentAlignment = Alignment.Center
             ) {
@@ -1100,39 +1066,51 @@ fun CategoryCard(
                     imageVector = icon,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(if (isSmall) 18.dp else 22.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Tekstualni podaci u vertikalnoj koloni (zauzima znatno manje visine)
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = categoryName,
+                        style = if (isSmall) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Text(
+                        text = percentage,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-            Text(
-                text = categoryName,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = percentage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Text(
-                text = amount,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Text(
-                text = "$count трансакција",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = amount,
+                        style = if (isSmall) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "$count траж.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
