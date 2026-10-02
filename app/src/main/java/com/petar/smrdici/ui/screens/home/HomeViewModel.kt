@@ -132,9 +132,20 @@ class HomeViewModel(
     }
 
     init {
-        loadTodayEvents()
-        loadExpenseData()
-        loadExpenseHistoryData()
+        loadDashboardDataSequentially()
+    }
+
+    private fun loadDashboardDataSequentially() {
+        viewModelScope.launch {
+            // 1. Prvo učitaj današnje događaje (vrh ekrana)
+            loadTodayEvents()
+
+            // 2. Kada se događaji učitaju, pređi na pita dijagram
+            loadExpenseData()
+
+            // 3. Na kraju učitaj istoriju troškova (dno ekrana)
+            loadExpenseHistoryData()
+        }
     }
 
     fun refreshExpenseData() {
