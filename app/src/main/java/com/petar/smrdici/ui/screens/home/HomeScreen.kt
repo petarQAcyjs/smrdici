@@ -41,9 +41,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,13 +53,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.airbnb.lottie.compose.LottieAnimation
-import com.airbnb.lottie.compose.LottieCompositionSpec
-import com.airbnb.lottie.compose.LottieConstants
-import com.airbnb.lottie.compose.animateLottieCompositionAsState
-import com.airbnb.lottie.compose.rememberLottieComposition
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.ui.auth.AuthState
@@ -76,6 +71,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 
 // Data classes for stacked bar chart
 data class CategoryExpense(
@@ -242,22 +239,10 @@ fun TodayActivitiesCard(
     events: List<Event>,
     onEventClick: (Event) -> Unit,
     modifier: Modifier = Modifier,
-    lottieResId: Int = R.raw.homeanimation
+    imageResId: Int = R.drawable.home_image // Promijeni 'home_image' u naziv tvoje PNG slike!
 ) {
     val cardColor = Color(0xFF3F8CFF)
     val textColor = Color.White
-
-    val lottieComposition by rememberLottieComposition(
-        LottieCompositionSpec.RawRes(lottieResId)
-    )
-
-    val lottieAnimationState by animateLottieCompositionAsState(
-        composition = lottieComposition,
-        iterations = LottieConstants.IterateForever,
-        isPlaying = true,
-        speed = 1.0f,
-        restartOnPlay = false
-    )
 
     Card(
         modifier = modifier,
@@ -322,13 +307,12 @@ fun TodayActivitiesCard(
                     .fillMaxHeight(),
                 contentAlignment = Alignment.Center
             ) {
-                LottieAnimation(
-                    composition = lottieComposition,
-                    progress = { lottieAnimationState },
+                Image(
+                    painter = painterResource(id = imageResId),
+                    contentDescription = "Home Image",
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(8.dp),
-                    enableMergePaths = true
+                        .padding(8.dp)
                 )
             }
         }
