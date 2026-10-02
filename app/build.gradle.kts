@@ -102,11 +102,11 @@ dependencies {
     // Firebase
     //noinspection LoginCredentials
     implementation(libs.play.services.auth)
-    implementation(libs.firebase.auth.ktx)
-    implementation(libs.firebase.firestore.ktx)
-    implementation(libs.firebase.common.ktx)
-    implementation(libs.firebase.database.ktx)
-    implementation(libs.firebase.messaging.ktx)
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.firebase.common)
+    implementation(libs.firebase.database)
+    implementation(libs.firebase.messaging)
 
     // Calendar
     implementation(libs.calendar.compose)
