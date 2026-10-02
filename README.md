@@ -99,13 +99,3 @@ POSIX shell.
 2. Open the project in Android Studio
 3. Sync Gradle files
 4. Run the app on an emulator or physical device (or use the Gradle commands above)
-
-## Roadmap
-
-- Richer finance reports and charts
-- Recurring events in the calendar
-- Sharing lists and events with family members
-- Improved notifications and event reminders
-- Sync with Google Calendar and other calendar apps
-- Themes and app appearance customization
-- Performance and memory usage optimization
