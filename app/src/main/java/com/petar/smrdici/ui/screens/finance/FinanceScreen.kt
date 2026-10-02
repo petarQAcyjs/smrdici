@@ -1,6 +1,9 @@
 package com.petar.smrdici.ui.screens.finance
 
 import android.annotation.SuppressLint
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
@@ -31,6 +35,8 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
@@ -39,6 +45,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -52,22 +60,26 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryIcons
@@ -84,33 +96,14 @@ import org.threeten.bp.format.DateTimeFormatter
 import org.threeten.bp.temporal.ChronoUnit
 import java.text.NumberFormat
 import java.util.Locale
-import androidx.compose.ui.platform.LocalContext
 import kotlin.math.abs
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.runtime.rememberCoroutineScope
 
-// Define predefined colors for categories
 private val predefinedColors = listOf(
-    Color(0xFFE57373), // Red
-    Color(0xFFFFB74D), // Orange
-    Color(0xFFFFF176), // Yellow
-    Color(0xFFAED581), // Light Green
-    Color(0xFF4DD0E1), // Cyan
-    Color(0xFF9575CD), // Purple
-    Color(0xFFF06292), // Pink
-    Color(0xFF7986CB), // Indigo
-    Color(0xFF4DB6AC), // Teal
-    Color(0xFFFF8A65)  // Deep Orange
+    Color(0xFFE57373), Color(0xFFFFB74D), Color(0xFFFFF176),
+    Color(0xFFAED581), Color(0xFF4DD0E1), Color(0xFF9575CD),
+    Color(0xFFF06292), Color(0xFF7986CB), Color(0xFF4DB6AC),
+    Color(0xFFFF8A65)
 )
 
 @SuppressLint("DefaultLocale")
@@ -125,9 +118,9 @@ fun FinanceScreen(
     val state by viewModel.state.collectAsState()
     val authState by authViewModel.authState.collectAsState()
     val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
-    
+
     var isRefreshing by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope() // <-- Dodato '= rememberCoroutineScope()'
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
         onRefresh = {
@@ -139,8 +132,6 @@ fun FinanceScreen(
         }
     )
 
-
-    // Add a navigation observer to refresh data when returning from other screens
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -155,13 +146,12 @@ fun FinanceScreen(
         }
     }
 
-    val numberFormat = remember { 
+    val numberFormat = remember {
         NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("sr").setRegion("RS").build())
     }
 
     var showAccountSelector by remember { mutableStateOf(false) }
 
-    // Create currency formatters for each currency
     val currencyFormatters = remember {
         mapOf(
             "RSD" to NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("sr").setRegion("RS").build()),
@@ -191,11 +181,10 @@ fun FinanceScreen(
                         when (state.selectedTransactionType) {
                             is TransactionType.Income -> navController.navigate(Screen.AddIncome.route)
                             is TransactionType.Expense -> {
-                                // Pass the selected date when navigating to AddExpense
                                 val selectedDate = when (val period = state.selectedTimePeriod) {
                                     is TimePeriod.Day -> period.date.toString()
-                                    is TimePeriod.Week, is TimePeriod.Month, is TimePeriod.Year, is TimePeriod.Custom -> 
-                                        LocalDate.now().toString() // Default to today for other period types
+                                    is TimePeriod.Week, is TimePeriod.Month, is TimePeriod.Year, is TimePeriod.Custom ->
+                                        LocalDate.now().toString()
                                 }
                                 navController.navigate(Screen.AddExpense.createRoute(selectedDate))
                             }
@@ -221,7 +210,6 @@ fun FinanceScreen(
                     .fillMaxSize()
                     .padding(top = paddingValues.calculateTopPadding())
             ) {
-                // Time Period Selector
                 TimePeriodSelector(
                     currentPeriod = state.selectedTimePeriod,
                     onNavigatePrevious = { viewModel.navigateToPreviousPeriod() },
@@ -231,13 +219,11 @@ fun FinanceScreen(
                     onPeriodTypeSelected = { viewModel.setTimePeriodType(it) }
                 )
 
-                // Transaction Type Selector
                 TransactionTypeSelector(
                     selectedType = state.selectedTransactionType,
                     onTypeSelected = { viewModel.setTransactionType(it) }
                 )
 
-                // Total Amount Card
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -255,7 +241,6 @@ fun FinanceScreen(
                             .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Account selection button
                         Button(
                             onClick = { showAccountSelector = true },
                             colors = ButtonDefaults.buttonColors(
@@ -271,13 +256,11 @@ fun FinanceScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // If a specific account is selected, show its balance in native currency
                         if (state.selectedAccountId != null) {
                             val accountBalance = state.accountBalances[state.selectedAccountId]
                             if (accountBalance != null) {
                                 val nativeCurrencyFormatter = currencyFormatters[accountBalance.nativeCurrency]
-                                
-                                // Display transaction total for the period
+
                                 Text(
                                     text = when (state.selectedTransactionType) {
                                         is TransactionType.Income -> "Укупни приходи за период:"
@@ -289,7 +272,7 @@ fun FinanceScreen(
                                         is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
                                     }
                                 )
-                                
+
                                 Text(
                                     text = nativeCurrencyFormatter?.format(accountBalance.transactionTotal)
                                         ?: "${accountBalance.transactionTotal} ${accountBalance.nativeCurrency}",
@@ -299,8 +282,7 @@ fun FinanceScreen(
                                         is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
                                     }
                                 )
-                                
-                                // Show account balance
+
                                 val account = state.accounts.find { it.id == state.selectedAccountId }
                                 if (account != null) {
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -309,23 +291,21 @@ fun FinanceScreen(
                                         thickness = 1.dp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                                     )
-                                    
+
                                     Text(
                                         text = "Тренутно стање рачуна:",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    
-                                    // Get the current balance from the accountBalances map which has the latest data
-                                    val currentBalance = state.accountBalances[account.id]?.let { 
-                                        // Use the current balance from repository
+
+                                    val currentBalance = state.accountBalances[account.id]?.let {
                                         val currentAccountBalance = accountBalance.currentBalance
-                                        
+
                                         nativeCurrencyFormatter?.format(currentAccountBalance)
                                             ?: "$currentAccountBalance ${accountBalance.nativeCurrency}"
                                     } ?: (nativeCurrencyFormatter?.format(account.balance)
                                         ?: "${account.balance} ${accountBalance.nativeCurrency}")
-                                    
+
                                     Text(
                                         text = currentBalance,
                                         style = MaterialTheme.typography.titleLarge,
@@ -334,9 +314,8 @@ fun FinanceScreen(
                                 }
                             }
                         } else {
-                            // Show total in EUR for all accounts
                             val eurFormatter = currencyFormatters["EUR"]
-                            
+
                             Text(
                                 text = when (state.selectedTransactionType) {
                                     is TransactionType.Income -> "Укупни приходи за период (EUR):"
@@ -348,7 +327,7 @@ fun FinanceScreen(
                                     is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
                                 }
                             )
-                            
+
                             Text(
                                 text = eurFormatter?.format(state.totalAmountInEur) ?: "${state.totalAmountInEur} EUR",
                                 style = MaterialTheme.typography.headlineMedium,
@@ -358,7 +337,6 @@ fun FinanceScreen(
                                 }
                             )
 
-                            // Show individual account balances
                             if (state.accountBalances.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 HorizontalDivider(
@@ -366,16 +344,16 @@ fun FinanceScreen(
                                     thickness = 1.dp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                                 )
-                                
+
                                 Text(
                                     text = "По рачунима:",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.align(Alignment.Start)
                                 )
-                                
+
                                 Spacer(modifier = Modifier.height(4.dp))
-                                
+
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -408,8 +386,7 @@ fun FinanceScreen(
                         }
                     }
                 }
-                
-                // Category Summary Cards - with reduced spacing
+
                 if (state.categorySummaries.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(
@@ -417,9 +394,8 @@ fun FinanceScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(state.categorySummaries.take(5)) { category ->
-                            // Find the icon for this category
                             val icon = CategoryIcons.findIconByName(category.iconName)
-                            
+
                             if (icon != null) {
                                 CategorySummaryCard(
                                     icon = icon,
@@ -434,17 +410,15 @@ fun FinanceScreen(
                         }
                     }
                 } else {
-                    // Add minimal spacing when no category summary cards
                     Spacer(modifier = Modifier.height(4.dp))
                 }
 
-                // Account Selection Dialog
                 if (showAccountSelector) {
                     LogUtils.d("FinanceScreen", "Opening account selector dialog", "ui")
                     AlertDialog(
-                        onDismissRequest = { 
+                        onDismissRequest = {
                             LogUtils.d("FinanceScreen", "Account selector dialog dismissed", "ui")
-                            showAccountSelector = false 
+                            showAccountSelector = false
                         },
                         title = { Text("Изаберите рачун") },
                         text = {
@@ -453,7 +427,6 @@ fun FinanceScreen(
                                     .verticalScroll(rememberScrollState()),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                // All Accounts Option
                                 Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -473,7 +446,6 @@ fun FinanceScreen(
                                     )
                                 }
 
-                                // Individual Accounts
                                 state.accounts.forEach { account ->
                                     Surface(
                                         modifier = Modifier
@@ -504,7 +476,6 @@ fun FinanceScreen(
                     )
                 }
 
-                // Category Details Dialog
                 state.selectedCategory?.let { category ->
                     val icon = CategoryIcons.findIconByName(category.iconName)
                     if (icon != null) {
@@ -521,7 +492,6 @@ fun FinanceScreen(
                     }
                 }
 
-                // Transactions List
                 if (state.isLoading) {
                     LogUtils.d("FinanceScreen", "Loading transactions...", "ui")
                     Box(
@@ -545,11 +515,9 @@ fun FinanceScreen(
                     }
                 } else {
                     LogUtils.d("FinanceScreen", "Displaying ${state.transactions.size} transactions from unified collection", "ui")
-                    
-                    // Collapse state for categories section
+
                     var categoriesExpanded by remember { mutableStateOf(false) }
-                    
-                    // Group transactions by category
+
                     val transactionsByCategory = remember(state.transactions) {
                         state.transactions.groupBy { transaction ->
                             when (transaction) {
@@ -558,19 +526,16 @@ fun FinanceScreen(
                             }
                         }
                     }
-                    
-                    // Calculate total amount
+
                     val totalAmount = remember(state.transactions) {
                         state.transactions.sumOf { it.amount }
                     }
-                    
-                    // Create category cards
+
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Combined Header with Sort Options
                         item {
                             CombinedHeaderWithSort(
                                 categoriesExpanded = categoriesExpanded,
@@ -578,18 +543,19 @@ fun FinanceScreen(
                                 onSortSelected = { viewModel.setSortOption(it) }
                             )
                         }
-                        
-                        // Category grid - 2 columns (collapsible)
+
                         item {
                             AnimatedVisibility(
                                 visible = categoriesExpanded,
                                 enter = expandVertically(),
                                 exit = shrinkVertically()
                             ) {
-                                val categories = transactionsByCategory.keys.toList()
+                                val categories = state.categorySummaries
+                                    .map { it.categoryName }
+                                    .filter { transactionsByCategory.containsKey(it) }
                                 val itemsPerRow = 2
                                 val rows = categories.chunked(itemsPerRow)
-                                
+
                                 Column(
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
@@ -602,30 +568,25 @@ fun FinanceScreen(
                                                 val transactions = transactionsByCategory[category] ?: emptyList()
                                                 val categoryAmount = transactions.sumOf { it.amount }
                                                 val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
-                                                
-                                                // Find icon for this category
+
                                                 val isExpense = transactions.firstOrNull() is ExpenseTransaction
-                                                // Use a default icon based on transaction type
                                                 val iconName = when {
-                                                    isExpense -> "ShoppingCart" // Default expense icon
-                                                    else -> "AttachMoney" // Default income icon
+                                                    isExpense -> "ShoppingCart"
+                                                    else -> "AttachMoney"
                                                 }
-                                                
+
                                                 val icon = CategoryIcons.findIconByName(iconName)
-                                                
-                                                // Get the saved color from CategoryManager if available
+
                                                 val categoryManager = CategoryManager.getInstance(LocalContext.current)
                                                 val savedColorValue = categoryManager.getCategoryColor(category, isExpense)
-                                                
-                                                // Use the saved color or fall back to a color based on category hash code
+
                                                 val color = if (savedColorValue != null) {
                                                     Color(savedColorValue)
                                                 } else {
-                                                    // Use a color based on category hash code for consistency
                                                     val colorIndex = abs(category.hashCode() % predefinedColors.size)
                                                     predefinedColors[colorIndex]
                                                 }
-                                                
+
                                                 if (icon != null) {
                                                     CategoryCard(
                                                         icon = icon,
@@ -635,7 +596,6 @@ fun FinanceScreen(
                                                         amount = numberFormat.format(categoryAmount),
                                                         count = transactions.size,
                                                         onClick = {
-                                                            // Create a category summary object and select it
                                                             val categorySummary = CategorySummary(
                                                                 categoryName = category,
                                                                 iconName = iconName,
@@ -651,8 +611,7 @@ fun FinanceScreen(
                                                     Spacer(modifier = Modifier.weight(1f))
                                                 }
                                             }
-                                            
-                                            // Add spacers for incomplete rows
+
                                             repeat(itemsPerRow - rowItems.size) {
                                                 Spacer(modifier = Modifier.weight(1f))
                                             }
@@ -661,8 +620,7 @@ fun FinanceScreen(
                                 }
                             }
                         }
-                        
-                        // Individual transactions header
+
                         item {
                             Spacer(modifier = Modifier.height(4.dp))
                             HorizontalDivider()
@@ -673,8 +631,7 @@ fun FinanceScreen(
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
-                        
-                        // Individual transactions
+
                         items(state.transactions) { transaction ->
                             TransactionItem(
                                 transaction = transaction,
@@ -715,8 +672,7 @@ fun FinanceScreen(
             modifier = Modifier.align(Alignment.TopCenter)
         )
     }
-    
-    // Display error if any
+
     if (state.error != null) {
         LaunchedEffect(state.error) {
             LogUtils.e("FinanceScreen", "Error: ${state.error}", category = "ui")
@@ -749,9 +705,9 @@ fun TimePeriodSelector(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
-                onClick = { 
+                onClick = {
                     LogUtils.i("FinanceScreen", "Navigating to previous period", "ui")
-                    onNavigatePrevious() 
+                    onNavigatePrevious()
                 }
             ) {
                 Icon(
@@ -760,7 +716,7 @@ fun TimePeriodSelector(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            
+
             Text(
                 text = when (currentPeriod) {
                     is TimePeriod.Day -> currentPeriod.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
@@ -780,16 +736,16 @@ fun TimePeriodSelector(
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable { 
+                modifier = Modifier.clickable {
                     LogUtils.d("FinanceScreen", "Opening period type selector", "ui")
-                    showPeriodTypeDialog = true 
+                    showPeriodTypeDialog = true
                 }
             )
 
             IconButton(
-                onClick = { 
+                onClick = {
                     LogUtils.i("FinanceScreen", "Navigating to next period", "ui")
-                    onNavigateNext() 
+                    onNavigateNext()
                 }
             ) {
                 Icon(
@@ -799,7 +755,7 @@ fun TimePeriodSelector(
                 )
             }
         }
-        
+
         if (!isCurrentPeriod) {
             Text(
                 text = when (currentPeriod) {
@@ -824,9 +780,9 @@ fun TimePeriodSelector(
 
     if (showPeriodTypeDialog) {
         AlertDialog(
-            onDismissRequest = { 
+            onDismissRequest = {
                 LogUtils.d("FinanceScreen", "Period type selector dismissed", "ui")
-                showPeriodTypeDialog = false 
+                showPeriodTypeDialog = false
             },
             title = { Text("Изаберите период") },
             text = {
@@ -888,9 +844,9 @@ fun TransactionTypeSelector(
     ) {
         FilterChip(
             selected = selectedType is TransactionType.Income,
-            onClick = { 
+            onClick = {
                 LogUtils.i("FinanceScreen", "Selected transaction type: Income", "ui")
-                onTypeSelected(TransactionType.Income) 
+                onTypeSelected(TransactionType.Income)
             },
             label = { Text("Приходи") },
             leadingIcon = {
@@ -902,12 +858,12 @@ fun TransactionTypeSelector(
             },
             modifier = Modifier.weight(1f)
         )
-        
+
         FilterChip(
             selected = selectedType is TransactionType.Expense,
-            onClick = { 
+            onClick = {
                 LogUtils.i("FinanceScreen", "Selected transaction type: Expense", "ui")
-                onTypeSelected(TransactionType.Expense) 
+                onTypeSelected(TransactionType.Expense)
             },
             label = { Text("Расходи") },
             leadingIcon = {
@@ -929,7 +885,7 @@ fun CombinedHeaderWithSort(
     onSortSelected: (SortOption) -> Unit
 ) {
     var showSortDropdown by remember { mutableStateOf(false) }
-    
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -937,7 +893,6 @@ fun CombinedHeaderWithSort(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left side: Categories title with expand/collapse
         Row(
             modifier = Modifier
                 .clickable { onToggleCategories() }
@@ -955,8 +910,7 @@ fun CombinedHeaderWithSort(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        
-        // Right side: Sort options
+
         Box {
             IconButton(
                 onClick = { showSortDropdown = true }
@@ -967,7 +921,7 @@ fun CombinedHeaderWithSort(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            
+
             DropdownMenu(
                 expanded = showSortDropdown,
                 onDismissRequest = { showSortDropdown = false }
@@ -1007,27 +961,24 @@ fun TransactionItem(
 ) {
     val context = LocalContext.current
     val categoryManager = CategoryManager.getInstance(context)
-    
-    // Get category name and whether it's an expense
+
     val categoryName = when (transaction) {
         is IncomeTransaction -> transaction.income.category
         is ExpenseTransaction -> transaction.expense.category
     }
     val isExpense = transaction is ExpenseTransaction
-    
-    // Get the saved color from CategoryManager if available
+
     val savedColorValue = categoryManager.getCategoryColor(categoryName, isExpense)
     val categoryColor = if (savedColorValue != null) {
         Color(savedColorValue)
     } else {
-        // Use default colors if no custom color is set
         if (isExpense) {
             MaterialTheme.colorScheme.error
         } else {
             MaterialTheme.colorScheme.primary
         }
     }
-    
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -1081,7 +1032,7 @@ fun TransactionItem(
                     }
                 }
             }
-            
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -1091,7 +1042,7 @@ fun TransactionItem(
                     style = MaterialTheme.typography.titleMedium,
                     color = categoryColor
                 )
-                
+
                 IconButton(onClick = onEdit) {
                     Icon(
                         imageVector = Icons.Default.Edit,
@@ -1099,7 +1050,7 @@ fun TransactionItem(
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
-                
+
                 IconButton(onClick = onDelete) {
                     Icon(
                         imageVector = Icons.Default.Delete,
@@ -1152,31 +1103,31 @@ fun CategoryCard(
                     modifier = Modifier.size(24.dp)
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Text(
                 text = categoryName,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 textAlign = TextAlign.Center
             )
-            
+
             Spacer(modifier = Modifier.height(4.dp))
-            
+
             Text(
                 text = percentage,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            
+
             Text(
                 text = amount,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
-            
+
             Text(
                 text = "$count трансакција",
                 style = MaterialTheme.typography.bodySmall,
