@@ -121,12 +121,10 @@ dependencies {
 
     // Календарска компонента
     implementation(libs.calendar.compose)
-    
-    // Lottie за анимације
-    implementation(libs.lottie.compose)
 
     // Додајемо или ажурирамо зависност за Material3
     implementation(libs.androidx.material3.library)
+    implementation("androidx.appcompat:appcompat:1.6.1")
     
     // Gson за JSON сeријализацију
     implementation(libs.gson)

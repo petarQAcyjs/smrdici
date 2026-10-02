@@ -2,7 +2,9 @@ package com.petar.smrdici.data.model
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.PropertyName
+import androidx.compose.runtime.Immutable
 
+@Immutable
 data class ShoppingList(
     var id: String? = null,
     val title: String = "",
@@ -16,6 +18,7 @@ data class ShoppingList(
     val items: List<ShoppingItem> = emptyList()
 )
 
+@Immutable
 data class ShoppingItem(
     val id: String = "",
     val name: String = "",

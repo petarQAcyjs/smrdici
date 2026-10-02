@@ -31,8 +31,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.Random
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.cos
-import kotlin.math.sin
 
 class NotificationService(private val context: Context) {
 
@@ -115,7 +113,6 @@ class NotificationService(private val context: Context) {
 
         val notificationMessage = eventData.message
 
-
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(eventData.title)
             .setContentText(notificationMessage)
@@ -182,7 +179,6 @@ class NotificationService(private val context: Context) {
             val messageText = "${eventData.title} - $eventTimeStr"
             messagingStyle.addMessage(messageText, System.currentTimeMillis(), null as Person?)
         }
-
 
         val summaryBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
@@ -336,8 +332,6 @@ class NotificationService(private val context: Context) {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setSmallIcon(R.drawable.ic_notification)
-            .setLargeIcon(createMorningIcon())
-            .setColor("#FF9800".toColorInt())
 
         if (notificationManager.notificationSoundEnabled) {
             builder.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
@@ -359,50 +353,4 @@ class NotificationService(private val context: Context) {
             }
         }
     }
-
-    private fun createMorningIcon(): Bitmap {
-        val size = 128
-        val bitmap = createBitmap(size, size)
-        val canvas = Canvas(bitmap)
-        val paint = Paint().apply { isAntiAlias = true }
-
-        paint.color = "#FFEB3B".toColorInt()
-        canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
-
-        paint.color = "#FF9800".toColorInt()
-        paint.strokeWidth = 8f
-        val centerX = size / 2f
-        val centerY = size / 2f
-        val rayLength = size * 0.45f
-        val rayOuterLength = size * 0.35f
-
-        for (i in 0 until 8) {
-            val angle = Math.toRadians((i * 45).toDouble())
-            val startX = centerX + (rayLength * 0.4 * cos(angle)).toFloat()
-            val startY = centerY + (rayLength * 0.4 * sin(angle)).toFloat()
-            val endX = centerX + (rayOuterLength * cos(angle)).toFloat()
-            val endY = centerY + (rayOuterLength * sin(angle)).toFloat()
-            canvas.drawLine(startX, startY, endX, endY, paint)
-        }
-
-        paint.color = "#795548".toColorInt()
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 4f
-
-        val smileRadius = size * 0.2f
-        canvas.drawArc(
-            centerX - smileRadius,
-            centerY - smileRadius / 2,
-            centerX + smileRadius,
-            centerY + smileRadius,
-            0f, 180f, false, paint
-        )
-
-        val eyeSize = size * 0.1f
-        canvas.drawCircle(centerX - eyeSize, centerY - eyeSize, eyeSize / 4, paint)
-        canvas.drawCircle(centerX + eyeSize, centerY - eyeSize, eyeSize / 4, paint)
-
-        return bitmap
-    }
-
 }

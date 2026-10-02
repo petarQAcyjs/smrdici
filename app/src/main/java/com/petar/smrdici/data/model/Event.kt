@@ -2,7 +2,9 @@ package com.petar.smrdici.data.model
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.PropertyName
+import androidx.compose.runtime.Immutable
 
+@Immutable
 data class Event(
     var id: String? = null,
     val title: String = "",
