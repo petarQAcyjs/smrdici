@@ -71,7 +71,8 @@
 -keep class * implements com.google.gson.JsonDeserializer
 
 # Model klase
--keep class com.petar.smrdici.model.** { *; }
+-keep class com.petar.smrdici.data.model.** { *; }
+-keepclassmembers class com.petar.smrdici.data.model.** { *; }
 
 # Androidx Navigation
 -keep class androidx.navigation.** { *; }

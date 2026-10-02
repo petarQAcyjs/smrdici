@@ -160,61 +160,29 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
     private val transactionRepository: TransactionRepository by lazy { TransactionRepository.getInstance() }
     private val accountRepository: AccountRepository by lazy { AccountRepository.getInstance() }
 
-    // Zastavica da li su podaci već učitani bar jednom u aplikaciji
     private var hasInitialLoad = false
 
     private val categoryColors = listOf(
-        Color(0xFFFF5252),  // Red
-        Color(0xFFFF9800),  // Orange
-        Color(0xFFFFEB3B),  // Yellow
-        Color(0xFF4CAF50),  // Green
-        Color(0xFF2196F3),  // Blue
-        Color(0xFF673AB7),  // Purple
-        Color(0xFFE91E63),  // Pink
-        Color(0xFF009688),  // Teal
-        Color(0xFF795548),  // Brown
-        Color(0xFF607D8B),  // Blue Grey
-        Color(0xFFFFA000),  // Amber
-        Color(0xFF00BCD4),  // Cyan
-        Color(0xFF3F51B5)   // Indigo
+        Color(0xFFFF5252), Color(0xFFFF9800), Color(0xFFFFEB3B),
+        Color(0xFF4CAF50), Color(0xFF2196F3), Color(0xFF673AB7),
+        Color(0xFFE91E63), Color(0xFF009688), Color(0xFF795548),
+        Color(0xFF607D8B), Color(0xFFFFA000), Color(0xFF00BCD4),
+        Color(0xFF3F51B5)
     )
 
     private val categoryIconMapping = mapOf(
-        "GROCERIES" to "LocalGroceryStore",
-        "UTILITIES" to "Receipt",
-        "RENT" to "Home",
-        "TRANSPORTATION" to "DirectionsCar",
-        "ENTERTAINMENT" to "SportsEsports",
-        "HEALTH" to "LocalHospital",
-        "EDUCATION" to "School",
-        "CLOTHING" to "Checkroom",
-        "TRAVEL" to "Flight",
-        "FOOD" to "Restaurant",
-        "COFFEE" to "LocalCafe",
-        "ALCOHOL" to "LocalBar",
-        "CIGARETTES" to "SmokingRooms",
-        "GIFTS" to "CardGiftcard",
-        "SUBSCRIPTIONS" to "Subscriptions",
-        "ELECTRONICS" to "Devices",
-        "HOME" to "Home",
-        "BEAUTY" to "Face",
-        "PETS" to "Pets",
-        "SPORTS" to "FitnessCenter",
-        "INVESTMENTS" to "TrendingUp",
-        "DEBT" to "CreditCard",
-        "INSURANCE" to "Security",
-        "TAXES" to "Receipt",
-        "CHARITY" to "Favorite",
-        "BUSINESS" to "BusinessCenter",
-        "CHILDREN" to "ChildCare",
-        "PERSONAL_CARE" to "Face",
-        "SHOPPING" to "ShoppingCart",
-        "MAINTENANCE" to "Handyman",
-        "SERVICES" to "Receipt",
-        "SAVINGS" to "Savings",
-        "LOAN" to "CreditCard",
-        "RAMPA" to "DirectionsCar",
-        "PARKING" to "DirectionsCar",
+        "GROCERIES" to "LocalGroceryStore", "UTILITIES" to "Receipt", "RENT" to "Home",
+        "TRANSPORTATION" to "DirectionsCar", "ENTERTAINMENT" to "SportsEsports",
+        "HEALTH" to "LocalHospital", "EDUCATION" to "School", "CLOTHING" to "Checkroom",
+        "TRAVEL" to "Flight", "FOOD" to "Restaurant", "COFFEE" to "LocalCafe",
+        "ALCOHOL" to "LocalBar", "CIGARETTES" to "SmokingRooms", "GIFTS" to "CardGiftcard",
+        "SUBSCRIPTIONS" to "Subscriptions", "ELECTRONICS" to "Devices", "HOME" to "Home",
+        "BEAUTY" to "Face", "PETS" to "Pets", "SPORTS" to "FitnessCenter",
+        "INVESTMENTS" to "TrendingUp", "DEBT" to "CreditCard", "INSURANCE" to "Security",
+        "TAXES" to "Receipt", "CHARITY" to "Favorite", "BUSINESS" to "BusinessCenter",
+        "CHILDREN" to "ChildCare", "PERSONAL_CARE" to "Face", "SHOPPING" to "ShoppingCart",
+        "MAINTENANCE" to "Handyman", "SERVICES" to "Receipt", "SAVINGS" to "Savings",
+        "LOAN" to "CreditCard", "RAMPA" to "DirectionsCar", "PARKING" to "DirectionsCar",
         "OTHER" to "Receipt"
     )
 
@@ -232,7 +200,6 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
             categoryTransactions = emptyList()
         )
 
-        // Ako su podaci već ranije učitani, radimo tiho osvežavanje u pozadini bez skidanja elemenata sa ekrana
         if (hasInitialLoad) {
             refreshData(silent = true)
         } else {
@@ -374,9 +341,15 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
 
     fun setSortOption(sortOption: SortOption) {
         LogUtils.i("FinanceViewModel", "Setting sort option to: $sortOption", category = "finance")
-        _state.value = _state.value.copy(sortOption = sortOption)
-        val sortedTransactions = sortTransactions(_state.value.transactions, sortOption)
-        _state.value = _state.value.copy(transactions = sortedTransactions)
+        val currentState = _state.value
+        val sortedTransactions = sortTransactions(currentState.transactions, sortOption)
+        val updatedSummaries = calculateCategorySummaries(sortedTransactions, sortOption)
+
+        _state.value = currentState.copy(
+            sortOption = sortOption,
+            transactions = sortedTransactions,
+            categorySummaries = updatedSummaries
+        )
     }
 
     fun selectCategory(category: CategorySummary) {
@@ -411,7 +384,9 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
 
                 val startDate = _state.value.selectedTimePeriod.calculateStartDate()
                 val endDate = _state.value.selectedTimePeriod.calculateEndDate()
-                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
+                val defaultAccount = _state.value.accounts.find { it.isDefault } ?: _state.value.accounts.firstOrNull()
+                val targetAccountId = _state.value.selectedAccountId ?: defaultAccount?.id
 
                 transactionRepository.getAllTransactions().collect { allTransactions ->
                     val filteredTransactions = withContext(Dispatchers.Default) {
@@ -422,12 +397,23 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                             }
                             if (!matchesType) return@filter false
 
-                            val transactionDate = LocalDate.parse(transaction.date, formatter)
-                            val inDateRange = (transactionDate.isEqual(startDate) || transactionDate.isAfter(startDate)) &&
-                                    (transactionDate.isEqual(endDate) || transactionDate.isBefore(endDate))
-                            if (!inDateRange) return@filter false
+                            if (targetAccountId != null && transaction.accountId != targetAccountId) {
+                                return@filter false
+                            }
 
-                            _state.value.selectedAccountId == null || transaction.accountId == _state.value.selectedAccountId
+                            val transactionDate = try {
+                                val parts = transaction.date.split("-")
+                                if (parts.size == 3) {
+                                    LocalDate.of(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+                                } else {
+                                    LocalDate.parse(transaction.date)
+                                }
+                            } catch (_: Exception) {
+                                null
+                            } ?: return@filter false
+
+                            (transactionDate.isEqual(startDate) || transactionDate.isAfter(startDate)) &&
+                                    (transactionDate.isEqual(endDate) || transactionDate.isBefore(endDate))
                         }
                     }
 
@@ -488,7 +474,7 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                     }
 
                     val sorted = sortTransactions(transactions, _state.value.sortOption)
-                    val summaries = calculateCategorySummaries(sorted)
+                    val summaries = calculateCategorySummaries(sorted, _state.value.sortOption)
 
                     Tuple4(accountBalancesMap, eurSum, sorted, summaries)
                 }
@@ -540,7 +526,10 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         }
     }
 
-    private fun calculateCategorySummaries(transactions: List<UITransaction>): List<CategorySummary> {
+    private fun calculateCategorySummaries(
+        transactions: List<UITransaction>,
+        sortOption: SortOption = _state.value.sortOption
+    ): List<CategorySummary> {
         if (transactions.isEmpty()) return emptyList()
 
         val categoryGroups = transactions.groupBy { transaction ->
@@ -578,9 +567,15 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                 amount = categoryAmount,
                 percentage = percentage
             )
-        }.sortedByDescending { it.amount }
+        }
 
-        return summaries
+        return when (sortOption) {
+            SortOption.AMOUNT_HIGHEST -> summaries.sortedByDescending { it.amount }
+            SortOption.AMOUNT_LOWEST -> summaries.sortedBy { it.amount }
+            SortOption.CATEGORY_A_Z -> summaries.sortedBy { it.categoryName }
+            SortOption.CATEGORY_Z_A -> summaries.sortedByDescending { it.categoryName }
+            SortOption.DATE_NEWEST, SortOption.DATE_OLDEST -> summaries.sortedByDescending { it.amount }
+        }
     }
 
     fun deleteIncome(incomeId: String) {
