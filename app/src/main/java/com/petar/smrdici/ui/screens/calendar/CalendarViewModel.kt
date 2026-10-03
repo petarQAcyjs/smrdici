@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import com.petar.smrdici.SmrdiciApplication
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
@@ -36,6 +35,9 @@ class CalendarViewModel @Inject constructor(
     private val _events = MutableStateFlow<List<Event>>(emptyList())
     val events: StateFlow<List<Event>> = _events
 
+    // Keš lista za SVE događaje
+    private val _allEvents = MutableStateFlow<List<Event>>(emptyList())
+
     private val _datesWithBirthdays = MutableStateFlow<Set<Date>>(emptySet())
     val datesWithBirthdays: StateFlow<Set<Date>> = _datesWithBirthdays
 
@@ -55,28 +57,16 @@ class CalendarViewModel @Inject constructor(
             try {
                 _uiState.value = CalendarUiState.Loading
 
-                eventRepository.cleanupDatabase()
 
-                val calendar = Calendar.getInstance().apply {
-                    time = _selectedDate.value
-                    set(Calendar.DAY_OF_MONTH, 1)
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
+                // Pretplaćujemo se na stream svih događaja uživo (iz baze / lokalnog keša)
+                eventRepository.getAllEventsFlow().collect { allFetchedEvents ->
+                    _allEvents.value = allFetchedEvents
+
+                    // Filtriramo događaje za trenutno izabrani datum
+                    val eventsForSelectedDate = filterEventsForDate(_selectedDate.value, allFetchedEvents)
+                    updateDatesWithEvents(allFetchedEvents)
+                    _uiState.value = CalendarUiState.Success(eventsForSelectedDate)
                 }
-                val startDate = calendar.time
-
-                calendar.add(Calendar.MONTH, 1)
-                calendar.add(Calendar.MILLISECOND, -1)
-                val endDate = calendar.time
-
-                eventRepository.getEvents(startDate, endDate)
-                    .collect { events ->
-                        _events.value = events
-                        updateDatesWithEvents(events)
-                        val eventsForSelectedDate = filterEventsForDate(_selectedDate.value, events)
-                        _uiState.value = CalendarUiState.Success(eventsForSelectedDate)
-                    }
             } catch (e: Exception) {
                 Log.e("CalendarViewModel", "Грешка при иницијализацији", e)
                 _uiState.value = CalendarUiState.Error("Грешка при иницијализацији")
@@ -110,7 +100,7 @@ class CalendarViewModel @Inject constructor(
         val selectedMonth = selectedCalendar.get(Calendar.MONTH)
         val selectedDayOfMonth = selectedCalendar.get(Calendar.DAY_OF_MONTH)
 
-        val filteredEvents = events.filter { event ->
+        return events.filter { event ->
             val isNormalEvent = event.startTime?.toDate()?.let { eventDate ->
                 !eventDate.before(startOfDay) && !eventDate.after(endOfDay)
             } ?: false
@@ -128,7 +118,6 @@ class CalendarViewModel @Inject constructor(
             if (event.isRecurringYearly && event.startTime != null) {
                 val eventDate = event.startTime.toDate()
                 val eventCalendar = Calendar.getInstance().apply { time = eventDate }
-                val selectedCalendar = Calendar.getInstance().apply { time = date }
 
                 if (eventCalendar.get(Calendar.MONTH) == selectedCalendar.get(Calendar.MONTH) &&
                     eventCalendar.get(Calendar.DAY_OF_MONTH) == selectedCalendar.get(Calendar.DAY_OF_MONTH) &&
@@ -153,48 +142,15 @@ class CalendarViewModel @Inject constructor(
             }
             event
         }
-
-        return filteredEvents
     }
 
-    private fun loadEvents() {
-        viewModelScope.launch {
-            try {
-                if (_events.value.isEmpty()) {
-                    _uiState.value = CalendarUiState.Loading
-                }
-
-                val calendar = Calendar.getInstance().apply {
-                    time = _selectedDate.value
-                    set(Calendar.DAY_OF_MONTH, 1)
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                }
-                val startDate = calendar.time
-
-                calendar.add(Calendar.MONTH, 1)
-                calendar.add(Calendar.MILLISECOND, -1)
-                val endDate = calendar.time
-
-                eventRepository.getEvents(startDate, endDate)
-                    .collect { events ->
-                        _events.value = events
-                        updateDatesWithEvents(events)
-                        val eventsForSelectedDate = filterEventsForDate(_selectedDate.value, events)
-                        _uiState.value = CalendarUiState.Success(eventsForSelectedDate)
-                    }
-            } catch (e: Exception) {
-                Log.e("CalendarViewModel", "Грешка при учитавању догађаја", e)
-                _uiState.value = CalendarUiState.Error("Грешка при учитавању догађаја")
-            }
-        }
-    }
-
+    // Promena izabranog datuma (sada vrši samo memorijsko filtriranje bez mrežnog opterećenja)
     fun selectDate(date: Date) {
         _selectedDate.value = date
 
-        val filteredEvents = filterEventsForDate(date, _events.value)
+        val filteredEvents = filterEventsForDate(date, _allEvents.value)
+        _events.value = filteredEvents
+        updateDatesWithEvents(_allEvents.value)
         _uiState.value = CalendarUiState.Success(filteredEvents)
 
         updateEventForm { form ->
@@ -305,7 +261,6 @@ class CalendarViewModel @Inject constructor(
 
                         val eventWithId = event.copy(id = eventId)
                         scheduleNotifications(eventWithId)
-                        loadEvents()
                     }
                     .onFailure { e ->
                         _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при додавању догађаја")
@@ -320,9 +275,6 @@ class CalendarViewModel @Inject constructor(
         viewModelScope.launch {
             cancelNotifications(eventId)
             eventRepository.deleteEvent(eventId)
-                .onSuccess {
-                    loadEvents()
-                }
                 .onFailure { e ->
                     _uiState.value = CalendarUiState.Error(e.message ?: "Грешка при брисању догађаја")
                 }
@@ -330,19 +282,9 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun loadEventsForDate(date: Date) {
-        viewModelScope.launch {
-            try {
-                if (_events.value.isEmpty()) {
-                    _uiState.value = CalendarUiState.Loading
-                    loadEvents()
-                } else {
-                    val filteredEvents = filterEventsForDate(date, _events.value)
-                    _uiState.value = CalendarUiState.Success(filteredEvents)
-                }
-            } catch (_: Exception) {
-                _uiState.value = CalendarUiState.Error("Грешка при филтрирању догађаја")
-            }
-        }
+        _selectedDate.value = date
+        val filteredEvents = filterEventsForDate(date, _allEvents.value)
+        _uiState.value = CalendarUiState.Success(filteredEvents)
     }
 
     fun startEditingEvent(event: Event) {
@@ -438,7 +380,7 @@ class CalendarViewModel @Inject constructor(
                 val appContext = SmrdiciApplication.getInstance().applicationContext
 
                 return CalendarViewModel(
-                    EventRepository(FirebaseFirestore.getInstance(), FirebaseAuth.getInstance()),
+                    EventRepository.getInstance(appContext),
                     FirebaseAuth.getInstance(),
                     appContext
                 ) as T
@@ -460,28 +402,29 @@ class CalendarViewModel @Inject constructor(
                 val eventCal = Calendar.getInstance().apply { time = date }
 
                 if (event.isRecurringYearly) {
-                    val virtualBirthdayCal = Calendar.getInstance().apply {
-                        set(Calendar.YEAR, currentViewYear)
-                        set(Calendar.MONTH, eventCal.get(Calendar.MONTH))
-                        set(Calendar.DAY_OF_MONTH, eventCal.get(Calendar.DAY_OF_MONTH))
-                        set(Calendar.HOUR_OF_DAY, 0)
-                        set(Calendar.MINUTE, 0)
-                        set(Calendar.SECOND, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }
-
-                    if (virtualBirthdayCal.get(Calendar.MONTH) == currentViewMonth) {
+                    if (eventCal.get(Calendar.MONTH) == currentViewMonth) {
+                        val virtualBirthdayCal = Calendar.getInstance().apply {
+                            set(Calendar.YEAR, currentViewYear)
+                            set(Calendar.MONTH, eventCal.get(Calendar.MONTH))
+                            set(Calendar.DAY_OF_MONTH, eventCal.get(Calendar.DAY_OF_MONTH))
+                            set(Calendar.HOUR_OF_DAY, 0)
+                            set(Calendar.MINUTE, 0)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }
                         birthdayDates.add(virtualBirthdayCal.time)
                     }
                 } else {
-                    val normalizedDate = Calendar.getInstance().apply {
-                        time = date
-                        set(Calendar.HOUR_OF_DAY, 0)
-                        set(Calendar.MINUTE, 0)
-                        set(Calendar.SECOND, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }.time
-                    normalDates.add(normalizedDate)
+                    if (eventCal.get(Calendar.YEAR) == currentViewYear && eventCal.get(Calendar.MONTH) == currentViewMonth) {
+                        val normalizedDate = Calendar.getInstance().apply {
+                            time = date
+                            set(Calendar.HOUR_OF_DAY, 0)
+                            set(Calendar.MINUTE, 0)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }.time
+                        normalDates.add(normalizedDate)
+                    }
                 }
             }
         }
@@ -493,9 +436,6 @@ class CalendarViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 eventRepository.syncEvents()
-                    .onSuccess {
-                        loadEvents()
-                    }
                     .onFailure {
                         _uiState.value = CalendarUiState.Error("Грешка при синхронизацији")
                     }

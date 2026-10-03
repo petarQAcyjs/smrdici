@@ -8,15 +8,14 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.petar.smrdici.SmrdiciApplication
 import com.petar.smrdici.data.model.Event
-import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.notification.NotificationHelper
 import com.petar.smrdici.notification.NotificationManager
-import kotlinx.coroutines.tasks.await
-import java.util.Date
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
 import java.util.Calendar
+import java.util.Date
 
 // Класа је измењена да прима зависности кроз конструктор уместо да их креира интерно
 class EventRepository(
@@ -104,6 +103,41 @@ class EventRepository(
         } catch (e: Exception) {
             Log.e("EventRepository", "Грешка при синхронизацији", e)
             Result.failure(e)
+        }
+    }
+
+    fun getAllEventsFlow(): Flow<List<Event>> = callbackFlow {
+        val userId = auth.currentUser?.uid
+        if (userId == null) {
+            close(IllegalStateException("Korisnik nije prijavljen"))
+            return@callbackFlow
+        }
+
+        val listener = eventsCollection
+            .orderBy("startTime", Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("EventRepository", "Greška pri slušanju svih događaja", error)
+                    trySend(cachedEvents) // Vrati bar ono što imamo u kešu
+                    return@addSnapshotListener
+                }
+
+                val events = snapshot?.documents?.mapNotNull { doc ->
+                    try {
+                        doc.toObject(Event::class.java)?.copy(id = doc.id)
+                    } catch (e: Exception) {
+                        Log.e("EventRepository", "Greška pri konverziji dokumenta ${doc.id}", e)
+                        null
+                    }
+                } ?: emptyList()
+
+                cachedEvents = events
+                lastFetchTime = System.currentTimeMillis()
+                trySend(events)
+            }
+
+        awaitClose {
+            listener.remove()
         }
     }
     
@@ -266,103 +300,7 @@ class EventRepository(
             emptyList()
         }
     }
-    
-    // Брисање свих догађаја (за операцију увоза)
-    suspend fun deleteAllEvents() {
-        try {
-            // Proveravamo samo da li je korisnik prijavljen
-            auth.currentUser?.uid ?: return
-            
-            val snapshot = eventsCollection
-                .get()
-                .await()
-                
-            val batch = firestore.batch()
-            for (document in snapshot.documents) {
-                batch.delete(eventsCollection.document(document.id))
-            }
-            
-            batch.commit().await()
-            Log.d("EventRepository", "Сви догађаји су обрисани")
-        } catch (e: Exception) {
-            Log.e("EventRepository", "Грешка при брисању свих догађаја", e)
-        }
-    }
-    
-    // Функција за функцију cleanupDatabase() и функцију за помоћне методе
-    suspend fun cleanupDatabase() {
-        try {
-            Log.d("EventRepository", "Почињем чишћење базе...")
-            
-            // 1. Прво добавимо све догађаје
-            val snapshot = eventsCollection
-                .orderBy("startTime", Query.Direction.ASCENDING)
-                .get()
-                .await()
-                
-            val allEvents = snapshot.documents
-                .mapNotNull { doc ->
-                    try {
-                        doc.toObject(Event::class.java)?.copy(id = doc.id)
-                    } catch (e: Exception) {
-                        Log.e("EventRepository", "Грешка при читању документа ${doc.id}", e)
-                        null
-                    }
-                }
-            
-            Log.d("EventRepository", "Пронађено ${allEvents.size} догађаја")
-            
-            // 2. Групишемо догађаје по кључу
-            val eventGroups = allEvents.groupBy { event ->
-                "${event.title}_${event.startTime?.seconds}_${event.assignee}"
-            }
-            
-            // 3. За сваку групу, задржавамо најстарији документ (са најмањим ID-ом)
-            var deletedCount = 0
-            eventGroups.forEach { (_, events) ->
-                if (events.size > 1) {
-                    // Сортирамо по ID-у и задржавамо први
-                    val sortedEvents = events.sortedBy { it.id }
-                    val keepEvent = sortedEvents.first()
-                    
-                    // Бришемо остале
-                    sortedEvents.drop(1).forEach { duplicateEvent ->
-                        duplicateEvent.id?.let { id ->
-                            try {
-                                eventsCollection.document(id).delete().await()
-                                deletedCount++
-                                Log.d("EventRepository", "Обрисан дупликат: ${duplicateEvent.title} (ID: $id)")
-                            } catch (e: Exception) {
-                                Log.e("EventRepository", "Грешка при брисању дупликата $id", e)
-                            }
-                        }
-                    }
-                    
-                    Log.d("EventRepository", "Задржан оригинал: ${keepEvent.title} (ID: ${keepEvent.id})")
-                }
-            }
-            
-            Log.d("EventRepository", "Чишћење базе завршено. Обрисано $deletedCount дупликата")
-            
-        } catch (e: Exception) {
-            Log.e("EventRepository", "Грешка при чишћењу базе", e)
-            throw e
-        }
-    }
-    
-    // Помоћна функција за добављање локалних промена
-    // Ово би требало да буде имплементирано за рад ван мреже
-    private fun getLocalChanges(): List<Event> {
-        // У овој имплементацији, враћамо све локалне догађаје који нису синхронизовани
-        // У правој имплементацији, ово би користило Room базу или другу локалну базу
-        // за праћење промена које нису синхронизоване са сервером
-        return cachedEvents.filter { event ->
-            // Овде би требало да имамо неки начин да пратимо који догађаји су модификовани
-            // али пошто немамо такав механизам, враћамо празну листу
-            false
-        }
-    }
-    
+
     // Добављање догађаја између два датума
     fun getEvents(startDate: Date, endDate: Date): Flow<List<Event>> = callbackFlow {
         try {
@@ -486,7 +424,7 @@ class EventRepository(
                         set(Calendar.SECOND, 0)
                         set(Calendar.MILLISECOND, 0)
                         
-                        // If the event is today but it's already past 8 AM, don't schedule
+                        // If the event is today, but it's already past 8 AM, don't schedule
                         if (timeInMillis < System.currentTimeMillis()) {
                             return@scheduleEventMorningNotification
                         }
@@ -498,8 +436,8 @@ class EventRepository(
                         "eventId" to event.id,
                         "recipients" to listOf(userId),
                         "status" to "scheduled",
-                        "scheduledFor" to com.google.firebase.Timestamp(Date(morningTime.timeInMillis)),
-                        "createdAt" to com.google.firebase.Timestamp.now()
+                        "scheduledFor" to Timestamp(Date(morningTime.timeInMillis)),
+                        "createdAt" to Timestamp.now()
                     )
                     
                     // Add to Firestore notifications collection
@@ -522,7 +460,7 @@ class EventRepository(
         
         @Volatile
         private var instance: EventRepository? = null
-        
+
         fun getInstance(): EventRepository {
             return instance ?: synchronized(this) {
                 instance ?: EventRepository(
