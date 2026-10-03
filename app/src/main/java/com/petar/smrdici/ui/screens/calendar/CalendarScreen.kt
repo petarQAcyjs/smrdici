@@ -106,6 +106,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.compose.material.icons.filled.Today
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -283,11 +284,52 @@ fun CalendarScreen(
                         )
                     }
 
-                    Text(
-                        text = SimpleDateFormat("MMMM yyyy", Locale.forLanguageTag("sr")).format(selectedDate),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    // Naslov meseca i "Danas" dugme
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = SimpleDateFormat("MMMM yyyy", Locale.forLanguageTag("sr")).format(selectedDate),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        // Proveravamo da li prikazani mesec/godina odgovaraju DANAŠNJEM mesecu i godini
+                        val today = remember { Date() }
+                        val isCurrentMonth = remember(selectedDate) {
+                            val calSelected = Calendar.getInstance().apply { time = selectedDate }
+                            val calToday = Calendar.getInstance().apply { time = today }
+                            calSelected.get(Calendar.MONTH) == calToday.get(Calendar.MONTH) &&
+                                    calSelected.get(Calendar.YEAR) == calToday.get(Calendar.YEAR)
+                        }
+
+                        // Prikazujemo dugme samo ako nismo u tekućem mesecu
+                        if (!isCurrentMonth) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            FilledTonalButton(
+                                onClick = {
+                                    calendarViewModel.selectDate(Date())
+                                },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                    horizontal = 10.dp,
+                                    vertical = 4.dp
+                                ),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Today,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Данас",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+                    }
 
                     IconButton(
                         onClick = {
