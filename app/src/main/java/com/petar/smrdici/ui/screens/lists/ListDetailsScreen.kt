@@ -95,12 +95,12 @@ import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.burnoutcrew.reorderable.ReorderableItem
 import org.burnoutcrew.reorderable.ReorderableLazyListState
 import org.burnoutcrew.reorderable.detectReorderAfterLongPress
 import org.burnoutcrew.reorderable.rememberReorderableLazyListState
 import org.burnoutcrew.reorderable.reorderable
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -133,7 +133,7 @@ fun ListDetailsScreen(
             coroutineScope.launch {
                 isRefreshing = true
                 listsViewModel.loadListById(listId)
-                delay(1000) // Минимално трајање анимације освежавања
+                delay(1000.milliseconds) // Минимално трајање анимације освежавања
                 isRefreshing = false
             }
         }
@@ -152,8 +152,7 @@ fun ListDetailsScreen(
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     
     // Додајемо стање за праћење да ли је листа празна
-    val isListEmpty = selectedList?.items?.isEmpty() == true
-    
+
     // Додајемо стање за дијалог за потврду брисања листе
     var showClearListDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -174,7 +173,7 @@ fun ListDetailsScreen(
                 listsViewModel.updateItemPositions(listId, items)
             }
         },
-        canDragOver = { draggedOver, dragging -> true } // Allow dragging over all items
+        canDragOver = { _, _ -> true } // Allow dragging over all items
     )
 
     // Watch for drag state changes and provide haptic feedback
@@ -188,7 +187,7 @@ fun ListDetailsScreen(
     LaunchedEffect(listId) {
         isRefreshing = true
         listsViewModel.loadListById(listId)
-        delay(500) // Кратко одлагање за иницијално учитавање
+        delay(500.milliseconds) // Кратко одлагање за иницијално учитавање
         isRefreshing = false
         // Scroll to top after initial load
         lazyListState.scrollToItem(0)
@@ -207,7 +206,7 @@ fun ListDetailsScreen(
         
         // Фокусирамо поље за унос након кратког одлагања
         coroutineScope.launch {
-            delay(100)
+            delay(100.milliseconds)
             try {
                 focusRequester.requestFocus()
                 keyboardController?.show()
@@ -228,7 +227,7 @@ fun ListDetailsScreen(
             
             // Додајемо кратко одлагање пре додавања нове празне ставке
             coroutineScope.launch {
-                delay(100) // Kratko odlaganje za bolji UX
+                delay(100.milliseconds) // Kratko odlaganje za bolji UX
                 addEmptyItem()
             }
         }
@@ -241,7 +240,7 @@ fun ListDetailsScreen(
             
             // Only perform auto-scrolling for lists with 5 or more items
             if (itemCount >= 5 && (currentEditingItemId != null || isKeyboardVisible)) {
-                delay(150)
+                delay(150.milliseconds)
                 try {
                     // Scroll to the last item with appropriate offset
                     val lastIndex = itemCount - 1
@@ -359,7 +358,7 @@ fun ListDetailsScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    androidx.compose.material3.TextField(
+                    TextField(
                         value = newItemText,
                         onValueChange = { text -> 
                             // Capitalize the first letter if the text is not empty
@@ -453,56 +452,65 @@ fun ListDetailsScreen(
                                     Spacer(modifier = Modifier.padding(top = 200.dp))
                                 }
                             }
-                            
+
                             items(
                                 items = listState.items,
                                 key = { item -> item.id }
                             ) { item ->
-                                ReorderableItem(
-                                    reorderableState = reorderableState,
-                                    key = item.id,
+                                val isDragging = reorderableState.draggingItemKey == item.id
+
+                                Box(
                                     modifier = Modifier.animateItem()
-                                ) { isDragging ->
-                                    ShoppingItemRow(
-                                        item = item,
-                                        onDelete = { deletedItem ->
-                                            listsViewModel.deleteItem(deletedItem.id)
-                                            coroutineScope.launch {
-                                                val result = snackbarHostState.showSnackbar(
-                                                    message = "Ставка обрисана",
-                                                    actionLabel = "Поништи",
-                                                    duration = SnackbarDuration.Short
-                                                )
-                                                if (result == SnackbarResult.ActionPerformed) {
-                                                    lastDeletedItem = deletedItem
-                                                    if (deletedItem.id.isNotEmpty()) {
-                                                        listsViewModel.restoreItem(deletedItem.id, deletedItem)
+                                ) {
+                                    Column {
+                                        ShoppingItemRow(
+                                            item = item,
+                                            onDelete = { deletedItem ->
+                                                listsViewModel.deleteItem(deletedItem.id)
+                                                coroutineScope.launch {
+                                                    val result = snackbarHostState.showSnackbar(
+                                                        message = "Ставка обрисана",
+                                                        actionLabel = "Поништи",
+                                                        duration = SnackbarDuration.Short
+                                                    )
+                                                    if (result == SnackbarResult.ActionPerformed) {
+                                                        lastDeletedItem = deletedItem
+                                                        if (deletedItem.id.isNotEmpty()) {
+                                                            listsViewModel.restoreItem(
+                                                                deletedItem.id,
+                                                                deletedItem
+                                                            )
+                                                        }
                                                     }
                                                 }
-                                            }
-                                        },
-                                        onCheckedChange = { shoppingItem, isChecked ->
-                                            listState.id?.let { id ->
-                                                listsViewModel.updateItemCompletionStatus(id, shoppingItem.id, isChecked)
-                                            }
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(
-                                                if (isDragging) MaterialTheme.colorScheme.primaryContainer
-                                                else MaterialTheme.colorScheme.surface
-                                            ),
-                                        isKucniPoslovi = listState.title == "Kućni poslovi",
-                                        listsViewModel = listsViewModel,
-                                        listId = listId,
-                                        isDragging = isDragging,
-                                        reorderableState = reorderableState
-                                    )
-
-                                    if (item != listState.items.lastOrNull()) {
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(vertical = 4.dp)
+                                            },
+                                            onCheckedChange = { shoppingItem, isChecked ->
+                                                listState.id?.let { id ->
+                                                    listsViewModel.updateItemCompletionStatus(
+                                                        id,
+                                                        shoppingItem.id,
+                                                        isChecked
+                                                    )
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(
+                                                    if (isDragging) MaterialTheme.colorScheme.primaryContainer
+                                                    else MaterialTheme.colorScheme.surface
+                                                ),
+                                            isKucniPoslovi = listState.title == "Kućni poslovi",
+                                            listsViewModel = listsViewModel,
+                                            listId = listId,
+                                            isDragging = isDragging,
+                                            reorderableState = reorderableState
                                         )
+
+                                        if (item != listState.items.lastOrNull()) {
+                                            HorizontalDivider(
+                                                modifier = Modifier.padding(vertical = 4.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -637,7 +645,7 @@ fun ShoppingItemRow(
             listsViewModel.setEditingItemId(item.id)
             // Request focus and scroll to this item
             coroutineScope.launch {
-                delay(100) // Short delay to ensure the layout is ready
+                delay(100.milliseconds) // Short delay to ensure the layout is ready
                 focusRequester.requestFocus()
             }
         }
