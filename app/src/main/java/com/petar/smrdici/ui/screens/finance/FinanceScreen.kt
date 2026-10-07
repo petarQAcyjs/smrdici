@@ -80,7 +80,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -116,11 +115,12 @@ fun FinanceScreen(
     val cardContentPadding = if (windowInfo.isSmallWidth) 10.dp else 16.dp
 
     var isRefreshing by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
+
+    val scope = rememberCoroutineScope()
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
         onRefresh = {
-            coroutineScope.launch {
+            scope.launch {
                 isRefreshing = true
                 viewModel.syncWithRemote()
                 isRefreshing = false
@@ -771,95 +771,141 @@ fun TimePeriodSelector(
 ) {
     var showPeriodTypeDialog by remember { mutableStateOf(false) }
 
+    val periodText = when (currentPeriod) {
+        is TimePeriod.Day -> currentPeriod.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+        is TimePeriod.Week -> {
+            val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+            "${currentPeriod.startDate.format(formatter)} - ${currentPeriod.startDate.plus(6, ChronoUnit.DAYS).format(formatter)}"
+        }
+        is TimePeriod.Month -> {
+            val formatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.Builder().setLanguage("sr").setRegion("RS").build())
+            currentPeriod.yearMonth.format(formatter).replaceFirstChar { it.uppercase() }
+        }
+        is TimePeriod.Year -> currentPeriod.year.toString()
+        is TimePeriod.Custom -> {
+            val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+            "${currentPeriod.startDate.format(formatter)} - ${currentPeriod.endDate.format(formatter)}"
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // Glavna plutajuća navigaciona traka
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(32.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
         ) {
-            IconButton(onClick = onNavigatePrevious) {
-                Icon(
-                    Icons.Default.ChevronLeft,
-                    contentDescription = "Претходни период",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onNavigatePrevious,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ChevronLeft,
+                        contentDescription = "Претходни период",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
 
-            Text(
-                text = when (currentPeriod) {
-                    is TimePeriod.Day -> currentPeriod.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-                    is TimePeriod.Week -> {
-                        val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
-                        "${currentPeriod.startDate.format(formatter)} - ${currentPeriod.startDate.plus(6, ChronoUnit.DAYS).format(formatter)}"
-                    }
-                    is TimePeriod.Month -> {
-                        val formatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.Builder().setLanguage("sr").setRegion("RS").build())
-                        currentPeriod.yearMonth.format(formatter).replaceFirstChar { it.uppercase() }
-                    }
-                    is TimePeriod.Year -> currentPeriod.year.toString()
-                    is TimePeriod.Custom -> {
-                        val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
-                        "${currentPeriod.startDate.format(formatter)} - ${currentPeriod.endDate.format(formatter)}"
-                    }
-                },
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable { showPeriodTypeDialog = true }
-            )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { showPeriodTypeDialog = true }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = periodText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ExpandMore,
+                        contentDescription = "Изабери тип периода",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
-            IconButton(onClick = onNavigateNext) {
-                Icon(
-                    Icons.Default.ChevronRight,
-                    contentDescription = "Следећи период",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                IconButton(
+                    onClick = onNavigateNext,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "Следећи период",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
 
-        if (!isCurrentPeriod) {
-            Text(
-                text = when (currentPeriod) {
-                    is TimePeriod.Day -> "Врати се на данашњи дан"
-                    is TimePeriod.Week -> "Врати се на тренутну недељу"
-                    is TimePeriod.Month -> "Врати се на тренутни месец"
-                    is TimePeriod.Year -> "Врати се на тренутну годину"
-                    is TimePeriod.Custom -> "Врати се на тренутни период"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
+        // Pilula za brzi povratak na trenutni period
+        AnimatedVisibility(
+            visible = !isCurrentPeriod,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Surface(
                 modifier = Modifier
-                    .clickable { onResetToCurrentPeriod() }
-                    .padding(bottom = 4.dp),
-                textDecoration = TextDecoration.Underline
-            )
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onResetToCurrentPeriod() },
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = when (currentPeriod) {
+                        is TimePeriod.Day -> "Врати се на данашњи дан"
+                        is TimePeriod.Week -> "Врати се на тренутну недељу"
+                        is TimePeriod.Month -> "Врати се на тренутни месеци"
+                        is TimePeriod.Year -> "Врати се на тренутну годину"
+                        is TimePeriod.Custom -> "Врати се на тренутни период"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
         }
     }
 
     if (showPeriodTypeDialog) {
         AlertDialog(
             onDismissRequest = { showPeriodTypeDialog = false },
-            title = { Text("Изаберите период") },
+            title = { Text("Изаберите период", fontWeight = FontWeight.Bold) },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     PeriodType.entries.forEach { periodType ->
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
                                 .clickable {
                                     onPeriodTypeSelected(periodType)
                                     showPeriodTypeDialog = false
                                 },
-                            color = MaterialTheme.colorScheme.surface
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Text(
                                 text = when (periodType) {
@@ -869,7 +915,8 @@ fun TimePeriodSelector(
                                     PeriodType.DAY -> "Дан"
                                     PeriodType.CUSTOM -> "Прилагођени период"
                                 },
-                                modifier = Modifier.padding(12.dp)
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(14.dp)
                             )
                         }
                     }
