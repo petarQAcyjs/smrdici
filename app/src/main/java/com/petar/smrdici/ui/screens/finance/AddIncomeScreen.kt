@@ -24,7 +24,6 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -40,10 +39,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -58,16 +57,16 @@ import com.petar.smrdici.data.repository.TransactionRepository
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
-import com.petar.smrdici.ui.components.CategoryDropdown
+import com.petar.smrdici.ui.components.SuccessOverlay
 import com.petar.smrdici.ui.screens.settings.AccountViewModel
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import androidx.compose.runtime.rememberCoroutineScope
+import kotlin.time.Duration.Companion.milliseconds
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Suppress("UNUSED_PARAMETER", "KotlinRedundantDiagnosticSuppress", "NAME_SHADOWING")
 @Composable
 fun AddIncomeScreen(
@@ -76,54 +75,37 @@ fun AddIncomeScreen(
     authViewModel: AuthViewModel = viewModel(),
     accountViewModel: AccountViewModel = viewModel()
 ) {
-    // Спречавамо непотребно учитавање EventRepository-а
-    // DisposableEffect(Unit) {
-    //    onDispose { }
-    // }
-    
-    // Нема потребе директно приступати репозиторијуму, користимо budgetViewModel
-    // val incomeRepository = IncomeRepository.getInstance()
-    
-    // Стање за форму
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<IncomeCategory?>(null) }
-    var customCategoryName by remember { mutableStateOf("") } // For custom categories
+    var customCategoryName by remember { mutableStateOf("") }
     var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var selectedAccountId by remember { mutableStateOf("") }
-    
-    // Стање за грешке
+
     var amountError by remember { mutableStateOf("") }
     var categoryError by remember { mutableStateOf("") }
     var accountError by remember { mutableStateOf("") }
-    
-    // Стање за падајуће меније
+
     var accountMenuExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
-    
-    // Стање за снекбар
+
     val snackbarHostState = remember { SnackbarHostState() }
-    
-    // Стање за учитавање
+
     var isLoading by remember { mutableStateOf(false) }
-    
-    // Стање за аутентификацију
+    var showSuccessAnimation by remember { mutableStateOf(false) }
+
     val authState by authViewModel.authState.collectAsState()
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
-    
-    // Учитавање рачуна
+
     val accounts by accountViewModel.accounts.collectAsState()
-    
-    // Initialize transaction repository
     val transactionRepository = remember { TransactionRepository.getInstance() }
-    
+
     val context = LocalContext.current
     val categoryManager = remember { CategoryManager.getInstance(context) }
-    val scope = rememberCoroutineScope()
     var isLoadingCategories by remember { mutableStateOf(true) }
     val incomeCategories = remember { mutableStateListOf<String>() }
 
@@ -134,8 +116,7 @@ fun AddIncomeScreen(
         incomeCategories.addAll(categories)
         isLoadingCategories = false
     }
-    
-    // Приказ ако корисник није пријављен
+
     if (user == null) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -145,25 +126,21 @@ fun AddIncomeScreen(
         }
         return
     }
-    
-    // Учитавамо рачуне при иницијализацији
+
     LaunchedEffect(Unit) {
         accountViewModel.refreshAccounts()
     }
-    
-    // Аутоматски постављамо подразумевани рачун ако постоји
+
     LaunchedEffect(accounts) {
         if (accounts.isNotEmpty() && selectedAccountId.isEmpty()) {
             val defaultAccount = accounts.find { account -> account.isDefault }
             selectedAccountId = defaultAccount?.id ?: (if (accounts.isNotEmpty()) accounts.first().id else "")
         }
     }
-    
-    // Функција за валидацију форме
+
     fun validateForm(): Boolean {
         var isValid = true
-        
-        // Валидација износа
+
         if (amount.isEmpty()) {
             amountError = "Унесите износ"
             isValid = false
@@ -181,34 +158,29 @@ fun AddIncomeScreen(
                 isValid = false
             }
         }
-        
-        // Валидација категорије
+
         if (selectedCategory == null) {
             categoryError = "Изаберите категорију"
             isValid = false
         } else {
             categoryError = ""
         }
-        
-        // Валидација рачуна
+
         if (selectedAccountId.isEmpty()) {
             accountError = "Изаберите рачун"
             isValid = false
         } else {
             accountError = ""
         }
-        
+
         return isValid
     }
-    
-    // Функција за чување прихода
+
     fun saveIncome() {
         if (!validateForm()) return
-        
         isLoading = true
     }
-    
-    // Handle income saving in a LaunchedEffect
+
     LaunchedEffect(isLoading) {
         if (isLoading) {
             try {
@@ -216,21 +188,21 @@ fun AddIncomeScreen(
                 val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
                 dateFormat.timeZone = TimeZone.getTimeZone("UTC")
                 val dateStr = dateFormat.format(Date(selectedDate))
-                
+
                 val income = Income(
                     id = UUID.randomUUID().toString(),
-                    userId = user?.uid ?: "",
+                    userId = user.uid,
                     amount = amountValue,
                     description = description,
-                    category = if (customCategoryName.isNotEmpty() && selectedCategory == IncomeCategory.OTHER) 
+                    category = if (customCategoryName.isNotEmpty() && selectedCategory == IncomeCategory.OTHER)
                         customCategoryName else selectedCategory!!.name,
                     date = dateStr,
                     accountId = selectedAccountId
                 )
-                
-                // Save income using TransactionRepository
+
                 transactionRepository.addIncome(income)
-                snackbarHostState.showSnackbar("Приход је успешно сачуван")
+                showSuccessAnimation = true
+                delay(1200.milliseconds)
                 onNavigateBack()
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("Грешка при чувању прихода: ${e.message}")
@@ -239,18 +211,16 @@ fun AddIncomeScreen(
             }
         }
     }
-    
-    // Формат датума
+
     val dateFormatter = remember {
         SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
     }
-    
-    // DatePicker дијалог
+
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = selectedDate
         )
-        
+
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
@@ -276,74 +246,150 @@ fun AddIncomeScreen(
             DatePicker(state = datePickerState)
         }
     }
-    
+
     if (isLoadingCategories) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
     } else {
-        Scaffold(
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            topBar = {
-                Box(modifier = Modifier.statusBarsPadding()) {
-                    AppHeader(
-                        title = "Додај приход",
-                        user = user,
-                        navController = navController,
-                        showBackButton = true,
-                        showProfileIcon = false
-                    )
-                }
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Поље за износ
-                Column {
-                    OutlinedTextField(
-                        value = amount,
-                        onValueChange = { amount = it },
-                        label = { Text("Износ") },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        isError = amountError.isNotEmpty(),
-                        enabled = !isLoading
-                    )
-                    
-                    if (amountError.isNotEmpty()) {
-                        Text(
-                            text = amountError,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                topBar = {
+                    Box(modifier = Modifier.statusBarsPadding()) {
+                        AppHeader(
+                            title = "Додај приход",
+                            user = user,
+                            navController = navController,
+                            showBackButton = true,
+                            showProfileIcon = false
                         )
                     }
                 }
-                
-                // Поље за опис
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Опис") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
-                )
-                
-                // Избор категорије
-                Column {
-                    // Custom implementation for string-based categories
+            ) { paddingValues ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(horizontal = 16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Column {
+                        OutlinedTextField(
+                            value = amount,
+                            onValueChange = { amount = it },
+                            label = { Text("Износ") },
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = amountError.isNotEmpty(),
+                            enabled = !isLoading
+                        )
+
+                        if (amountError.isNotEmpty()) {
+                            Text(
+                                text = amountError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Опис") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isLoading
+                    )
+
+                    Column {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { categoryMenuExpanded = true },
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (customCategoryName.isNotEmpty() && selectedCategory == IncomeCategory.OTHER)
+                                        customCategoryName
+                                    else selectedCategory?.getDisplayName() ?: "Изаберите категорију",
+                                    color = if (selectedCategory == null) {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Изаберите категорију"
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = categoryMenuExpanded,
+                            onDismissRequest = { categoryMenuExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                        ) {
+                            IncomeCategory.entries.forEach { category ->
+                                DropdownMenuItem(
+                                    text = { Text(category.getDisplayName()) },
+                                    onClick = {
+                                        selectedCategory = category
+                                        categoryMenuExpanded = false
+                                    }
+                                )
+                            }
+
+                            incomeCategories.filter { categoryName ->
+                                try {
+                                    IncomeCategory.valueOf(categoryName)
+                                    false
+                                } catch (_: IllegalArgumentException) {
+                                    true
+                                }
+                            }.forEach { customCategory ->
+                                DropdownMenuItem(
+                                    text = { Text(customCategory) },
+                                    onClick = {
+                                        selectedCategory = IncomeCategory.OTHER
+                                        customCategoryName = customCategory
+                                        categoryMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+
+                        if (categoryError.isNotEmpty()) {
+                            Text(
+                                text = categoryError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                            )
+                        }
+                    }
+
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { categoryMenuExpanded = true },
+                            .clickable(enabled = !isLoading) { showDatePicker = true },
                         shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.surface,
                         border = androidx.compose.foundation.BorderStroke(
@@ -359,179 +405,99 @@ fun AddIncomeScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = if (customCategoryName.isNotEmpty() && selectedCategory == IncomeCategory.OTHER) 
-                                    customCategoryName 
-                                else selectedCategory?.getDisplayName() ?: "Изаберите категорију",
-                                color = if (selectedCategory == null) {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
+                                text = dateFormatter.format(Date(selectedDate)),
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Изаберите категорију"
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = "Изабери датум"
                             )
                         }
                     }
-                    
-                    DropdownMenu(
-                        expanded = categoryMenuExpanded,
-                        onDismissRequest = { categoryMenuExpanded = false },
-                        modifier = Modifier.fillMaxWidth(0.9f)
-                    ) {
-                        // First show built-in enum categories
-                        IncomeCategory.entries.forEach { category ->
-                            DropdownMenuItem(
-                                text = { Text(category.getDisplayName()) },
-                                onClick = {
-                                    selectedCategory = category
-                                    categoryMenuExpanded = false
-                                }
-                            )
-                        }
-                        
-                        // Then show custom categories from CategoryManager that aren't in the enum
-                        incomeCategories.filter { categoryName ->
-                            try {
-                                IncomeCategory.valueOf(categoryName)
-                                false // Skip if it's already in the enum
-                            } catch (_: IllegalArgumentException) {
-                                true // Include if it's a custom category
-                            }
-                        }.forEach { customCategory ->
-                            DropdownMenuItem(
-                                text = { Text(customCategory) },
-                                onClick = {
-                                    // For custom categories, we'll use the OTHER enum value
-                                    // but we'll save the actual category name when saving the income
-                                    selectedCategory = IncomeCategory.OTHER
-                                    customCategoryName = customCategory
-                                    categoryMenuExpanded = false
-                                }
-                            )
-                        }
-                    }
-                    
-                    if (categoryError.isNotEmpty()) {
-                        Text(
-                            text = categoryError,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
-                        )
-                    }
-                }
-                
-                // Избор датума
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = !isLoading) { showDatePicker = true },
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = androidx.compose.foundation.BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = dateFormatter.format(Date(selectedDate)),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Изабери датум"
-                        )
-                    }
-                }
-                
-                // Избор рачуна
-                Column {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !isLoading) { accountMenuExpanded = true },
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = if (accountError.isNotEmpty()) {
-                            androidx.compose.foundation.BorderStroke(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        } else {
-                            androidx.compose.foundation.BorderStroke(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-                    ) {
-                        Row(
+
+                    Column {
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .clickable(enabled = !isLoading) { accountMenuExpanded = true },
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = if (accountError.isNotEmpty()) {
+                                androidx.compose.foundation.BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            } else {
+                                androidx.compose.foundation.BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
                         ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = accounts.find { account -> account.id == selectedAccountId }?.name ?: "Изабери рачун",
+                                    color = if (selectedAccountId.isEmpty()) {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Изабери рачун"
+                                )
+                            }
+                        }
+
+                        if (accountError.isNotEmpty()) {
                             Text(
-                                text = accounts.find { account -> account.id == selectedAccountId }?.name ?: "Изабери рачун",
-                                color = if (selectedAccountId.isEmpty()) {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
-                            )
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Изабери рачун"
+                                text = accountError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 16.dp, top = 4.dp)
                             )
                         }
+
+                        DropdownMenu(
+                            expanded = accountMenuExpanded,
+                            onDismissRequest = { accountMenuExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                        ) {
+                            accounts.forEach { account ->
+                                DropdownMenuItem(
+                                    text = { Text(account.name) },
+                                    onClick = {
+                                        selectedAccountId = account.id
+                                        accountMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
-                    
-                    if (accountError.isNotEmpty()) {
-                        Text(
-                            text = accountError,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
-                        )
-                    }
-                    
-                    DropdownMenu(
-                        expanded = accountMenuExpanded,
-                        onDismissRequest = { accountMenuExpanded = false },
-                        modifier = Modifier.fillMaxWidth(0.9f)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = { saveIncome() },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isLoading
                     ) {
-                        accounts.forEach { account ->
-                            DropdownMenuItem(
-                                text = { Text(account.name) },
-                                onClick = {
-                                    selectedAccountId = account.id
-                                    accountMenuExpanded = false
-                                }
-                            )
-                        }
+                        Text("Сачувај")
                     }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Дугме за чување
-                Button(
-                    onClick = { saveIncome() },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
-                ) {
-                    Text("Сачувај")
                 }
             }
+
+            SuccessOverlay(
+                visible = showSuccessAnimation,
+                message = "Приход успешно додат"
+            )
         }
     }
-} 
+}
