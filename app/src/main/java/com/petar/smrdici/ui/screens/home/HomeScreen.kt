@@ -73,6 +73,9 @@ import kotlin.math.ceil
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalLocale
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
 
 // Data classes for stacked bar chart
 data class CategoryExpense(
@@ -720,21 +723,39 @@ fun ExpenseHistoryCard(
                                 }
                             }
 
+                            val animationProgress = remember { Animatable(0f) }
+
+                            LaunchedEffect(false, historyData) {
+                                if (!isLoading && historyData.isNotEmpty()) {
+                                    animationProgress.snapTo(0f)
+                                    animationProgress.animateTo(
+                                        targetValue = 1f,
+                                        animationSpec = tween(
+                                            durationMillis = 1000,
+                                            easing = FastOutSlowInEasing
+                                        )
+                                    )
+                                }
+                            }
+
                             Row(
                                 modifier = Modifier.fillMaxSize(),
                                 horizontalArrangement = Arrangement.SpaceEvenly,
                                 verticalAlignment = Alignment.Bottom
                             ) {
                                 historyData.forEach { periodData ->
-                                    val heightPercentage = if (maxGridValue > 0) {
+                                    val targetPercentage = if (maxGridValue > 0) {
                                         (periodData.totalAmount / maxGridValue).toFloat().coerceIn(0f, 1f)
                                     } else 0f
+
+                                    // Množimo ciljanu visinu sa animacijom
+                                    val animatedHeight = targetPercentage * animationProgress.value
 
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
                                             .padding(horizontal = 6.dp)
-                                            .fillMaxHeight(heightPercentage)
+                                            .fillMaxHeight(animatedHeight)
                                             .background(
                                                 color = MaterialTheme.colorScheme.primary,
                                                 shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
