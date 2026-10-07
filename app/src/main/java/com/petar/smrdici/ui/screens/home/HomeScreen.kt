@@ -69,10 +69,10 @@ import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 import kotlin.math.ceil
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalLocale
 
 // Data classes for stacked bar chart
 data class CategoryExpense(
@@ -239,7 +239,7 @@ fun TodayActivitiesCard(
     events: List<Event>,
     onEventClick: (Event) -> Unit,
     modifier: Modifier = Modifier,
-    imageResId: Int = R.drawable.home_image // Promijeni 'home_image' u naziv tvoje PNG slike!
+    imageResId: Int = R.drawable.home_image
 ) {
     val cardColor = Color(0xFF3F8CFF)
     val textColor = Color.White
@@ -252,68 +252,74 @@ fun TodayActivitiesCard(
             containerColor = cardColor
         )
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(12.dp)
         ) {
+            // Slika je pozicionirana desno pozadi (može se delimično ili potpuno preklopiti)
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.6f) // Slika zauzima do 60% širine
+                    .align(Alignment.CenterEnd),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = imageResId),
+                    contentDescription = "Home Image",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // Sadržaj (naslov i stavke) ide preko slike ako zatreba
             Column(
                 modifier = Modifier
-                    .weight(0.6f)
-                    .fillMaxHeight()
+                    .fillMaxSize()
             ) {
                 Text(
                     text = "Данашње активности",
                     style = MaterialTheme.typography.titleMedium,
                     color = textColor,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    maxLines = 1, // Garantuje 1 red
+                    softWrap = false, // Sprečava prelamanje u novi red
+                    modifier = Modifier.padding(bottom = 6.dp)
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                if (events.isEmpty()) {
-                    Text(
-                        text = "Нема активности за данас",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = textColor.copy(alpha = 0.9f),
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                } else {
-                    val eventsToShow = events.take(3)
-                    eventsToShow.forEach { event ->
-                        EventItemCompact(
-                            event = event,
-                            onClick = { onEventClick(event) },
-                            textColor = textColor
-                        )
-                    }
-
-                    if (events.size > 3) {
+                // Kolona za događaje ograničena na levu stranu
+                Column(
+                    modifier = Modifier.fillMaxWidth(0.55f)
+                ) {
+                    if (events.isEmpty()) {
                         Text(
-                            text = "Још ${events.size - 3} догађаја...",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "Нема активности за данас",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = textColor.copy(alpha = 0.9f),
-                            modifier = Modifier.padding(top = 4.dp)
+                            modifier = Modifier.padding(vertical = 4.dp)
                         )
+                    } else {
+                        val eventsToShow = events.take(3)
+                        eventsToShow.forEach { event ->
+                            EventItemCompact(
+                                event = event,
+                                onClick = { onEventClick(event) },
+                                textColor = textColor
+                            )
+                        }
+
+                        if (events.size > 3) {
+                            Text(
+                                text = "Још ${events.size - 3} догађаја...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = textColor.copy(alpha = 0.9f),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
                     }
                 }
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(0.4f)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(id = imageResId),
-                    contentDescription = "Home Image",
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp)
-                )
             }
         }
     }
@@ -355,7 +361,7 @@ fun EventItemCompact(
             )
 
             event.startTime?.let { startTime ->
-                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                val timeFormat = SimpleDateFormat("HH:mm", LocalLocale.current.platformLocale)
                 val timeText = if (event.allDay) {
                     "Цео дан"
                 } else {
@@ -532,7 +538,7 @@ fun ExpensePieChartCard(
                         )
 
                         Text(
-                            text = String.format(Locale.getDefault(), "%.2f", totalExpenses),
+                            text = String.format(LocalLocale.current.platformLocale, "%.2f", totalExpenses),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.error
@@ -579,7 +585,7 @@ private fun CompactCategoryLegendItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = String.format(Locale.getDefault(), "%.1f%%", category.percentage),
+                    text = String.format(LocalLocale.current.platformLocale, "%.1f%%", category.percentage),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -587,7 +593,7 @@ private fun CompactCategoryLegendItem(
                 Spacer(modifier = Modifier.width(4.dp))
 
                 Text(
-                    text = String.format(Locale.getDefault(), "%.0f", category.amount),
+                    text = String.format(LocalLocale.current.platformLocale, "%.0f", category.amount),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

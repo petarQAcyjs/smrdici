@@ -4,10 +4,10 @@
     <selectionStates>
       <SelectionState runConfigName="Smrdici_180926">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-10-04T19:48:01.099826100Z">
+        <DropdownSelection timestamp="2026-10-04T19:51:32.488428Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="PhysicalDevice" identifier="serial=R5CX422PYFH" />
+              <DeviceId pluginId="PhysicalDevice" identifier="serial=R5CT91YM11M" />
             </handle>
           </Target>
         </DropdownSelection>
