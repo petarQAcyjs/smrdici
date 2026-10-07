@@ -3,6 +3,8 @@ package com.petar.smrdici.ui.screens.finance
 import android.annotation.SuppressLint
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,10 +34,13 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.outlined.DocumentScanner
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
@@ -54,6 +59,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -94,13 +100,6 @@ import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.abs
 
-private val predefinedColors = listOf(
-    Color(0xFFE57373), Color(0xFFFFB74D), Color(0xFFFFF176),
-    Color(0xFFAED581), Color(0xFF4DD0E1), Color(0xFF9575CD),
-    Color(0xFFF06292), Color(0xFF7986CB), Color(0xFF4DB6AC),
-    Color(0xFFFF8A65)
-)
-
 @SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -110,6 +109,7 @@ fun FinanceScreen(
     navController: NavController
 ) {
     val state by viewModel.state.collectAsState()
+    var isFabMenuExpanded by remember { mutableStateOf(false) }
 
     // Detekcija veličine ekrana
     val windowInfo = rememberWindowInfo()
@@ -128,6 +128,12 @@ fun FinanceScreen(
                 isRefreshing = false
             }
         }
+    )
+    val predefinedColors = listOf(
+        Color(0xFFE57373), Color(0xFFFFB74D), Color(0xFFFFF176),
+        Color(0xFFAED581), Color(0xFF4DD0E1), Color(0xFF9575CD),
+        Color(0xFFF06292), Color(0xFF7986CB), Color(0xFF4DB6AC),
+        Color(0xFFFF8A65)
     )
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -167,32 +173,86 @@ fun FinanceScreen(
         Scaffold(
 
             floatingActionButton = {
-                FloatingActionButton(
-                    onClick = {
-                        when (state.selectedTransactionType) {
-                            is TransactionType.Income -> navController.navigate(Screen.AddIncome.route)
-                            is TransactionType.Expense -> {
-                                val selectedDate = when (val period = state.selectedTimePeriod) {
-                                    is TimePeriod.Day -> period.date.toString()
-                                    is TimePeriod.Week, is TimePeriod.Month, is TimePeriod.Year, is TimePeriod.Custom ->
-                                        LocalDate.now().toString()
+                when (state.selectedTransactionType) {
+                    is TransactionType.Income -> {
+                        // Za prihode ostaje obično FAB dugme
+                        FloatingActionButton(
+                            onClick = {
+                                navController.navigate(Screen.AddIncome.route)
+                            },
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Додај приход"
+                            )
+                        }
+                    }
+                    is TransactionType.Expense -> {
+                        // Za rashode prikazujemo FAB Meni sa 2 ikonice
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            AnimatedVisibility(
+                                visible = isFabMenuExpanded,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.End,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    // Opcija 1: OCR Unos (Samo ikonica)
+                                    SmallFloatingActionButton(
+                                        onClick = {
+                                            isFabMenuExpanded = false
+                                            // TODO: Navigacija ili pokretanje OCR skenera
+                                            // navController.navigate(Screen.OcrScanner.route)
+                                        },
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.DocumentScanner, // ili Icons.Outlined.QrCodeScanner
+                                            contentDescription = "OCR Unos"
+                                        )
+                                    }
+
+                                    // Opcija 2: Ručni unos (Samo ikonica - otvara AddExpenseForm)
+                                    SmallFloatingActionButton(
+                                        onClick = {
+                                            isFabMenuExpanded = false
+                                            val selectedDate = when (val period = state.selectedTimePeriod) {
+                                                is TimePeriod.Day -> period.date.toString()
+                                                is TimePeriod.Week, is TimePeriod.Month, is TimePeriod.Year, is TimePeriod.Custom ->
+                                                    LocalDate.now().toString()
+                                            }
+                                            navController.navigate(Screen.AddExpense.createRoute(selectedDate))
+                                        },
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Edit,
+                                            contentDescription = "Ручни unos"
+                                        )
+                                    }
                                 }
-                                navController.navigate(Screen.AddExpense.createRoute(selectedDate))
+                            }
+
+                            // Glavno FAB dugme koje otvara/zatvara meni
+                            FloatingActionButton(
+                                onClick = { isFabMenuExpanded = !isFabMenuExpanded },
+                                containerColor = MaterialTheme.colorScheme.error
+                            ) {
+                                Icon(
+                                    imageVector = if (isFabMenuExpanded) Icons.Default.Close else Icons.Default.Add,
+                                    contentDescription = if (isFabMenuExpanded) "Zatvori meni" else "Dodaj rashod"
+                                )
                             }
                         }
-                    },
-                    containerColor = when (state.selectedTransactionType) {
-                        is TransactionType.Income -> MaterialTheme.colorScheme.primary
-                        is TransactionType.Expense -> MaterialTheme.colorScheme.error
                     }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = when (state.selectedTransactionType) {
-                            is TransactionType.Income -> "Додај приход"
-                            is TransactionType.Expense -> "Додај расход"
-                        }
-                    )
                 }
             }
         ) { paddingValues ->
