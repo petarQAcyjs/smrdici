@@ -31,9 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
@@ -52,8 +50,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -123,7 +119,6 @@ fun FinanceScreen(
     val cardContentPadding = if (windowInfo.isSmallWidth) 10.dp else 16.dp
 
     var isRefreshing by remember { mutableStateOf(false) }
-
     val scope = rememberCoroutineScope()
     val pullRefreshState = rememberPullRefreshState(
         refreshing = isRefreshing,
@@ -292,18 +287,68 @@ fun FinanceScreen(
                             .padding(cardContentPadding),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Button(
-                            onClick = { showAccountSelector = true },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                contentColor = MaterialTheme.colorScheme.onSurface
-                            ),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = state.accounts.find { it.id == state.selectedAccountId }?.name ?: "Сви рачуни",
-                                style = if (windowInfo.isSmallWidth) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium
-                            )
+                        Box(contentAlignment = Alignment.Center) {
+                            val accountName = state.accounts.find { it.id == state.selectedAccountId }?.name ?: "Сви рачуни"
+
+                            val contentColor = when (state.selectedTransactionType) {
+                                is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { showAccountSelector = true }
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = accountName,
+                                    style = if (windowInfo.isSmallWidth) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = contentColor
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ExpandMore,
+                                    contentDescription = "Изабери рачун",
+                                    tint = contentColor.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = showAccountSelector,
+                                onDismissRequest = { showAccountSelector = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "Сви рачуни",
+                                            fontWeight = if (state.selectedAccountId == null) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    onClick = {
+                                        viewModel.setSelectedAccount(null)
+                                        showAccountSelector = false
+                                    }
+                                )
+
+                                state.accounts.forEach { account ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = account.name,
+                                                fontWeight = if (state.selectedAccountId == account.id) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.setSelectedAccount(account.id)
+                                            showAccountSelector = false
+                                        }
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))
@@ -466,62 +511,6 @@ fun FinanceScreen(
                     }
                 }
 
-                if (showAccountSelector) {
-                    AlertDialog(
-                        onDismissRequest = { showAccountSelector = false },
-                        title = { Text("Изаберите рачун") },
-                        text = {
-                            Column(
-                                modifier = Modifier.verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            viewModel.setSelectedAccount(null)
-                                            showAccountSelector = false
-                                        },
-                                    color = if (state.selectedAccountId == null)
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    else MaterialTheme.colorScheme.surface
-                                ) {
-                                    Text(
-                                        text = "Сви рачуни",
-                                        modifier = Modifier.padding(12.dp),
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                }
-
-                                state.accounts.forEach { account ->
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                viewModel.setSelectedAccount(account.id)
-                                                showAccountSelector = false
-                                            },
-                                        color = if (state.selectedAccountId == account.id)
-                                            MaterialTheme.colorScheme.primaryContainer
-                                        else MaterialTheme.colorScheme.surface
-                                    ) {
-                                        Text(
-                                            text = account.name,
-                                            modifier = Modifier.padding(12.dp),
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                        confirmButton = {
-                            TextButton(onClick = { showAccountSelector = false }) {
-                                Text("Затвори")
-                            }
-                        }
-                    )
-                }
-
                 state.selectedCategory?.let { category ->
                     val icon = CategoryIcons.findIconByName(category.iconName)
                     if (icon != null) {
@@ -573,7 +562,6 @@ fun FinanceScreen(
                         state.transactions.sumOf { it.amount }
                     }
 
-                    // Grupisanje transakcija po datumu (uz očuvanje trenutnog redoslijeda sortiranja)
                     val groupedTransactions = remember(state.transactions) {
                         state.transactions.groupBy { it.date }
                     }
@@ -676,7 +664,6 @@ fun FinanceScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        // Prikaz grupa po datumima
                         groupedTransactions.forEach { (dateString, transactionsInGroup) ->
                             item(key = "header_$dateString") {
                                 Text(
@@ -736,10 +723,6 @@ fun FinanceScreen(
     }
 }
 
-/**
- * Helper funkcija za formatiranje datuma grupe na ćirilici:
- * "Данас", "Јуче" ili formatirani datum (npr. "22. мај 2024.").
- */
 private fun formatGroupHeaderDate(dateStr: String): String {
     return try {
         val parts = dateStr.split("-")
@@ -803,7 +786,6 @@ fun TimePeriodSelector(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // Glavna plutajuća navigaciona traka
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(32.dp),
@@ -864,7 +846,6 @@ fun TimePeriodSelector(
             }
         }
 
-        // Pilula za brzi povratak na trenutni period
         AnimatedVisibility(
             visible = !isCurrentPeriod,
             enter = fadeIn() + expandVertically(),
@@ -881,7 +862,7 @@ fun TimePeriodSelector(
                     text = when (currentPeriod) {
                         is TimePeriod.Day -> "Врати се на данашњи дан"
                         is TimePeriod.Week -> "Врати се на тренутну недељу"
-                        is TimePeriod.Month -> "Врати се на тренутни месеци"
+                        is TimePeriod.Month -> "Врати се на тренутни месец"
                         is TimePeriod.Year -> "Врати се на тренутну годину"
                         is TimePeriod.Custom -> "Врати се на тренутни период"
                     },
@@ -961,7 +942,6 @@ fun TransactionTypeSelector(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. Rashodi (leva polovina)
             val isExpenseSelected = selectedType is TransactionType.Expense
             TransactionTypeNavItem(
                 label = "Расходи",
@@ -970,7 +950,6 @@ fun TransactionTypeSelector(
                 onClick = { onTypeSelected(TransactionType.Expense) }
             )
 
-            // 2. Prihodi (desna polovina)
             val isIncomeSelected = selectedType is TransactionType.Income
             TransactionTypeNavItem(
                 label = "Приходи",
@@ -989,7 +968,6 @@ private fun RowScope.TransactionTypeNavItem(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    // Glatka promena boje pozadine pilule
     val backgroundColor by animateColorAsState(
         targetValue = if (isSelected) {
             MaterialTheme.colorScheme.onSurface
@@ -1000,7 +978,6 @@ private fun RowScope.TransactionTypeNavItem(
         label = "TransactionNavItemBackground"
     )
 
-    // Glatka promena boje ikonice i teksta
     val contentColor by animateColorAsState(
         targetValue = if (isSelected) {
             MaterialTheme.colorScheme.surface
@@ -1013,7 +990,7 @@ private fun RowScope.TransactionTypeNavItem(
 
     Box(
         modifier = Modifier
-            .weight(1f) // Obe opcije drže tačno pola dostupne širine
+            .weight(1f)
             .height(44.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -1023,7 +1000,7 @@ private fun RowScope.TransactionTypeNavItem(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth(), // Unutrašnja pilula ispunjava svoju polovinu
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
             color = backgroundColor
         ) {
