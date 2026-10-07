@@ -76,6 +76,7 @@ import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
+import androidx.navigation.NavGraph.Companion.findStartDestination
 
 // Data classes for stacked bar chart
 data class CategoryExpense(
@@ -187,7 +188,13 @@ fun HomeScreen(
                         expenseData = homeViewModel.expenseChartData.collectAsState().value,
                         isLoading = homeViewModel.isLoadingExpenseData.collectAsState().value,
                         onCardClick = {
-                            navController.navigate(Screen.Finance.route)
+                            navController.navigate(Screen.Finance.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -199,7 +206,13 @@ fun HomeScreen(
                         historyData = homeViewModel.expenseHistoryData.collectAsState().value,
                         isLoading = homeViewModel.isLoadingHistoryData.collectAsState().value,
                         onCardClick = {
-                            navController.navigate(Screen.Finance.route)
+                            navController.navigate(Screen.Finance.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
