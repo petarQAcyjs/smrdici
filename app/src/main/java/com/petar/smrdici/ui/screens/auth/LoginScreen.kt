@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,7 +33,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +59,7 @@ import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
 import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
+import com.petar.smrdici.utils.rememberWindowInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,24 +69,32 @@ fun LoginScreen(
 ) {
     val context = LocalContext.current
     val authState by authViewModel.authState.collectAsState()
-    val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
-    
+
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isSignUp by remember { mutableStateOf(false) }
-    
+
+    // Pristup informacijama o dimenzijama ekrana
+    val windowInfo = rememberWindowInfo()
+    val scrollState = rememberScrollState()
+
+    // Dinamičke vrednosti zasnovane na veličini ekrana
+    val logoSize = if (windowInfo.isSmallHeight) 90.dp else 140.dp
+    val horizontalPadding = if (windowInfo.isSmallWidth) 16.dp else 24.dp
+    val spacing = if (windowInfo.isSmallHeight) 10.dp else 16.dp
+
     // Inicijalizacija Google Sign-In
     LaunchedEffect(Unit) {
         authViewModel.initGoogleSignIn(context)
     }
-    
+
     // Launcher za Google Sign-In sa IntentSender
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         authViewModel.handleGoogleSignInResult(result)
     }
-    
+
     // Provera stanja autentikacije
     LaunchedEffect(authState) {
         if (authState is AuthState.Authenticated) {
@@ -93,13 +103,12 @@ fun LoginScreen(
             }
         }
     }
-    
-    // Спречавамо непотребно учитавање EventRepository-а
+
+    // Sprečavamo nepotrebno učitavanje EventRepository-a
     DisposableEffect(Unit) {
-        // Ништа не радимо, само спречавамо непотребно учитавање
         onDispose { }
     }
-    
+
     Scaffold(
         topBar = {
             Box(modifier = Modifier.statusBarsPadding()) {
@@ -107,7 +116,7 @@ fun LoginScreen(
                     title = if (isSignUp) "Регистрација" else "Пријава",
                     navController = navController,
                     showBackButton = false,
-                    user = user
+                    showProfileIcon = false
                 )
             }
         }
@@ -116,58 +125,56 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .verticalScroll(scrollState) // Omogućeno skrolovanje!
+                .padding(horizontal = horizontalPadding, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(spacing)
         ) {
-            Spacer(modifier = Modifier.weight(0.1f))
-            
-            // Ikona aplikacije kao logo
+            Spacer(modifier = Modifier.height(if (windowInfo.isSmallHeight) 8.dp else 16.dp))
+
+            // Ikona aplikacije kao logo (skalirana za manji ekran)
             Image(
                 painter = painterResource(id = R.mipmap.ic_launcher_foreground),
                 contentDescription = "Лого апликације",
                 modifier = Modifier
-                    .size(140.dp)
-                    .padding(bottom = 8.dp)
+                    .size(logoSize)
+                    .padding(bottom = 4.dp)
             )
-            
+
             // Naziv aplikacije
             Text(
                 text = "Смрдићи",
-                fontSize = 28.sp,
+                fontSize = if (windowInfo.isSmallWidth) 24.sp else 28.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 16.dp)
+                color = MaterialTheme.colorScheme.primary
             )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
+
+            Spacer(modifier = Modifier.height(if (windowInfo.isSmallHeight) 4.dp else 12.dp))
+
             // Email polje
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
                 label = { Text("Имејл") },
-                modifier = Modifier
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 shape = RoundedCornerShape(12.dp)
             )
-            
+
             // Password polje
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("Лозинка") },
-                modifier = Modifier
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 shape = RoundedCornerShape(12.dp)
             )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             // Dugme za prijavu/registraciju
             Button(
                 onClick = {
@@ -192,10 +199,8 @@ fun LoginScreen(
                     )
                 )
             }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Текст за раздвајање
+
+            // Tekst za razdvajanje
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -209,10 +214,8 @@ fun LoginScreen(
                 )
                 HorizontalDivider(modifier = Modifier.weight(1f))
             }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Google Sign-In дугме
+
+            // Google Sign-In dugme
             GoogleSignInButton(
                 onClick = {
                     authViewModel.beginGoogleSignIn(
@@ -229,19 +232,18 @@ fun LoginScreen(
                             Log.e("LoginScreen", "Грешка при пријави: $errorMsg")
                         }
                     )
-                },
-                modifier = Modifier
+                }
             )
-            
-            Spacer(modifier = Modifier.weight(0.1f))
-            
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Prebacivanje između prijave i registracije
             TextButton(
                 onClick = { isSignUp = !isSignUp }
             ) {
                 Text(if (isSignUp) "Већ имаш налог? Пријави се" else "Немаш налог? Региструј се")
             }
-            
+
             // Prikaz greške
             if (authState is AuthState.Error) {
                 Text(
@@ -250,13 +252,15 @@ fun LoginScreen(
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
-            
+
             // Prikaz učitavanja
             if (authState is AuthState.Loading) {
                 CircularProgressIndicator(
                     modifier = Modifier.padding(16.dp)
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -288,9 +292,9 @@ fun GoogleSignInButton(
                 contentDescription = "Google Logo",
                 modifier = Modifier.size(20.dp)
             )
-            
+
             Spacer(modifier = Modifier.width(12.dp))
-            
+
             Text(
                 text = "Пријава преко Google налога",
                 style = MaterialTheme.typography.bodyMedium.copy(

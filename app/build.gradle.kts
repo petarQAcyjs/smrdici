@@ -1,25 +1,24 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import com.android.build.api.dsl.ApplicationExtension
+
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    //alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("com.google.gms.google-services")
+    alias(libs.plugins.google.services)
 }
 
-android {
+configure<ApplicationExtension> {
     namespace = "com.petar.smrdici"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         versionCode = providers.gradleProperty("versionCode").get().toInt()
         versionName = providers.gradleProperty("versionName").get()
         applicationId = "com.petar.smrdici"
         minSdk = 24
-        //noinspection OldTargetApi Aplikacija sada koristi targetSdk = 36, što je najnovija verzija Android SDK-a (Android 16).
-        //noinspection OldTargetApi
-        targetSdk = 36        
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        
-        // Искључујемо учитавање native библиотеке libpenguin.so
+        targetSdk = 36
+
         ndk {
             abiFilters.add("armeabi-v7a")
             abiFilters.add("arm64-v8a")
@@ -40,11 +39,14 @@ android {
         }
         debug {
             buildConfigField("Boolean", "DEBUG_VISUALIZATION", "false")
-       }
-    
-   }
-    
-    // Додајемо конфигурацију за спречавање покушаја учитавања непостојећих .dm фајлова
+        }
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+
     packaging {
         resources {
             excludes.add("META-INF/LICENSE")
@@ -55,40 +57,32 @@ android {
             excludes.add("**/*.dm")
         }
     }
-    
-    // Dodajemo kompilacione opcije
+
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-    
-    // Potiskujemo upozorenja o zastarelim opcijama
-    tasks.withType<JavaCompile>().configureEach {
-        options.compilerArgs.add("-Xlint:-options")
-    }
-    
-    kotlinOptions {
-        jvmTarget = "1.8"
-    }
-    
-    buildFeatures {
-        compose = true
-        buildConfig = true
-    }
-    
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
+// Kotlin DSL block placed at top-level
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
 
+// Suppress obsolete javac options warning
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("-Xlint:-options")
+}
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
+
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
@@ -97,54 +91,46 @@ dependencies {
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.animation.graphics)
     implementation(libs.androidx.compose.material.icons.extended)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    
-    // Firebase BOM koristeći version catalog referencu
+
+    // Firebase BOM
     implementation(platform(libs.firebase.bom))
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
 
     // Firebase
+    //noinspection LoginCredentials
     implementation(libs.play.services.auth)
-    implementation(libs.firebase.auth.ktx)
-    implementation(libs.firebase.firestore.ktx)
-    implementation(libs.firebase.common.ktx)
-    implementation(libs.firebase.database.ktx)
-    implementation("com.google.firebase:firebase-messaging-ktx") // Firebase Cloud Messaging
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.firebase.common)
+    implementation(libs.firebase.database)
+    implementation(libs.firebase.messaging)
 
-    // Календарска компонента
+    // Calendar
     implementation(libs.calendar.compose)
 
-    // Додајемо или ажурирамо зависност за Material3
+    // Material3 & Appcompat
     implementation(libs.androidx.material3.library)
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    
-    // Gson за JSON сeријализацију
+    implementation(libs.androidx.appcompat)
+
+    // Gson
     implementation(libs.gson)
-    
-    // Додатне зависности за решавање проблема са Google API
+
+    // Google Play Services
     implementation(libs.play.services.base)
-    
-    // Coroutines sync - za Mutex implementaciju
+
+    // Coroutines
     implementation(libs.kotlinx.coroutines.core)
 
-    // Reorderable library for drag-and-drop functionality
-    implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
+    // Reorderable
+    implementation(libs.composereorderable)
 
-    // ThreeTenABP for java.time backport
+    // ThreeTenABP
     implementation(libs.threetenabp)
-    
-    // WorkManager for scheduling notifications
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
-    
-    // Notification dependencies
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.core:core:1.12.0")
+
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
 }
