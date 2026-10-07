@@ -288,7 +288,8 @@ fun FinanceScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            val accountName = state.accounts.find { it.id == state.selectedAccountId }?.name ?: "Сви рачуни"
+                            val selectedAccount = state.accounts.find { it.id == state.selectedAccountId } ?: state.accounts.firstOrNull()
+                            val accountName = selectedAccount?.name ?: ""
 
                             val contentColor = when (state.selectedTransactionType) {
                                 is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
@@ -321,19 +322,6 @@ fun FinanceScreen(
                                 expanded = showAccountSelector,
                                 onDismissRequest = { showAccountSelector = false }
                             ) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = "Сви рачуни",
-                                            fontWeight = if (state.selectedAccountId == null) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    onClick = {
-                                        viewModel.setSelectedAccount(null)
-                                        showAccountSelector = false
-                                    }
-                                )
-
                                 state.accounts.forEach { account ->
                                     DropdownMenuItem(
                                         text = {
@@ -353,137 +341,33 @@ fun FinanceScreen(
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        if (state.selectedAccountId != null) {
-                            val accountBalance = state.accountBalances[state.selectedAccountId]
-                            if (accountBalance != null) {
-                                val nativeCurrencyFormatter = currencyFormatters[accountBalance.nativeCurrency]
-
-                                Text(
-                                    text = when (state.selectedTransactionType) {
-                                        is TransactionType.Income -> "Укупни приходи за период:"
-                                        is TransactionType.Expense -> "Укупни расходи за период:"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = when (state.selectedTransactionType) {
-                                        is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
-                                        is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
-                                    }
-                                )
-
-                                Text(
-                                    text = nativeCurrencyFormatter?.format(accountBalance.transactionTotal)
-                                        ?: "${accountBalance.transactionTotal} ${accountBalance.nativeCurrency}",
-                                    style = if (windowInfo.isSmallWidth) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = when (state.selectedTransactionType) {
-                                        is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
-                                        is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
-                                    }
-                                )
-
-                                val account = state.accounts.find { it.id == state.selectedAccountId }
-                                if (account != null) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(vertical = 4.dp),
-                                        thickness = 1.dp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                                    )
-
-                                    Text(
-                                        text = "Тренутно стање рачуна:",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-
-                                    val currentBalance = state.accountBalances[account.id]?.let {
-                                        val currentAccountBalance = accountBalance.currentBalance
-
-                                        nativeCurrencyFormatter?.format(currentAccountBalance)
-                                            ?: "$currentAccountBalance ${accountBalance.nativeCurrency}"
-                                    } ?: (nativeCurrencyFormatter?.format(account.balance)
-                                        ?: "${account.balance} ${accountBalance.nativeCurrency}")
-
-                                    Text(
-                                        text = currentBalance,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                        Text(
+                            text = "Преостали износ:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = when (state.selectedTransactionType) {
+                                is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
+                                is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
                             }
-                        } else {
-                            val eurFormatter = currencyFormatters["EUR"]
+                        )
 
-                            Text(
-                                text = when (state.selectedTransactionType) {
-                                    is TransactionType.Income -> "Укупни приходи за период (EUR):"
-                                    is TransactionType.Expense -> "Укупни расходи за период (EUR):"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = when (state.selectedTransactionType) {
-                                    is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
-                                    is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
-                                }
-                            )
+                        val activeAccountId = state.selectedAccountId ?: state.accounts.firstOrNull()?.id
+                        val accountBalance = state.accountBalances[activeAccountId]
+                        val account = state.accounts.find { it.id == activeAccountId }
+                        val nativeCurrencyFormatter = accountBalance?.nativeCurrency?.let { currencyFormatters[it] }
 
-                            Text(
-                                text = eurFormatter?.format(state.totalAmountInEur) ?: "${state.totalAmountInEur} EUR",
-                                style = if (windowInfo.isSmallWidth) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = when (state.selectedTransactionType) {
-                                    is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
-                                    is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
-                                }
-                            )
+                        val currentAccountBalance = accountBalance?.currentBalance ?: account?.balance ?: 0.0
+                        val balanceText = nativeCurrencyFormatter?.format(currentAccountBalance)
+                            ?: "$currentAccountBalance ${accountBalance?.nativeCurrency ?: account?.currency ?: ""}"
 
-                            if (state.accountBalances.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 4.dp),
-                                    thickness = 1.dp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                                )
-
-                                Text(
-                                    text = "По рачунима:",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.align(Alignment.Start)
-                                )
-
-                                Spacer(modifier = Modifier.height(2.dp))
-
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
-                                    state.accounts.forEach { account ->
-                                        val balance = state.accountBalances[account.id]
-                                        if (balance != null && balance.transactionTotal != 0.0) {
-                                            val formatter = currencyFormatters[balance.nativeCurrency]
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = account.name,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Text(
-                                                    text = formatter?.format(balance.transactionTotal)
-                                                        ?: "${balance.transactionTotal} ${balance.nativeCurrency}",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
+                        Text(
+                            text = balanceText,
+                            style = if (windowInfo.isSmallWidth) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = when (state.selectedTransactionType) {
+                                is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
+                                is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
                             }
-                        }
+                        )
                     }
                 }
 
