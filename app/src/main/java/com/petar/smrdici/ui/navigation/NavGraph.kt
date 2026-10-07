@@ -108,11 +108,33 @@ fun NavGraph(
 
         composable(Screen.ReceiptScanner.route) {
             ReceiptScannerScreen(
-                onReceiptScanned = { merchant, roundedAmount, category ->
-                    navController.previousBackStackEntry?.savedStateHandle?.set("scanned_merchant", merchant)
-                    navController.previousBackStackEntry?.savedStateHandle?.set("scanned_amount", roundedAmount.toString())
-                    navController.previousBackStackEntry?.savedStateHandle?.set("scanned_category", category)
-                    navController.popBackStack()
+                onReceiptScanned = { merchant, roundedAmount, category, source ->
+                    // Proveravamo da li je prethodni ekran AddExpense
+                    val previousRoute = navController.previousBackStackEntry?.destination?.route
+
+                    if (previousRoute?.startsWith(Screen.AddExpense.route) == true) {
+                        // Ako smo došli iz AddExpenseScreen, samo vrati podatke tamo
+                        navController.previousBackStackEntry?.savedStateHandle?.apply {
+                            set("scanned_merchant", merchant)
+                            set("scanned_amount", roundedAmount.toString())
+                            set("scanned_category", category)
+                            set("scanned_source", source)
+                        }
+                        navController.popBackStack()
+                    } else {
+                        // Ako smo skener otvorili iz npr. FinanceScreen ili HomeScreen-a,
+                        // zatvori skener i otvori AddExpenseScreen sa podacima
+                        navController.popBackStack()
+                        navController.navigate(Screen.AddExpense.route) {
+                            // Sačekaj da se ekran kreira i prosledi podaci kroz currentBackStackEntry
+                        }
+                        navController.currentBackStackEntry?.savedStateHandle?.apply {
+                            set("scanned_merchant", merchant)
+                            set("scanned_amount", roundedAmount.toString())
+                            set("scanned_category", category)
+                            set("scanned_source", source)
+                        }
+                    }
                 },
                 onNavigateBack = {
                     navController.popBackStack()
