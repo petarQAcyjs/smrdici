@@ -123,7 +123,32 @@ fun AddExpenseScreen(
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
+    val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
 
+    LaunchedEffect(savedStateHandle) {
+        val scannedMerchant = savedStateHandle?.get<String>("scanned_merchant")
+        val scannedAmount = savedStateHandle?.get<String>("scanned_amount")
+        val scannedCategory = savedStateHandle?.get<String>("scanned_category")
+
+        if (!scannedAmount.isNullOrEmpty()) {
+            amount = scannedAmount // Već zaokružen iznos na sledeću desetinu!
+            savedStateHandle.remove<String>("scanned_amount")
+        }
+
+        if (!scannedMerchant.isNullOrEmpty()) {
+            description = scannedMerchant // U opis upisujemo naziv trgovca (npr. MAXI)
+            savedStateHandle.remove<String>("scanned_merchant")
+        }
+
+        if (!scannedCategory.isNullOrEmpty()) {
+            try {
+                selectedCategory = ExpenseCategory.valueOf(scannedCategory)
+            } catch (_: Exception) {
+                customCategoryName = scannedCategory
+            }
+            savedStateHandle.remove<String>("scanned_category")
+        }
+    }
     val accounts by accountViewModel.accounts.collectAsState()
     val transactionRepository = remember { TransactionRepository.getInstance() }
 

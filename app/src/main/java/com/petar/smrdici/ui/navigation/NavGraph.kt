@@ -22,6 +22,7 @@ import com.petar.smrdici.ui.screens.finance.EditExpenseScreen
 import com.petar.smrdici.ui.screens.finance.EditIncomeScreen
 import com.petar.smrdici.ui.screens.finance.FinanceScreen
 import com.petar.smrdici.ui.screens.finance.FinanceViewModel
+import com.petar.smrdici.ui.screens.finance.ReceiptScannerScreen
 import com.petar.smrdici.ui.screens.home.HomeScreen
 import com.petar.smrdici.ui.screens.lists.ListDetailsScreen
 import com.petar.smrdici.ui.screens.lists.ListsScreen
@@ -103,6 +104,20 @@ fun NavGraph(
         
         composable(route = Screen.AddEvent.route) {
             AddEventScreen(navController = navController)
+        }
+
+        composable(Screen.ReceiptScanner.route) {
+            ReceiptScannerScreen(
+                onReceiptScanned = { merchant, roundedAmount, category ->
+                    navController.previousBackStackEntry?.savedStateHandle?.set("scanned_merchant", merchant)
+                    navController.previousBackStackEntry?.savedStateHandle?.set("scanned_amount", roundedAmount.toString())
+                    navController.previousBackStackEntry?.savedStateHandle?.set("scanned_category", category)
+                    navController.popBackStack()
+                },
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
         }
         
         composable(

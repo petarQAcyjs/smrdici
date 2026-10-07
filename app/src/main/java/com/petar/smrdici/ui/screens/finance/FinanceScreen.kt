@@ -207,14 +207,13 @@ fun FinanceScreen(
                                     SmallFloatingActionButton(
                                         onClick = {
                                             isFabMenuExpanded = false
-                                            // TODO: Navigacija ili pokretanje OCR skenera
-                                            // navController.navigate(Screen.OcrScanner.route)
+                                            navController.navigate(Screen.ReceiptScanner.route)
                                         },
                                         containerColor = MaterialTheme.colorScheme.errorContainer,
                                         contentColor = MaterialTheme.colorScheme.onErrorContainer
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Outlined.DocumentScanner, // ili Icons.Outlined.QrCodeScanner
+                                            imageVector = Icons.Outlined.DocumentScanner,
                                             contentDescription = "OCR Unos"
                                         )
                                     }

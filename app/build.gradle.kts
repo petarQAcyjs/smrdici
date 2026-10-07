@@ -133,4 +133,21 @@ dependencies {
 
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
+
+// Google ML Kit
+    implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.mlkit.text.recognition)
+
+    // CameraX
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+
+    // JSoup
+    implementation(libs.jsoup)
+
+    // Guava za CameraX ListenableFuture
+    implementation(libs.guava)
+    implementation(libs.concurrent.futures)
 }
