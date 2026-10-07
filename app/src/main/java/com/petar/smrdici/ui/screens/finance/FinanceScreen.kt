@@ -2,17 +2,25 @@ package com.petar.smrdici.ui.screens.finance
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,8 +59,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -80,7 +86,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -937,39 +945,133 @@ fun TransactionTypeSelector(
     onTypeSelected: (TransactionType) -> Unit,
     horizontalPadding: androidx.compose.ui.unit.Dp
 ) {
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = horizontalPadding, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = horizontalPadding, vertical = 6.dp),
+        shape = RoundedCornerShape(32.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp
     ) {
-        FilterChip(
-            selected = selectedType is TransactionType.Income,
-            onClick = { onTypeSelected(TransactionType.Income) },
-            label = { Text("Приходи") },
-            leadingIcon = {
-                Icon(
-                    Icons.AutoMirrored.Filled.TrendingUp,
-                    contentDescription = null,
-                    modifier = Modifier.size(FilterChipDefaults.IconSize)
-                )
-            },
-            modifier = Modifier.weight(1f)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 1. Rashodi (leva polovina)
+            val isExpenseSelected = selectedType is TransactionType.Expense
+            TransactionTypeNavItem(
+                label = "Расходи",
+                icon = Icons.AutoMirrored.Filled.TrendingDown,
+                isSelected = isExpenseSelected,
+                onClick = { onTypeSelected(TransactionType.Expense) }
+            )
 
-        FilterChip(
-            selected = selectedType is TransactionType.Expense,
-            onClick = { onTypeSelected(TransactionType.Expense) },
-            label = { Text("Расходи") },
-            leadingIcon = {
+            // 2. Prihodi (desna polovina)
+            val isIncomeSelected = selectedType is TransactionType.Income
+            TransactionTypeNavItem(
+                label = "Приходи",
+                icon = Icons.AutoMirrored.Filled.TrendingUp,
+                isSelected = isIncomeSelected,
+                onClick = { onTypeSelected(TransactionType.Income) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun RowScope.TransactionTypeNavItem(
+    label: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    // Glatka promena boje pozadine pilule
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            Color.Transparent
+        },
+        animationSpec = tween(durationMillis = 220),
+        label = "TransactionNavItemBackground"
+    )
+
+    // Glatka promena boje ikonice i teksta
+    val contentColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        },
+        animationSpec = tween(durationMillis = 200),
+        label = "TransactionNavItemContent"
+    )
+
+    Box(
+        modifier = Modifier
+            .weight(1f) // Obe opcije drže tačno pola dostupne širine
+            .height(44.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(), // Unutrašnja pilula ispunjava svoju polovinu
+            shape = RoundedCornerShape(22.dp),
+            color = backgroundColor
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
                 Icon(
-                    Icons.AutoMirrored.Filled.TrendingDown,
-                    contentDescription = null,
-                    modifier = Modifier.size(FilterChipDefaults.IconSize)
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = contentColor,
+                    modifier = Modifier.size(22.dp)
                 )
-            },
-            modifier = Modifier.weight(1f)
-        )
+
+                AnimatedVisibility(
+                    visible = isSelected,
+                    enter = fadeIn(tween(180, delayMillis = 30)) + expandHorizontally(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        expandFrom = Alignment.Start
+                    ),
+                    exit = fadeOut(tween(100)) + shrinkHorizontally(
+                        animationSpec = tween(140),
+                        shrinkTowards = Alignment.Start
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = label,
+                            color = contentColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
