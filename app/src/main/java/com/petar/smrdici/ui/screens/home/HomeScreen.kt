@@ -30,7 +30,6 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -474,9 +473,22 @@ fun ExpensePieChartCard(
                             .padding(4.dp),
                         contentAlignment = Alignment.Center
                     ) {
+                        val formattedCenterText = remember(totalExpenses) {
+                            val srLocale = java.util.Locale.Builder()
+                                .setLanguage("sr")
+                                .setScript("Cyrl")
+                                .setRegion("RS")
+                                .build()
+
+                            val formatter = java.text.NumberFormat.getInstance(srLocale).apply {
+                                isGroupingUsed = true
+                            }
+                            formatter.format(totalExpenses.toInt())
+                        }
+
                         PieChart(
                             data = pieChartData,
-                            centerText = totalExpenses.toInt().toString(),
+                            centerText = formattedCenterText,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -527,34 +539,6 @@ fun ExpensePieChartCard(
                     }
                 }
 
-                Column {
-                    HorizontalDivider(
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Укупно:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Text(
-                            text = String.format(LocalLocale.current.platformLocale, "%.2f", totalExpenses),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
             }
         }
     }

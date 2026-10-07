@@ -111,11 +111,9 @@ fun FinanceScreen(
     val state by viewModel.state.collectAsState()
     var isFabMenuExpanded by remember { mutableStateOf(false) }
 
-    // Detekcija veličine ekrana
     val windowInfo = rememberWindowInfo()
     val screenHorizontalPadding = if (windowInfo.isSmallWidth) 8.dp else 16.dp
     val cardContentPadding = if (windowInfo.isSmallWidth) 10.dp else 16.dp
-    val listSpacing = if (windowInfo.isSmallHeight) 8.dp else 12.dp
 
     var isRefreshing by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -171,11 +169,9 @@ fun FinanceScreen(
             .pullRefresh(pullRefreshState)
     ) {
         Scaffold(
-
             floatingActionButton = {
                 when (state.selectedTransactionType) {
                     is TransactionType.Income -> {
-                        // Za prihode ostaje obično FAB dugme
                         FloatingActionButton(
                             onClick = {
                                 navController.navigate(Screen.AddIncome.route)
@@ -189,7 +185,6 @@ fun FinanceScreen(
                         }
                     }
                     is TransactionType.Expense -> {
-                        // Za rashode prikazujemo FAB Meni sa 2 ikonice
                         Column(
                             horizontalAlignment = Alignment.End,
                             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -203,7 +198,6 @@ fun FinanceScreen(
                                     horizontalAlignment = Alignment.End,
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    // Opcija 1: OCR Unos (Samo ikonica)
                                     SmallFloatingActionButton(
                                         onClick = {
                                             isFabMenuExpanded = false
@@ -218,7 +212,6 @@ fun FinanceScreen(
                                         )
                                     }
 
-                                    // Opcija 2: Ručni unos (Samo ikonica - otvara AddExpenseForm)
                                     SmallFloatingActionButton(
                                         onClick = {
                                             isFabMenuExpanded = false
@@ -240,7 +233,6 @@ fun FinanceScreen(
                                 }
                             }
 
-                            // Glavno FAB dugme koje otvara/zatvara meni
                             FloatingActionButton(
                                 onClick = { isFabMenuExpanded = !isFabMenuExpanded },
                                 containerColor = MaterialTheme.colorScheme.error
@@ -573,10 +565,14 @@ fun FinanceScreen(
                         state.transactions.sumOf { it.amount }
                     }
 
+                    // Grupisanje transakcija po datumu (uz očuvanje trenutnog redoslijeda sortiranja)
+                    val groupedTransactions = remember(state.transactions) {
+                        state.transactions.groupBy { it.date }
+                    }
+
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = screenHorizontalPadding, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(listSpacing)
+                        contentPadding = PaddingValues(horizontal = screenHorizontalPadding, vertical = 8.dp)
                     ) {
                         item {
                             CombinedHeaderWithSort(
@@ -600,7 +596,8 @@ fun FinanceScreen(
                                 val rows = categories.chunked(itemsPerRow)
 
                                 Column(
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(bottom = 8.dp)
                                 ) {
                                     rows.forEachIndexed { _, rowItems ->
                                         Row(
@@ -668,32 +665,50 @@ fun FinanceScreen(
                         item {
                             Spacer(modifier = Modifier.height(2.dp))
                             HorizontalDivider()
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Све трансакције",
-                                style = if (windowInfo.isSmallWidth) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.padding(bottom = 2.dp)
-                            )
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        items(state.transactions) { transaction ->
-                            TransactionItem(
-                                transaction = transaction,
-                                numberFormat = numberFormat,
-                                isSmall = windowInfo.isSmallWidth,
-                                onEdit = {
+                        // Prikaz grupa po datumima
+                        groupedTransactions.forEach { (dateString, transactionsInGroup) ->
+                            item(key = "header_$dateString") {
+                                Text(
+                                    text = formatGroupHeaderDate(dateString),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp, start = 4.dp)
+                                )
+                            }
+
+                            items(
+                                items = transactionsInGroup,
+                                key = { transaction ->
                                     when (transaction) {
-                                        is IncomeTransaction -> navController.navigate("edit_income/${transaction.income.id}")
-                                        is ExpenseTransaction -> navController.navigate("edit_expense/${transaction.expense.id}")
-                                    }
-                                },
-                                onDelete = {
-                                    when (transaction) {
-                                        is IncomeTransaction -> viewModel.deleteIncome(transaction.income.id)
-                                        is ExpenseTransaction -> viewModel.deleteExpense(transaction.expense.id)
+                                        is IncomeTransaction -> "inc_${transaction.income.id}"
+                                        is ExpenseTransaction -> "exp_${transaction.expense.id}"
                                     }
                                 }
-                            )
+                            ) { transaction ->
+                                Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                    TransactionItem(
+                                        transaction = transaction,
+                                        numberFormat = numberFormat,
+                                        isSmall = windowInfo.isSmallWidth,
+                                        onEdit = {
+                                            when (transaction) {
+                                                is IncomeTransaction -> navController.navigate("edit_income/${transaction.income.id}")
+                                                is ExpenseTransaction -> navController.navigate("edit_expense/${transaction.expense.id}")
+                                            }
+                                        },
+                                        onDelete = {
+                                            when (transaction) {
+                                                is IncomeTransaction -> viewModel.deleteIncome(transaction.income.id)
+                                                is ExpenseTransaction -> viewModel.deleteExpense(transaction.expense.id)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -710,6 +725,38 @@ fun FinanceScreen(
         LaunchedEffect(state.error) {
             LogUtils.e("FinanceScreen", "Error: ${state.error}", category = "ui")
         }
+    }
+}
+
+/**
+ * Helper funkcija za formatiranje datuma grupe na ćirilici:
+ * "Данас", "Јуче" ili formatirani datum (npr. "22. мај 2024.").
+ */
+private fun formatGroupHeaderDate(dateStr: String): String {
+    return try {
+        val parts = dateStr.split("-")
+        val date = if (parts.size == 3) {
+            LocalDate.of(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+        } else {
+            LocalDate.parse(dateStr)
+        }
+
+        val today = LocalDate.now()
+        val yesterday = today.minusDays(1)
+
+        when (date) {
+            today -> "Данас"
+            yesterday -> "Јуче"
+            else -> {
+                val formatter = DateTimeFormatter.ofPattern(
+                    "d. MMMM yyyy.",
+                    Locale.Builder().setLanguage("sr").setScript("Cyrl").setRegion("RS").build()
+                )
+                date.format(formatter)
+            }
+        }
+    } catch (_: Exception) {
+        dateStr
     }
 }
 
@@ -889,8 +936,7 @@ fun CombinedHeaderWithSort(
     var showSortDropdown by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -965,6 +1011,10 @@ fun TransactionItem(
         is IncomeTransaction -> transaction.income.category
         is ExpenseTransaction -> transaction.expense.category
     }
+    val descriptionText = when (transaction) {
+        is IncomeTransaction -> transaction.income.description
+        is ExpenseTransaction -> transaction.expense.description
+    }
     val isExpense = transaction is ExpenseTransaction
 
     val savedColorValue = categoryManager.getCategoryColor(categoryName, isExpense)
@@ -994,42 +1044,16 @@ fun TransactionItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                when (transaction) {
-                    is IncomeTransaction -> {
-                        Text(
-                            text = transaction.income.description,
-                            style = if (isSmall) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = transaction.date,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = transaction.income.category,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = categoryColor
-                        )
-                    }
-                    is ExpenseTransaction -> {
-                        Text(
-                            text = transaction.expense.description,
-                            style = if (isSmall) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = transaction.date,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = transaction.expense.category,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = categoryColor
-                        )
-                    }
-                }
+                Text(
+                    text = descriptionText,
+                    style = if (isSmall) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = categoryName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = categoryColor
+                )
             }
 
             Row(
@@ -1084,8 +1108,7 @@ fun CategoryCard(
     isSmall: Boolean = false
 ) {
     Card(
-        modifier = modifier
-            .clickable(onClick = onClick),
+        modifier = modifier.clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
@@ -1097,7 +1120,6 @@ fun CategoryCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (isSmall) 8.dp else 12.dp)
         ) {
-            // Ikonica kategorije
             Box(
                 modifier = Modifier
                     .size(if (isSmall) 32.dp else 40.dp)
@@ -1113,10 +1135,7 @@ fun CategoryCard(
                 )
             }
 
-            // Tekstualni podaci u vertikalnoj koloni (zauzima znatno manje visine)
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
