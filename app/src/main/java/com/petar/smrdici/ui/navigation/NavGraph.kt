@@ -64,7 +64,7 @@ fun NavGraph(
             MainLayout(
                 navController = navController
             ) {
-                CalendarScreen(navController = navController)
+                CalendarScreen()
             }
         }
         

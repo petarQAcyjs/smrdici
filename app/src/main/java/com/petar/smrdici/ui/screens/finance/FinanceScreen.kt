@@ -46,7 +46,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -80,13 +79,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryIcons
 import com.petar.smrdici.data.model.CategoryManager
-import com.petar.smrdici.ui.auth.AuthState
-import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import com.petar.smrdici.utils.LogUtils
@@ -107,17 +102,14 @@ private val predefinedColors = listOf(
 )
 
 @SuppressLint("DefaultLocale")
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun FinanceScreen(
     modifier: Modifier = Modifier,
     viewModel: FinanceViewModel,
-    navController: NavController,
-    authViewModel: AuthViewModel = viewModel()
+    navController: NavController
 ) {
     val state by viewModel.state.collectAsState()
-    val authState by authViewModel.authState.collectAsState()
-    val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
 
     // Detekcija veličine ekrana
     val windowInfo = rememberWindowInfo()
@@ -173,14 +165,7 @@ fun FinanceScreen(
             .pullRefresh(pullRefreshState)
     ) {
         Scaffold(
-            topBar = {
-                AppHeader(
-                    title = "Финансије",
-                    user = user,
-                    navController = navController,
-                    showProfileIcon = false
-                )
-            },
+
             floatingActionButton = {
                 FloatingActionButton(
                     onClick = {
@@ -906,7 +891,6 @@ fun CombinedHeaderWithSort(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionItem(
     transaction: UITransaction,

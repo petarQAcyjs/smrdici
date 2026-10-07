@@ -1,7 +1,11 @@
 @file:OptIn(ExperimentalMaterialApi::class)
 package com.petar.smrdici.ui.screens.home
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +51,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,11 +64,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.PieChart
 import com.petar.smrdici.ui.components.PieChartData
 import com.petar.smrdici.ui.navigation.Screen
@@ -70,13 +76,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import kotlin.math.ceil
-import androidx.compose.foundation.Image
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.platform.LocalLocale
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.Animatable
-import androidx.navigation.NavGraph.Companion.findStartDestination
 
 // Data classes for stacked bar chart
 data class CategoryExpense(
@@ -135,12 +134,7 @@ fun HomeScreen(
     }
 
     Scaffold(
-        topBar = {
-            AppHeader(
-                title = "Почетна",
-                showLogoutButton = false
-            )
-        },
+
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         Box(

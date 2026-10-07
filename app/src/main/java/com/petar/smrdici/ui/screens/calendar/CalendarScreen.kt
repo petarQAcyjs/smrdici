@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
@@ -87,14 +88,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.data.model.EventAssignee
 import com.petar.smrdici.notification.NotificationHelper
-import com.petar.smrdici.ui.auth.AuthState
-import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.components.TimePickerWrapper
 import kotlinx.coroutines.CoroutineScope
@@ -106,14 +103,11 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
-import androidx.compose.material.icons.filled.Today
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun CalendarScreen(
-    navController: NavController,
-    calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModel.Factory()),
-    authViewModel: AuthViewModel = viewModel()
+    calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModel.Factory())
 ) {
     val calendarUiState by calendarViewModel.uiState.collectAsState()
     val eventFormState by calendarViewModel.eventFormState.collectAsState()
@@ -122,7 +116,6 @@ fun CalendarScreen(
     val editingEvent by calendarViewModel.editingEvent.collectAsState()
     val datesWithEvents by calendarViewModel.datesWithEvents.collectAsState()
     val datesWithBirthdays by calendarViewModel.datesWithBirthdays.collectAsState()
-    val authState by authViewModel.authState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -168,10 +161,6 @@ fun CalendarScreen(
     var showAddEventDialog by remember { mutableStateOf(false) }
     var selectedEvent by remember { mutableStateOf<Event?>(null) }
     var showEventDetailsDialog by remember { mutableStateOf(false) }
-
-    val user = if (authState is AuthState.Authenticated) {
-        (authState as AuthState.Authenticated).user
-    } else null
 
     LaunchedEffect(editingEvent) {
         if (editingEvent != null) {
@@ -239,14 +228,6 @@ fun CalendarScreen(
             .pullRefresh(pullRefreshState)
     ) {
         Scaffold(
-            topBar = {
-                AppHeader(
-                    title = "Календар",
-                    user = user,
-                    navController = navController,
-                    showProfileIcon = false
-                )
-            },
             snackbarHost = { SnackbarHost(snackbarHostState) },
             floatingActionButton = {
                 FloatingActionButton(

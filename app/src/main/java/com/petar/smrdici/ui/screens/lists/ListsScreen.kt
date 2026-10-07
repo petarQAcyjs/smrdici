@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
@@ -81,15 +82,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.ShoppingList
-import com.petar.smrdici.ui.auth.AuthState
-import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
-import androidx.compose.foundation.gestures.detectTapGestures
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -105,8 +102,7 @@ private fun generateUniqueListKey(listId: String?): String {
 @Composable
 fun ListsScreen(
     navController: NavController,
-    listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory()),
-    authViewModel: AuthViewModel = viewModel()
+    listsViewModel: ListsViewModel = viewModel(factory = ListsViewModel.Factory())
 ) {
     val listsUiState by listsViewModel.uiState.collectAsState()
     val deletingListIds by listsViewModel.deletingListIds.collectAsState()
@@ -133,12 +129,7 @@ fun ListsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     
     var lastDeletedList by remember { mutableStateOf<ShoppingList?>(null) }
-    
-    val authState by authViewModel.authState.collectAsState()
-    val user = if (authState is AuthState.Authenticated) {
-        (authState as AuthState.Authenticated).user
-    } else null
-    
+
     LaunchedEffect(isDeletionInProgress) {
         if (isDeletionInProgress) {
             Log.d("ListsScreen", "Брисање је у току: ${deletingListIds.joinToString()}")
@@ -163,14 +154,7 @@ fun ListsScreen(
                     )
                 }
             },
-            topBar = {
-                AppHeader(
-                    title = "Листе",
-                    user = user,
-                    navController = navController,
-                    showProfileIcon = false
-                )
-            }
+
         ) { paddingValues ->
             Column(
                 modifier = Modifier

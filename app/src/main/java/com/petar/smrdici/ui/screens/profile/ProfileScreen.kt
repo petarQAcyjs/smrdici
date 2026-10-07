@@ -58,7 +58,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.navigation.Screen
 import com.petar.smrdici.ui.screens.home.HomeViewModel
 import com.petar.smrdici.ui.screens.home.SyncStatus
@@ -132,14 +131,7 @@ fun ProfileScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            AppHeader(
-                title = "Профил",
-                user = user,
-                navController = navController,
-                showProfileIcon = false
-            )
-        }
+
     ) { paddingValues ->
         if (user != null) {
             Column(
