@@ -102,6 +102,7 @@ import org.threeten.bp.format.DateTimeFormatter
 import org.threeten.bp.temporal.ChronoUnit
 import java.text.NumberFormat
 import java.util.Locale
+import androidx.compose.foundation.shape.CircleShape
 
 @SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterialApi::class)
@@ -175,7 +176,8 @@ fun FinanceScreen(
                             onClick = {
                                 navController.navigate(Screen.AddIncome.route)
                             },
-                            containerColor = MaterialTheme.colorScheme.primary
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            shape = CircleShape
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,
@@ -203,7 +205,8 @@ fun FinanceScreen(
                                             navController.navigate(Screen.ReceiptScanner.route)
                                         },
                                         containerColor = MaterialTheme.colorScheme.errorContainer,
-                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                        shape = CircleShape
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.DocumentScanner,
@@ -222,7 +225,8 @@ fun FinanceScreen(
                                             navController.navigate(Screen.AddExpense.createRoute(selectedDate))
                                         },
                                         containerColor = MaterialTheme.colorScheme.errorContainer,
-                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                        shape = CircleShape
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.Edit,
@@ -234,7 +238,8 @@ fun FinanceScreen(
 
                             FloatingActionButton(
                                 onClick = { isFabMenuExpanded = !isFabMenuExpanded },
-                                containerColor = MaterialTheme.colorScheme.error
+                                containerColor = MaterialTheme.colorScheme.error,
+                                shape = CircleShape
                             ) {
                                 Icon(
                                     imageVector = if (isFabMenuExpanded) Icons.Default.Close else Icons.Default.Add,
@@ -1023,77 +1028,111 @@ fun TransactionItem(
     }
     val isExpense = transaction is ExpenseTransaction
 
+    // Dobijanje boje i ikonice kategorije uz bezbednu proveru null vrednosti
     val savedColorValue = categoryManager.getCategoryColor(categoryName, isExpense)
     val categoryColor = if (savedColorValue != null) {
         Color(savedColorValue)
     } else {
-        if (isExpense) {
-            MaterialTheme.colorScheme.error
-        } else {
-            MaterialTheme.colorScheme.primary
-        }
+        if (isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     }
 
-    val itemPadding = if (isSmall) 10.dp else 14.dp
+    val iconName = categoryManager.getCategoryIcon(categoryName, isExpense)
+    val categoryIcon = CategoryIcons.findIconByName(iconName ?: "") ?: Icons.Default.MoreHoriz
+
+    val itemPadding = if (isSmall) 10.dp else 12.dp
 
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(itemPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = descriptionText,
-                    style = if (isSmall) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = categoryName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = categoryColor
+            // --- IKONICA KATEGORIJE (Lijevo) ---
+            Box(
+                modifier = Modifier
+                    .size(if (isSmall) 36.dp else 42.dp)
+                    .clip(CircleShape)
+                    .background(categoryColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = categoryIcon,
+                    contentDescription = categoryName,
+                    tint = categoryColor,
+                    modifier = Modifier.size(if (isSmall) 20.dp else 22.dp)
                 )
             }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // --- NASLOV (OPIS) I KATEGORIJA (Sredina) ---
+            Column(
+                modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = numberFormat.format(transaction.amount),
+                    text = descriptionText.ifBlank { categoryName },
+                    style = if (isSmall) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = categoryName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // --- IZNOS I DUGMAD ZA AKCIJE (Desno) ---
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val formattedAmount = numberFormat.format(transaction.amount)
+                val amountText = if (isExpense) "-$formattedAmount" else "+$formattedAmount"
+
+                Text(
+                    text = amountText,
                     style = if (isSmall) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = categoryColor
+                    color = if (isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 )
 
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier.size(if (isSmall) 32.dp else 40.dp)
+                    modifier = Modifier.size(if (isSmall) 28.dp else 34.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
                         contentDescription = "Измени",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(if (isSmall) 18.dp else 22.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(if (isSmall) 16.dp else 18.dp)
                     )
                 }
 
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(if (isSmall) 32.dp else 40.dp)
+                    modifier = Modifier.size(if (isSmall) 28.dp else 34.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Обриши",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(if (isSmall) 18.dp else 22.dp)
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                        modifier = Modifier.size(if (isSmall) 16.dp else 18.dp)
                     )
                 }
             }

@@ -234,7 +234,8 @@ fun CalendarScreen(
                     onClick = {
                         calendarViewModel.resetEventForm()
                         showAddEventDialog = true
-                    }
+                    },
+                    shape = CircleShape
                 ) {
                     Icon(Icons.Default.Add, "Додај догађај")
                 }
