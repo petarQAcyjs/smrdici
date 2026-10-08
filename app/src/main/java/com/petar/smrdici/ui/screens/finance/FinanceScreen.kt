@@ -3,6 +3,8 @@ package com.petar.smrdici.ui.screens.finance
 import android.annotation.SuppressLint
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,10 +34,13 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.outlined.DocumentScanner
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
@@ -46,7 +51,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -55,6 +59,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -80,13 +85,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryIcons
 import com.petar.smrdici.data.model.CategoryManager
-import com.petar.smrdici.ui.auth.AuthState
-import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import com.petar.smrdici.utils.LogUtils
@@ -99,31 +100,20 @@ import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.abs
 
-private val predefinedColors = listOf(
-    Color(0xFFE57373), Color(0xFFFFB74D), Color(0xFFFFF176),
-    Color(0xFFAED581), Color(0xFF4DD0E1), Color(0xFF9575CD),
-    Color(0xFFF06292), Color(0xFF7986CB), Color(0xFF4DB6AC),
-    Color(0xFFFF8A65)
-)
-
 @SuppressLint("DefaultLocale")
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun FinanceScreen(
     modifier: Modifier = Modifier,
     viewModel: FinanceViewModel,
-    navController: NavController,
-    authViewModel: AuthViewModel = viewModel()
+    navController: NavController
 ) {
     val state by viewModel.state.collectAsState()
-    val authState by authViewModel.authState.collectAsState()
-    val user = if (authState is AuthState.Authenticated) (authState as AuthState.Authenticated).user else null
+    var isFabMenuExpanded by remember { mutableStateOf(false) }
 
-    // Detekcija veličine ekrana
     val windowInfo = rememberWindowInfo()
     val screenHorizontalPadding = if (windowInfo.isSmallWidth) 8.dp else 16.dp
     val cardContentPadding = if (windowInfo.isSmallWidth) 10.dp else 16.dp
-    val listSpacing = if (windowInfo.isSmallHeight) 8.dp else 12.dp
 
     var isRefreshing by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -136,6 +126,12 @@ fun FinanceScreen(
                 isRefreshing = false
             }
         }
+    )
+    val predefinedColors = listOf(
+        Color(0xFFE57373), Color(0xFFFFB74D), Color(0xFFFFF176),
+        Color(0xFFAED581), Color(0xFF4DD0E1), Color(0xFF9575CD),
+        Color(0xFFF06292), Color(0xFF7986CB), Color(0xFF4DB6AC),
+        Color(0xFFFF8A65)
     )
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -173,41 +169,81 @@ fun FinanceScreen(
             .pullRefresh(pullRefreshState)
     ) {
         Scaffold(
-            topBar = {
-                AppHeader(
-                    title = "Финансије",
-                    user = user,
-                    navController = navController,
-                    showProfileIcon = false
-                )
-            },
             floatingActionButton = {
-                FloatingActionButton(
-                    onClick = {
-                        when (state.selectedTransactionType) {
-                            is TransactionType.Income -> navController.navigate(Screen.AddIncome.route)
-                            is TransactionType.Expense -> {
-                                val selectedDate = when (val period = state.selectedTimePeriod) {
-                                    is TimePeriod.Day -> period.date.toString()
-                                    is TimePeriod.Week, is TimePeriod.Month, is TimePeriod.Year, is TimePeriod.Custom ->
-                                        LocalDate.now().toString()
+                when (state.selectedTransactionType) {
+                    is TransactionType.Income -> {
+                        FloatingActionButton(
+                            onClick = {
+                                navController.navigate(Screen.AddIncome.route)
+                            },
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Додај приход"
+                            )
+                        }
+                    }
+                    is TransactionType.Expense -> {
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            AnimatedVisibility(
+                                visible = isFabMenuExpanded,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.End,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    SmallFloatingActionButton(
+                                        onClick = {
+                                            isFabMenuExpanded = false
+                                            navController.navigate(Screen.ReceiptScanner.route)
+                                        },
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.DocumentScanner,
+                                            contentDescription = "OCR Unos"
+                                        )
+                                    }
+
+                                    SmallFloatingActionButton(
+                                        onClick = {
+                                            isFabMenuExpanded = false
+                                            val selectedDate = when (val period = state.selectedTimePeriod) {
+                                                is TimePeriod.Day -> period.date.toString()
+                                                is TimePeriod.Week, is TimePeriod.Month, is TimePeriod.Year, is TimePeriod.Custom ->
+                                                    LocalDate.now().toString()
+                                            }
+                                            navController.navigate(Screen.AddExpense.createRoute(selectedDate))
+                                        },
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Edit,
+                                            contentDescription = "Ручни unos"
+                                        )
+                                    }
                                 }
-                                navController.navigate(Screen.AddExpense.createRoute(selectedDate))
+                            }
+
+                            FloatingActionButton(
+                                onClick = { isFabMenuExpanded = !isFabMenuExpanded },
+                                containerColor = MaterialTheme.colorScheme.error
+                            ) {
+                                Icon(
+                                    imageVector = if (isFabMenuExpanded) Icons.Default.Close else Icons.Default.Add,
+                                    contentDescription = if (isFabMenuExpanded) "Zatvori meni" else "Dodaj rashod"
+                                )
                             }
                         }
-                    },
-                    containerColor = when (state.selectedTransactionType) {
-                        is TransactionType.Income -> MaterialTheme.colorScheme.primary
-                        is TransactionType.Expense -> MaterialTheme.colorScheme.error
                     }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = when (state.selectedTransactionType) {
-                            is TransactionType.Income -> "Додај приход"
-                            is TransactionType.Expense -> "Додај расход"
-                        }
-                    )
                 }
             }
         ) { paddingValues ->
@@ -529,10 +565,14 @@ fun FinanceScreen(
                         state.transactions.sumOf { it.amount }
                     }
 
+                    // Grupisanje transakcija po datumu (uz očuvanje trenutnog redoslijeda sortiranja)
+                    val groupedTransactions = remember(state.transactions) {
+                        state.transactions.groupBy { it.date }
+                    }
+
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = screenHorizontalPadding, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(listSpacing)
+                        contentPadding = PaddingValues(horizontal = screenHorizontalPadding, vertical = 8.dp)
                     ) {
                         item {
                             CombinedHeaderWithSort(
@@ -556,7 +596,8 @@ fun FinanceScreen(
                                 val rows = categories.chunked(itemsPerRow)
 
                                 Column(
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(bottom = 8.dp)
                                 ) {
                                     rows.forEachIndexed { _, rowItems ->
                                         Row(
@@ -624,32 +665,50 @@ fun FinanceScreen(
                         item {
                             Spacer(modifier = Modifier.height(2.dp))
                             HorizontalDivider()
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Све трансакције",
-                                style = if (windowInfo.isSmallWidth) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.padding(bottom = 2.dp)
-                            )
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        items(state.transactions) { transaction ->
-                            TransactionItem(
-                                transaction = transaction,
-                                numberFormat = numberFormat,
-                                isSmall = windowInfo.isSmallWidth,
-                                onEdit = {
+                        // Prikaz grupa po datumima
+                        groupedTransactions.forEach { (dateString, transactionsInGroup) ->
+                            item(key = "header_$dateString") {
+                                Text(
+                                    text = formatGroupHeaderDate(dateString),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp, start = 4.dp)
+                                )
+                            }
+
+                            items(
+                                items = transactionsInGroup,
+                                key = { transaction ->
                                     when (transaction) {
-                                        is IncomeTransaction -> navController.navigate("edit_income/${transaction.income.id}")
-                                        is ExpenseTransaction -> navController.navigate("edit_expense/${transaction.expense.id}")
-                                    }
-                                },
-                                onDelete = {
-                                    when (transaction) {
-                                        is IncomeTransaction -> viewModel.deleteIncome(transaction.income.id)
-                                        is ExpenseTransaction -> viewModel.deleteExpense(transaction.expense.id)
+                                        is IncomeTransaction -> "inc_${transaction.income.id}"
+                                        is ExpenseTransaction -> "exp_${transaction.expense.id}"
                                     }
                                 }
-                            )
+                            ) { transaction ->
+                                Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                                    TransactionItem(
+                                        transaction = transaction,
+                                        numberFormat = numberFormat,
+                                        isSmall = windowInfo.isSmallWidth,
+                                        onEdit = {
+                                            when (transaction) {
+                                                is IncomeTransaction -> navController.navigate("edit_income/${transaction.income.id}")
+                                                is ExpenseTransaction -> navController.navigate("edit_expense/${transaction.expense.id}")
+                                            }
+                                        },
+                                        onDelete = {
+                                            when (transaction) {
+                                                is IncomeTransaction -> viewModel.deleteIncome(transaction.income.id)
+                                                is ExpenseTransaction -> viewModel.deleteExpense(transaction.expense.id)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -666,6 +725,38 @@ fun FinanceScreen(
         LaunchedEffect(state.error) {
             LogUtils.e("FinanceScreen", "Error: ${state.error}", category = "ui")
         }
+    }
+}
+
+/**
+ * Helper funkcija za formatiranje datuma grupe na ćirilici:
+ * "Данас", "Јуче" ili formatirani datum (npr. "22. мај 2024.").
+ */
+private fun formatGroupHeaderDate(dateStr: String): String {
+    return try {
+        val parts = dateStr.split("-")
+        val date = if (parts.size == 3) {
+            LocalDate.of(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+        } else {
+            LocalDate.parse(dateStr)
+        }
+
+        val today = LocalDate.now()
+        val yesterday = today.minusDays(1)
+
+        when (date) {
+            today -> "Данас"
+            yesterday -> "Јуче"
+            else -> {
+                val formatter = DateTimeFormatter.ofPattern(
+                    "d. MMMM yyyy.",
+                    Locale.Builder().setLanguage("sr").setScript("Cyrl").setRegion("RS").build()
+                )
+                date.format(formatter)
+            }
+        }
+    } catch (_: Exception) {
+        dateStr
     }
 }
 
@@ -845,8 +936,7 @@ fun CombinedHeaderWithSort(
     var showSortDropdown by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -906,7 +996,6 @@ fun CombinedHeaderWithSort(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionItem(
     transaction: UITransaction,
@@ -921,6 +1010,10 @@ fun TransactionItem(
     val categoryName = when (transaction) {
         is IncomeTransaction -> transaction.income.category
         is ExpenseTransaction -> transaction.expense.category
+    }
+    val descriptionText = when (transaction) {
+        is IncomeTransaction -> transaction.income.description
+        is ExpenseTransaction -> transaction.expense.description
     }
     val isExpense = transaction is ExpenseTransaction
 
@@ -951,42 +1044,16 @@ fun TransactionItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                when (transaction) {
-                    is IncomeTransaction -> {
-                        Text(
-                            text = transaction.income.description,
-                            style = if (isSmall) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = transaction.date,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = transaction.income.category,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = categoryColor
-                        )
-                    }
-                    is ExpenseTransaction -> {
-                        Text(
-                            text = transaction.expense.description,
-                            style = if (isSmall) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = transaction.date,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = transaction.expense.category,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = categoryColor
-                        )
-                    }
-                }
+                Text(
+                    text = descriptionText,
+                    style = if (isSmall) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = categoryName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = categoryColor
+                )
             }
 
             Row(
@@ -1041,8 +1108,7 @@ fun CategoryCard(
     isSmall: Boolean = false
 ) {
     Card(
-        modifier = modifier
-            .clickable(onClick = onClick),
+        modifier = modifier.clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
@@ -1054,7 +1120,6 @@ fun CategoryCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (isSmall) 8.dp else 12.dp)
         ) {
-            // Ikonica kategorije
             Box(
                 modifier = Modifier
                     .size(if (isSmall) 32.dp else 40.dp)
@@ -1070,10 +1135,7 @@ fun CategoryCard(
                 )
             }
 
-            // Tekstualni podaci u vertikalnoj koloni (zauzima znatno manje visine)
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

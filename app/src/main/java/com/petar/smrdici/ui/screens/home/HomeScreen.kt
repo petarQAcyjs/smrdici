@@ -1,7 +1,11 @@
 @file:OptIn(ExperimentalMaterialApi::class)
 package com.petar.smrdici.ui.screens.home
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,7 +30,6 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -47,6 +50,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,11 +63,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.ui.auth.AuthState
 import com.petar.smrdici.ui.auth.AuthViewModel
-import com.petar.smrdici.ui.components.AppHeader
 import com.petar.smrdici.ui.components.PieChart
 import com.petar.smrdici.ui.components.PieChartData
 import com.petar.smrdici.ui.navigation.Screen
@@ -70,12 +75,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import kotlin.math.ceil
-import androidx.compose.foundation.Image
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.platform.LocalLocale
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.Animatable
 
 // Data classes for stacked bar chart
 data class CategoryExpense(
@@ -134,12 +133,7 @@ fun HomeScreen(
     }
 
     Scaffold(
-        topBar = {
-            AppHeader(
-                title = "Почетна",
-                showLogoutButton = false
-            )
-        },
+
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         Box(
@@ -187,7 +181,13 @@ fun HomeScreen(
                         expenseData = homeViewModel.expenseChartData.collectAsState().value,
                         isLoading = homeViewModel.isLoadingExpenseData.collectAsState().value,
                         onCardClick = {
-                            navController.navigate(Screen.Finance.route)
+                            navController.navigate(Screen.Finance.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -199,7 +199,13 @@ fun HomeScreen(
                         historyData = homeViewModel.expenseHistoryData.collectAsState().value,
                         isLoading = homeViewModel.isLoadingHistoryData.collectAsState().value,
                         onCardClick = {
-                            navController.navigate(Screen.Finance.route)
+                            navController.navigate(Screen.Finance.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -467,9 +473,22 @@ fun ExpensePieChartCard(
                             .padding(4.dp),
                         contentAlignment = Alignment.Center
                     ) {
+                        val formattedCenterText = remember(totalExpenses) {
+                            val srLocale = java.util.Locale.Builder()
+                                .setLanguage("sr")
+                                .setScript("Cyrl")
+                                .setRegion("RS")
+                                .build()
+
+                            val formatter = java.text.NumberFormat.getInstance(srLocale).apply {
+                                isGroupingUsed = true
+                            }
+                            formatter.format(totalExpenses.toInt())
+                        }
+
                         PieChart(
                             data = pieChartData,
-                            centerText = totalExpenses.toInt().toString(),
+                            centerText = formattedCenterText,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -520,34 +539,6 @@ fun ExpensePieChartCard(
                     }
                 }
 
-                Column {
-                    HorizontalDivider(
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Укупно:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Text(
-                            text = String.format(LocalLocale.current.platformLocale, "%.2f", totalExpenses),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
             }
         }
     }

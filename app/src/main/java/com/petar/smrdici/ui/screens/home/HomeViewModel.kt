@@ -447,7 +447,7 @@ class HomeViewModel(
                     }
                 }
 
-                val periods = calculatePeriods(configuredPeriod, now, NUM_PERIODS_TO_SHOW, customStartDay)
+                val periods = calculatePeriods(configuredPeriod, now, customStartDay)
                 if (periods.isEmpty()) {
                     _isLoadingHistoryData.value = false
                     return@launch
@@ -554,15 +554,21 @@ class HomeViewModel(
     private fun calculatePeriods(
         periodType: Period,
         currentDate: LocalDate,
-        count: Int,
         customStartDay: Int
     ): List<Triple<LocalDate, LocalDate, String>> {
         val periods = mutableListOf<Triple<LocalDate, LocalDate, String>>()
-        val dateFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
-        val monthFormatter = DateTimeFormatter.ofPattern("MMM", Locale.getDefault())
 
-        for (i in 0 until count) {
-            val (startDate, endDate, periodName) = when (periodType) {
+        val cyrillicLocale = Locale.Builder()
+            .setLanguage("sr")
+            .setScript("Cyrl")
+            .setRegion("RS")
+            .build()
+
+        val dateFormatter = DateTimeFormatter.ofPattern("MMM d", cyrillicLocale)
+        val monthFormatter = DateTimeFormatter.ofPattern("MMM", cyrillicLocale)
+
+        for (i in 0 until NUM_PERIODS_TO_SHOW) {
+            val triple = when (periodType) {
                 Period.DAILY -> {
                     val date = currentDate.minusDays(i.toLong())
                     val name = if (i == 0) "Данас" else if (i == 1) "Јуче" else date.format(dateFormatter)
@@ -611,14 +617,13 @@ class HomeViewModel(
                 }
             }
 
-            periods.add(Triple(startDate, endDate, periodName))
+            periods.add(triple)
         }
 
         return periods
     }
 
     override fun onCleared() {
-        super.onCleared()
         currentLoadJob?.cancel()
 
         viewModelScope.launch {

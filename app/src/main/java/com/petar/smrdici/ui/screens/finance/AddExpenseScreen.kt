@@ -1,5 +1,7 @@
 package com.petar.smrdici.ui.screens.finance
 
+import android.util.Log
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
@@ -81,6 +84,7 @@ fun AddExpenseScreen(
     var description by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
     var customCategoryName by remember { mutableStateOf("") }
+    var scannedSourceInfo by remember { mutableStateOf<String?>(null) }
 
     var selectedDateMillis by remember {
         mutableLongStateOf(
@@ -123,6 +127,38 @@ fun AddExpenseScreen(
     val user = if (authState is AuthState.Authenticated) {
         (authState as AuthState.Authenticated).user
     } else null
+    val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
+
+    LaunchedEffect(savedStateHandle) {
+        val scannedMerchant = savedStateHandle?.get<String>("scanned_merchant")
+        val scannedAmount = savedStateHandle?.get<String>("scanned_amount")
+        val scannedCategory = savedStateHandle?.get<String>("scanned_category")
+        val scannedSource = savedStateHandle?.get<String>("scanned_source")
+
+        if (!scannedAmount.isNullOrEmpty()) {
+            amount = scannedAmount
+            savedStateHandle.remove<String>("scanned_amount")
+        }
+
+        if (!scannedMerchant.isNullOrEmpty()) {
+            description = scannedMerchant
+            savedStateHandle.remove<String>("scanned_merchant")
+        }
+
+        if (!scannedCategory.isNullOrEmpty()) {
+            try {
+                selectedCategory = ExpenseCategory.valueOf(scannedCategory)
+            } catch (_: Exception) {
+                customCategoryName = scannedCategory
+            }
+            savedStateHandle.remove<String>("scanned_category")
+        }
+
+        if (!scannedSource.isNullOrEmpty()) {
+            scannedSourceInfo = scannedSource
+            savedStateHandle.remove<String>("scanned_source")
+        }
+    }
 
     val accounts by accountViewModel.accounts.collectAsState()
     val transactionRepository = remember { TransactionRepository.getInstance() }
@@ -295,7 +331,33 @@ fun AddExpenseScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (!scannedSourceInfo.isNullOrEmpty()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "Информација",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Учитано преко: $scannedSourceInfo",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
 
                 Column {
                     OutlinedTextField(
@@ -328,7 +390,7 @@ fun AddExpenseScreen(
 
                 Column {
                     if (isLoadingCategories) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     } else {
@@ -369,7 +431,7 @@ fun AddExpenseScreen(
                         .clickable(enabled = !isLoading) { showDatePicker = true },
                     shape = RoundedCornerShape(4.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    border = androidx.compose.foundation.BorderStroke(
+                    border = BorderStroke(
                         width = 1.dp,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -400,12 +462,12 @@ fun AddExpenseScreen(
                         shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.surface,
                         border = if (accountError.isNotEmpty()) {
-                            androidx.compose.foundation.BorderStroke(
+                            BorderStroke(
                                 width = 1.dp,
                                 color = MaterialTheme.colorScheme.error
                             )
                         } else {
-                            androidx.compose.foundation.BorderStroke(
+                            BorderStroke(
                                 width = 1.dp,
                                 color = MaterialTheme.colorScheme.outline
                             )

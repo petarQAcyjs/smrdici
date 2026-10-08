@@ -1,9 +1,10 @@
+@file:Suppress("UnstableApiUsage")
+
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import com.android.build.api.dsl.ApplicationExtension
 
 plugins {
     alias(libs.plugins.android.application)
-    //alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
 }
@@ -17,7 +18,11 @@ configure<ApplicationExtension> {
         versionName = providers.gradleProperty("versionName").get()
         applicationId = "com.petar.smrdici"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
+
+        externalNativeBuild {
+            experimentalProperties["android.experimental.art-abi-16kb-alignment"] = true
+        }
 
         ndk {
             abiFilters.add("armeabi-v7a")
@@ -133,4 +138,21 @@ dependencies {
 
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
+
+    // Google ML Kit
+    implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.mlkit.text.recognition)
+
+    // CameraX
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+
+    // JSoup
+    implementation(libs.jsoup)
+
+    // Guava za CameraX ListenableFuture
+    implementation(libs.guava)
+    implementation(libs.concurrent.futures)
 }

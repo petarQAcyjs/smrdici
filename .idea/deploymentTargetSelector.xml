@@ -4,10 +4,10 @@
     <selectionStates>
       <SelectionState runConfigName="Smrdici_180926">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-10-04T19:51:32.488428Z">
+        <DropdownSelection timestamp="2026-10-07T19:29:25.570202400Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="PhysicalDevice" identifier="serial=R5CT91YM11M" />
+              <DeviceId pluginId="Wireless" identifier="serviceName=adb-R5CX422PYFH-FwG1AA" />
             </handle>
           </Target>
         </DropdownSelection>
