@@ -1015,9 +1015,6 @@ fun TransactionItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val context = LocalContext.current
-    val categoryManager = CategoryManager.getInstance(context)
-
     val categoryName = when (transaction) {
         is IncomeTransaction -> transaction.income.category
         is ExpenseTransaction -> transaction.expense.category
@@ -1028,16 +1025,12 @@ fun TransactionItem(
     }
     val isExpense = transaction is ExpenseTransaction
 
-    // Dobijanje boje i ikonice kategorije uz bezbednu proveru null vrednosti
-    val savedColorValue = categoryManager.getCategoryColor(categoryName, isExpense)
-    val categoryColor = if (savedColorValue != null) {
-        Color(savedColorValue)
-    } else {
-        if (isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    }
+    // Koristimo gotovu boju i ikonicu dovedenu iz ViewModel-a bez ponovnog čitanja sa diska!
+    val categoryColor = transaction.categoryColor
+        ?: if (isExpense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
 
-    val iconName = categoryManager.getCategoryIcon(categoryName, isExpense)
-    val categoryIcon = CategoryIcons.findIconByName(iconName ?: "") ?: Icons.Default.MoreHoriz
+    val categoryIcon = CategoryIcons.findIconByName(transaction.categoryIconName ?: "")
+        ?: Icons.Default.MoreHoriz
 
     val itemPadding = if (isSmall) 10.dp else 12.dp
 

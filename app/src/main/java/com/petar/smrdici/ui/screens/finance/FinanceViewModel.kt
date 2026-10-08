@@ -108,14 +108,24 @@ sealed class TransactionType {
 sealed class UITransaction {
     abstract val amount: Double
     abstract val date: String
+    abstract val categoryColor: Color?
+    abstract val categoryIconName: String?
 }
 
-data class IncomeTransaction(val income: Income) : UITransaction() {
+data class IncomeTransaction(
+    val income: Income,
+    override val categoryColor: Color? = null,
+    override val categoryIconName: String? = null
+) : UITransaction() {
     override val amount: Double = income.amount
     override val date: String = income.date
 }
 
-data class ExpenseTransaction(val expense: Expense) : UITransaction() {
+data class ExpenseTransaction(
+    val expense: Expense,
+    override val categoryColor: Color? = null,
+    override val categoryIconName: String? = null
+) : UITransaction() {
     override val amount: Double = expense.amount
     override val date: String = expense.date
 }
@@ -393,15 +403,16 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                     _state.value = _state.value.copy(isLoading = true, error = null)
                 }
 
-                val startDate = _state.value.selectedTimePeriod.calculateStartDate()
-                val endDate = _state.value.selectedTimePeriod.calculateEndDate()
+                val startDate = _state.value.selectedTimePeriod.calculateStartDate().toString() // "YYYY-MM-DD"
+                val endDate = _state.value.selectedTimePeriod.calculateEndDate().toString()     // "YYYY-MM-DD"
 
                 val defaultAccount = _state.value.accounts.find { it.isDefault } ?: _state.value.accounts.firstOrNull()
                 val targetAccountId = _state.value.selectedAccountId ?: defaultAccount?.id
 
-                transactionRepository.getAllTransactions().collect { allTransactions ->
+                // Pozivamo novi upit po datumu iz Repozitorijuma
+                transactionRepository.getTransactionsByDateRangeFlow(startDate, endDate).collect { rangeTransactions ->
                     val filteredTransactions = withContext(Dispatchers.Default) {
-                        allTransactions.filter { transaction ->
+                        rangeTransactions.filter { transaction ->
                             val matchesType = when (_state.value.selectedTransactionType) {
                                 is TransactionType.Income -> transaction is Income
                                 is TransactionType.Expense -> transaction is Expense
@@ -412,27 +423,26 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
                                 return@filter false
                             }
 
-                            val transactionDate = try {
-                                val parts = transaction.date.split("-")
-                                if (parts.size == 3) {
-                                    LocalDate.of(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
-                                } else {
-                                    LocalDate.parse(transaction.date)
-                                }
-                            } catch (_: Exception) {
-                                null
-                            } ?: return@filter false
-
-                            (transactionDate.isEqual(startDate) || transactionDate.isAfter(startDate)) &&
-                                    (transactionDate.isEqual(endDate) || transactionDate.isBefore(endDate))
+                            true
                         }
                     }
 
+                    // Unapred dohvatamo ikonice i boje na pozadinskoj niti (Background Thread)
                     val uiTransactions = withContext(Dispatchers.Default) {
+                        val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
+                        val categoryManager = context?.let { com.petar.smrdici.data.model.CategoryManager.getInstance(it) }
+
                         filteredTransactions.map { transaction ->
+                            val isExpense = transaction is Expense
+                            val categoryName = if (transaction is Expense) transaction.category else (transaction as Income).category
+
+                            val savedColorLong = categoryManager?.getCategoryColor(categoryName, isExpense)
+                            val savedColor = savedColorLong?.let { Color(it) }
+                            val savedIconName = categoryManager?.getCategoryIcon(categoryName, isExpense)
+
                             when (transaction) {
-                                is Income -> IncomeTransaction(transaction)
-                                is Expense -> ExpenseTransaction(transaction)
+                                is Income -> IncomeTransaction(transaction, savedColor, savedIconName)
+                                is Expense -> ExpenseTransaction(transaction, savedColor, savedIconName)
                             }
                         }
                     }
