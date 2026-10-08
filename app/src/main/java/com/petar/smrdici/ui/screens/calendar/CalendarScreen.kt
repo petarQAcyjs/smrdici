@@ -562,6 +562,22 @@ fun CalendarGrid(
                 )
             }
         }
+
+        // --- ELEGANTNI RAZDVOJNIK (DIVIDER) ISPOD KALENDARA ---
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp, bottom = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+            )
+        }
     }
 }
 
@@ -572,22 +588,77 @@ fun EventsList(
     selectedDate: Date,
     modifier: Modifier = Modifier
 ) {
-    val dateFormatter = SimpleDateFormat("dd.MM.yyyy", LocalLocale.current.platformLocale)
-    val selectedDateText = remember(selectedDate) {
-        dateFormatter.format(selectedDate)
+    val srLocale = remember { Locale.forLanguageTag("sr") }
+
+    val isToday = remember(selectedDate) {
+        isSameDay(Date(), selectedDate)
+    }
+
+    val dayNumber = remember(selectedDate) {
+        SimpleDateFormat("d", srLocale).format(selectedDate)
+    }
+
+    val dayOfWeekName = remember(selectedDate) {
+        SimpleDateFormat("EEEE", srLocale).format(selectedDate)
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(srLocale) else it.toString() }
     }
 
     Column(
         modifier = modifier.padding(horizontal = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.Start
     ) {
-        Text(
-            text = "Догађаји за $selectedDateText",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
+        // --- NOVO ZAGLAVLJE SA VERTIKALNIM DIVIDEROM PORED DANA ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Plava linija (Vertical Divider) sa lijeve strane
+                Box(
+                    modifier = Modifier
+                        .height(52.dp)
+                        .width(3.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
 
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column(horizontalAlignment = Alignment.Start) {
+                    Text(
+                        text = if (isToday) "ДАНАС" else "ДАТУМ",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = dayNumber,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        lineHeight = 32.sp
+                    )
+                    Text(
+                        text = dayOfWeekName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Text(
+                text = "${events.size} ${if (events.size == 1) "догађај" else "догађаја"}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // --- LISTA DOGAĐAJA ---
         if (events.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -603,24 +674,28 @@ fun EventsList(
                         imageVector = Icons.Default.Event,
                         contentDescription = null,
                         modifier = Modifier
-                            .size(64.dp)
-                            .padding(bottom = 16.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            .size(56.dp)
+                            .padding(bottom = 12.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                     )
 
                     Text(
                         text = "Нема догађаја за изабрани датум",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         textAlign = TextAlign.Center
                     )
                 }
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(events) { event ->
+                items(
+                    items = events,
+                    key = { event -> event.id ?: event.hashCode() }
+                ) { event ->
                     EventItem(
                         event = event,
                         onClick = { onEventClick(event) }
@@ -638,25 +713,39 @@ fun EventItem(
 ) {
     val assignee = EventAssignee.entries.find { it.name == event.assignee } ?: EventAssignee.EVERYONE
 
+    val timeText = remember(event.allDay, event.startTime, event.endTime) {
+        if (!event.allDay && event.startTime != null) {
+            val start = SimpleDateFormat("HH:mm", Locale.getDefault()).format(event.startTime.toDate())
+            val end = event.endTime?.let { SimpleDateFormat("HH:mm", Locale.getDefault()).format(it.toDate()) }
+            if (end != null) "$start - $end" else start
+        } else {
+            "Целодневни догађај"
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(24.dp))
             .clickable { onClick() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(42.dp)
                     .background(
-                        Color(event.color.toColorInt()).copy(alpha = 0.3f),
+                        Color(event.color.toColorInt()).copy(alpha = 0.25f),
                         CircleShape
                     )
                     .border(1.dp, Color(event.color.toColorInt()), CircleShape)
@@ -673,50 +762,43 @@ fun EventItem(
                     painter = painterResource(id = avatarRes),
                     contentDescription = assignee.displayName,
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(32.dp)
                         .clip(CircleShape),
                     contentScale = ContentScale.Crop
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = if (event.isRecurringYearly) "🎂 ${event.title}" else event.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    text = timeText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    fontWeight = FontWeight.Bold
                 )
 
                 Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = if (event.isRecurringYearly) "🎂 ${event.title}" else event.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
                 if (event.location.isNotBlank()) {
                     Text(
                         text = event.location,
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
-
-            if (!event.allDay && event.startTime != null) {
-                Spacer(modifier = Modifier.width(8.dp))
-
-                val timeText = remember(event.startTime) {
-                    val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
-                    formatter.format(event.startTime.toDate())
-                }
-
-                Text(
-                    text = timeText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
