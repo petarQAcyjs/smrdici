@@ -146,6 +146,7 @@ data class AccountBalance(
 )
 
 data class CategorySummary(
+    val rawCategory: String,
     val categoryName: String,
     val iconName: String,
     val color: Color,
@@ -356,22 +357,17 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         LogUtils.i("FinanceViewModel", "Selected category: ${category.categoryName}", category = "finance")
 
         val categoryTransactions = _state.value.transactions.filter { transaction ->
-            when (transaction) {
-                is ExpenseTransaction -> transaction.expense.category == category.categoryName
-                is IncomeTransaction -> transaction.income.category == category.categoryName
+            val transCategory = when (transaction) {
+                is ExpenseTransaction -> transaction.expense.category
+                is IncomeTransaction -> transaction.income.category
             }
+            transCategory.equals(category.rawCategory, ignoreCase = true) ||
+                    transCategory.equals(category.categoryName, ignoreCase = true)
         }
 
         _state.value = _state.value.copy(
             selectedCategory = category,
             categoryTransactions = categoryTransactions
-        )
-    }
-
-    fun clearSelectedCategory() {
-        _state.value = _state.value.copy(
-            selectedCategory = null,
-            categoryTransactions = emptyList()
         )
     }
 
@@ -532,6 +528,11 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
     ): List<CategorySummary> {
         if (transactions.isEmpty()) return emptyList()
 
+        // 1. Pristupamo CategoryManager-u
+        val context = com.petar.smrdici.utils.AppGlobals.getAppContext()
+        val categoryManager = context?.let { com.petar.smrdici.data.model.CategoryManager.getInstance(it) }
+        val isExpense = _state.value.selectedTransactionType is TransactionType.Expense
+
         val categoryGroups = transactions.groupBy { transaction ->
             when (transaction) {
                 is ExpenseTransaction -> transaction.expense.category
@@ -545,14 +546,22 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
             val categoryAmount = categoryTransactions.sumOf { it.amount }
             val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
 
-            val colorIndex = abs(category.hashCode()) % categoryColors.size
-            val color = categoryColors[colorIndex]
+            // 2. Uzimamo boju iz CategoryManager-a (ili podrazumevanu ako je nema)
+            val savedColorValue = categoryManager?.getCategoryColor(category, isExpense)
+            val color = if (savedColorValue != null) {
+                Color(savedColorValue)
+            } else {
+                val colorIndex = abs(category.hashCode()) % categoryColors.size
+                categoryColors[colorIndex]
+            }
 
-            val iconName = categoryIconMapping[category] ?: "Receipt"
+            // 3. Uzimamo ikonicu iz CategoryManager-a (ili podrazumevanu ako je nema)
+            val savedIconName = categoryManager?.getCategoryIcon(category, isExpense)
+            val iconName = savedIconName ?: categoryIconMapping[category.uppercase()] ?: "Receipt"
 
             val displayName = try {
                 if (_state.value.selectedTransactionType is TransactionType.Expense) {
-                    ExpenseCategory.valueOf(category).getDisplayName()
+                    ExpenseCategory.valueOf(category.uppercase()).getDisplayName()
                 } else {
                     category
                 }
@@ -561,6 +570,7 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
             }
 
             CategorySummary(
+                rawCategory = category,
                 categoryName = displayName,
                 iconName = iconName,
                 color = color,

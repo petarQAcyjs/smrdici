@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ExperimentalMaterialApi
@@ -45,6 +44,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -83,6 +83,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -101,7 +102,6 @@ import org.threeten.bp.format.DateTimeFormatter
 import org.threeten.bp.temporal.ChronoUnit
 import java.text.NumberFormat
 import java.util.Locale
-import kotlin.math.abs
 
 @SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterialApi::class)
@@ -130,12 +130,6 @@ fun FinanceScreen(
             }
         }
     )
-    val predefinedColors = listOf(
-        Color(0xFFE57373), Color(0xFFFFB74D), Color(0xFFFFF176),
-        Color(0xFFAED581), Color(0xFF4DD0E1), Color(0xFF9575CD),
-        Color(0xFFF06292), Color(0xFF7986CB), Color(0xFF4DB6AC),
-        Color(0xFFFF8A65)
-    )
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -151,18 +145,20 @@ fun FinanceScreen(
         }
     }
 
-    val numberFormat = remember {
-        NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("sr").setRegion("RS").build())
+    val srLocale = remember { Locale.Builder().setLanguage("sr").setRegion("RS").build() }
+
+    val numberFormat = remember(srLocale) {
+        NumberFormat.getCurrencyInstance(srLocale)
     }
 
     var showAccountSelector by remember { mutableStateOf(false) }
 
-    val currencyFormatters = remember {
+    val currencyFormatters = remember(srLocale) {
         mapOf(
-            "RSD" to NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("sr").setRegion("RS").build()),
-            "EUR" to NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("de").setRegion("DE").build()),
-            "USD" to NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("en").setRegion("US").build()),
-            "GBP" to NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("en").setRegion("GB").build())
+            "RSD" to NumberFormat.getCurrencyInstance(srLocale),
+            "EUR" to NumberFormat.getCurrencyInstance(Locale.GERMANY),
+            "USD" to NumberFormat.getCurrencyInstance(Locale.US),
+            "GBP" to NumberFormat.getCurrencyInstance(Locale.UK)
         )
     }
 
@@ -353,11 +349,12 @@ fun FinanceScreen(
                         val activeAccountId = state.selectedAccountId ?: state.accounts.firstOrNull()?.id
                         val accountBalance = state.accountBalances[activeAccountId]
                         val account = state.accounts.find { it.id == activeAccountId }
-                        val nativeCurrencyFormatter = accountBalance?.nativeCurrency?.let { currencyFormatters[it] }
+
+                        val currencyKey = accountBalance?.nativeCurrency ?: account?.currency ?: "RSD"
+                        val nativeCurrencyFormatter = currencyFormatters[currencyKey] ?: numberFormat
 
                         val currentAccountBalance = accountBalance?.currentBalance ?: account?.balance ?: 0.0
-                        val balanceText = nativeCurrencyFormatter?.format(currentAccountBalance)
-                            ?: "$currentAccountBalance ${accountBalance?.nativeCurrency ?: account?.currency ?: ""}"
+                        val balanceText = nativeCurrencyFormatter.format(currentAccountBalance)
 
                         Text(
                             text = balanceText,
@@ -367,46 +364,6 @@ fun FinanceScreen(
                                 is TransactionType.Income -> MaterialTheme.colorScheme.onPrimaryContainer
                                 is TransactionType.Expense -> MaterialTheme.colorScheme.onErrorContainer
                             }
-                        )
-                    }
-                }
-
-                if (state.categorySummaries.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = screenHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(state.categorySummaries.take(5)) { category ->
-                            val icon = CategoryIcons.findIconByName(category.iconName)
-
-                            if (icon != null) {
-                                CategorySummaryCard(
-                                    icon = icon,
-                                    backgroundColor = category.color,
-                                    categoryName = category.categoryName,
-                                    percentage = "${String.format("%.1f", category.percentage)}%",
-                                    amount = numberFormat.format(category.amount),
-                                    onClick = { viewModel.selectCategory(category) },
-                                    modifier = Modifier.width(if (windowInfo.isSmallWidth) 220.dp else 280.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                state.selectedCategory?.let { category ->
-                    val icon = CategoryIcons.findIconByName(category.iconName)
-                    if (icon != null) {
-                        CategoryDetailsDialog(
-                            categoryName = category.categoryName,
-                            icon = icon,
-                            backgroundColor = category.color,
-                            transactions = state.categoryTransactions,
-                            totalAmount = category.amount,
-                            percentage = category.percentage,
-                            numberFormat = numberFormat,
-                            onDismiss = { viewModel.clearSelectedCategory() }
                         )
                     }
                 }
@@ -433,19 +390,6 @@ fun FinanceScreen(
                 } else {
                     var categoriesExpanded by remember { mutableStateOf(false) }
 
-                    val transactionsByCategory = remember(state.transactions) {
-                        state.transactions.groupBy { transaction ->
-                            when (transaction) {
-                                is IncomeTransaction -> transaction.income.category
-                                is ExpenseTransaction -> transaction.expense.category
-                            }
-                        }
-                    }
-
-                    val totalAmount = remember(state.transactions) {
-                        state.transactions.sumOf { it.amount }
-                    }
-
                     val groupedTransactions = remember(state.transactions) {
                         state.transactions.groupBy { it.date }
                     }
@@ -469,71 +413,48 @@ fun FinanceScreen(
                                 enter = expandVertically(),
                                 exit = shrinkVertically()
                             ) {
-                                val categories = state.categorySummaries
-                                    .map { it.categoryName }
-                                    .filter { transactionsByCategory.containsKey(it) }
+                                val summaries = state.categorySummaries
                                 val itemsPerRow = 2
-                                val rows = categories.chunked(itemsPerRow)
+                                val rows = summaries.chunked(itemsPerRow)
 
                                 Column(
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.padding(bottom = 8.dp)
                                 ) {
-                                    rows.forEachIndexed { _, rowItems ->
+                                    rows.forEach { rowSummaries ->
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            rowItems.forEach { category ->
-                                                val transactions = transactionsByCategory[category] ?: emptyList()
-                                                val categoryAmount = transactions.sumOf { it.amount }
-                                                val percentage = if (totalAmount > 0) (categoryAmount / totalAmount) * 100 else 0.0
+                                            rowSummaries.forEach { summary ->
+                                                val icon = CategoryIcons.findIconByName(summary.iconName)
+                                                    ?: Icons.Default.MoreHoriz
 
-                                                val isExpense = transactions.firstOrNull() is ExpenseTransaction
-                                                val iconName = when {
-                                                    isExpense -> "ShoppingCart"
-                                                    else -> "AttachMoney"
+                                                val count = state.transactions.count { transaction ->
+                                                    val cat = when (transaction) {
+                                                        is ExpenseTransaction -> transaction.expense.category
+                                                        is IncomeTransaction -> transaction.income.category
+                                                    }
+                                                    cat.equals(summary.rawCategory, ignoreCase = true) ||
+                                                            cat.equals(summary.categoryName, ignoreCase = true)
                                                 }
 
-                                                val icon = CategoryIcons.findIconByName(iconName)
-
-                                                val categoryManager = CategoryManager.getInstance(LocalContext.current)
-                                                val savedColorValue = categoryManager.getCategoryColor(category, isExpense)
-
-                                                val color = if (savedColorValue != null) {
-                                                    Color(savedColorValue)
-                                                } else {
-                                                    val colorIndex = abs(category.hashCode() % predefinedColors.size)
-                                                    predefinedColors[colorIndex]
-                                                }
-
-                                                if (icon != null) {
-                                                    CategoryCard(
-                                                        icon = icon,
-                                                        backgroundColor = color,
-                                                        categoryName = category,
-                                                        percentage = String.format("%.1f%%", percentage),
-                                                        amount = numberFormat.format(categoryAmount),
-                                                        count = transactions.size,
-                                                        onClick = {
-                                                            val categorySummary = CategorySummary(
-                                                                categoryName = category,
-                                                                iconName = iconName,
-                                                                color = color,
-                                                                amount = categoryAmount,
-                                                                percentage = percentage
-                                                            )
-                                                            viewModel.selectCategory(categorySummary)
-                                                        },
-                                                        modifier = Modifier.weight(1f),
-                                                        isSmall = windowInfo.isSmallWidth
-                                                    )
-                                                } else {
-                                                    Spacer(modifier = Modifier.weight(1f))
-                                                }
+                                                CategoryCard(
+                                                    icon = icon,
+                                                    backgroundColor = summary.color,
+                                                    categoryName = summary.categoryName,
+                                                    percentage = String.format(srLocale, "%.1f%%", summary.percentage),
+                                                    amount = numberFormat.format(summary.amount),
+                                                    count = count,
+                                                    onClick = {
+                                                        viewModel.selectCategory(summary)
+                                                    },
+                                                    modifier = Modifier.weight(1f),
+                                                    isSmall = windowInfo.isSmallWidth
+                                                )
                                             }
 
-                                            repeat(itemsPerRow - rowItems.size) {
+                                            repeat(itemsPerRow - rowSummaries.size) {
                                                 Spacer(modifier = Modifier.weight(1f))
                                             }
                                         }
@@ -808,7 +729,7 @@ fun TimePeriodSelector(
 fun TransactionTypeSelector(
     selectedType: TransactionType,
     onTypeSelected: (TransactionType) -> Unit,
-    horizontalPadding: androidx.compose.ui.unit.Dp
+    horizontalPadding: Dp
 ) {
     Surface(
         modifier = Modifier
