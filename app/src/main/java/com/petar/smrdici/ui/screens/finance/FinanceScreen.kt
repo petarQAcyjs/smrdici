@@ -390,8 +390,16 @@ fun FinanceScreen(
                 } else {
                     var categoriesExpanded by remember { mutableStateOf(false) }
 
-                    val groupedTransactions = remember(state.transactions) {
-                        state.transactions.groupBy { it.date }
+                    // 1. Proveravamo da li je izabrano sortiranje po datumu
+                    val isDateSort = state.sortOption == SortOption.DATE_NEWEST || state.sortOption == SortOption.DATE_OLDEST
+
+                    // 2. Ako jeste sort po datumu, grupisi po datumu. Ako nije, stavi sve u jednu grupu bez zaglavlja (prazan string "")
+                    val groupedTransactions = remember(state.transactions, state.sortOption) {
+                        if (isDateSort) {
+                            state.transactions.groupBy { it.date }
+                        } else {
+                            mapOf("" to state.transactions)
+                        }
                     }
 
                     LazyColumn(
@@ -470,14 +478,17 @@ fun FinanceScreen(
                         }
 
                         groupedTransactions.forEach { (dateString, transactionsInGroup) ->
-                            item(key = "header_$dateString") {
-                                Text(
-                                    text = formatGroupHeaderDate(dateString),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp, start = 4.dp)
-                                )
+                            // Prikazujemo zaglavlje sa datumom SAMO ako je sortiranje po datumu (kada dateString nije prazan)
+                            if (dateString.isNotEmpty()) {
+                                item(key = "header_$dateString") {
+                                    Text(
+                                        text = formatGroupHeaderDate(dateString),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 12.dp, bottom = 6.dp, start = 4.dp)
+                                    )
+                                }
                             }
 
                             items(
