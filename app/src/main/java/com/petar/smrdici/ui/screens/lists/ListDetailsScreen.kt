@@ -339,7 +339,8 @@ fun ListDetailsScreen(
                     onClick = {
                         addEmptyItem()
                     },
-                    containerColor = MaterialTheme.colorScheme.primary
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    shape = CircleShape
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,

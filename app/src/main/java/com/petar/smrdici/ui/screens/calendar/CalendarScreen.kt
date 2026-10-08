@@ -234,7 +234,8 @@ fun CalendarScreen(
                     onClick = {
                         calendarViewModel.resetEventForm()
                         showAddEventDialog = true
-                    }
+                    },
+                    shape = CircleShape
                 ) {
                     Icon(Icons.Default.Add, "Додај догађај")
                 }
@@ -265,7 +266,6 @@ fun CalendarScreen(
                         )
                     }
 
-                    // Naslov meseca i "Danas" dugme
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
@@ -276,7 +276,6 @@ fun CalendarScreen(
                             fontWeight = FontWeight.Bold
                         )
 
-                        // Proveravamo da li prikazani mesec/godina odgovaraju DANAŠNJEM mesecu i godini
                         val today = remember { Date() }
                         val isCurrentMonth = remember(selectedDate) {
                             val calSelected = Calendar.getInstance().apply { time = selectedDate }
@@ -285,7 +284,6 @@ fun CalendarScreen(
                                     calSelected.get(Calendar.YEAR) == calToday.get(Calendar.YEAR)
                         }
 
-                        // Prikazujemo dugme samo ako nismo u tekućem mesecu
                         if (!isCurrentMonth) {
                             Spacer(modifier = Modifier.width(8.dp))
                             FilledTonalButton(
@@ -431,21 +429,40 @@ fun CalendarScreen(
 @Composable
 fun DateCell(
     date: Date,
-    isSelected: Boolean,
+    selectedDate: Date,
     hasEvents: Boolean,
     hasBirthday: Boolean,
     onClick: () -> Unit
 ) {
+    val isSelected = isSameDay(selectedDate, date)
+    val isToday = isSameDay(Date(), date)
+
+    val isCurrentMonth = remember(date, selectedDate) {
+        val calDate = Calendar.getInstance().apply { time = date }
+        val calSelected = Calendar.getInstance().apply { time = selectedDate }
+        calDate.get(Calendar.MONTH) == calSelected.get(Calendar.MONTH) &&
+                calDate.get(Calendar.YEAR) == calSelected.get(Calendar.YEAR)
+    }
+
+    val textColor = when {
+        isSelected -> Color.White
+        isToday -> MaterialTheme.colorScheme.primary
+        !isCurrentMonth -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
     Box(
         modifier = Modifier
             .aspectRatio(1f)
             .padding(2.dp)
             .clip(CircleShape)
             .background(
-                when {
-                    isSelected -> MaterialTheme.colorScheme.primary
-                    else -> Color.Transparent
-                }
+                if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+            )
+            .then(
+                if (isToday && !isSelected) {
+                    Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                } else Modifier
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
@@ -456,25 +473,29 @@ fun DateCell(
         ) {
             Text(
                 text = SimpleDateFormat("d", LocalLocale.current.platformLocale).format(date),
-                color = if (isSelected) Color.White else Color.Unspecified,
-                fontSize = 13.sp
+                color = textColor,
+                fontSize = 13.sp,
+                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal
             )
 
             Row(
                 horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .height(14.dp)
+                    .padding(top = 1.dp)
             ) {
                 if (hasBirthday) {
                     Text(
                         text = "🎂",
                         fontSize = 10.sp,
-                        modifier = Modifier.padding(top = 1.dp)
+                        lineHeight = 10.sp
                     )
                 }
                 if (hasEvents) {
+                    if (hasBirthday) Spacer(modifier = Modifier.width(2.dp))
                     Box(
                         modifier = Modifier
-                            .padding(start = if (hasBirthday) 2.dp else 0.dp)
                             .size(4.dp)
                             .clip(CircleShape)
                             .background(
@@ -496,28 +517,66 @@ fun CalendarGrid(
     datesWithBirthdays: Set<Date>,
     onDateSelected: (Date) -> Unit
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(7),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        items(dates) { date ->
-            val calendar = Calendar.getInstance().apply { time = date }
-            val normalizedDate = calendar.apply {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }.time
+    val daysOfWeek = remember { listOf("П", "У", "С", "Ч", "П", "С", "Н") }
 
-            val hasBirthday = datesWithBirthdays.any { isSameDay(it, normalizedDate) }
-            val hasNormalEvents = datesWithEvents.any { isSameDay(it, normalizedDate) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            daysOfWeek.forEach { day ->
+                Text(
+                    text = day,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
 
-            DateCell(
-                date = date,
-                isSelected = isSameDay(selectedDate, date),
-                hasEvents = hasNormalEvents,
-                hasBirthday = hasBirthday,
-                onClick = { onDateSelected(date) }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(dates) { date ->
+                val calendar = Calendar.getInstance().apply { time = date }
+                val normalizedDate = calendar.apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
+
+                val hasBirthday = datesWithBirthdays.any { isSameDay(it, normalizedDate) }
+                val hasNormalEvents = datesWithEvents.any { isSameDay(it, normalizedDate) }
+
+                DateCell(
+                    date = date,
+                    selectedDate = selectedDate,
+                    hasEvents = hasNormalEvents,
+                    hasBirthday = hasBirthday,
+                    onClick = { onDateSelected(date) }
+                )
+            }
+        }
+
+        // --- ELEGANTNI RAZDVOJNIK (DIVIDER) ISPOD KALENDARA ---
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp, bottom = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
             )
         }
     }
@@ -530,22 +589,77 @@ fun EventsList(
     selectedDate: Date,
     modifier: Modifier = Modifier
 ) {
-    val dateFormatter = SimpleDateFormat("dd.MM.yyyy", LocalLocale.current.platformLocale)
-    val selectedDateText = remember(selectedDate) {
-        dateFormatter.format(selectedDate)
+    val srLocale = remember { Locale.forLanguageTag("sr") }
+
+    val isToday = remember(selectedDate) {
+        isSameDay(Date(), selectedDate)
+    }
+
+    val dayNumber = remember(selectedDate) {
+        SimpleDateFormat("d", srLocale).format(selectedDate)
+    }
+
+    val dayOfWeekName = remember(selectedDate) {
+        SimpleDateFormat("EEEE", srLocale).format(selectedDate)
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(srLocale) else it.toString() }
     }
 
     Column(
         modifier = modifier.padding(horizontal = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.Start
     ) {
-        Text(
-            text = "Догађаји за $selectedDateText",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
+        // --- NOVO ZAGLAVLJE SA VERTIKALNIM DIVIDEROM PORED DANA ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Plava linija (Vertical Divider) sa lijeve strane
+                Box(
+                    modifier = Modifier
+                        .height(52.dp)
+                        .width(3.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
 
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column(horizontalAlignment = Alignment.Start) {
+                    Text(
+                        text = if (isToday) "ДАНАС" else "ДАТУМ",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = dayNumber,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        lineHeight = 32.sp
+                    )
+                    Text(
+                        text = dayOfWeekName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Text(
+                text = "${events.size} ${if (events.size == 1) "догађај" else "догађаја"}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // --- LISTA DOGAĐAJA ---
         if (events.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -561,24 +675,28 @@ fun EventsList(
                         imageVector = Icons.Default.Event,
                         contentDescription = null,
                         modifier = Modifier
-                            .size(64.dp)
-                            .padding(bottom = 16.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            .size(56.dp)
+                            .padding(bottom = 12.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                     )
 
                     Text(
                         text = "Нема догађаја за изабрани датум",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         textAlign = TextAlign.Center
                     )
                 }
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(events) { event ->
+                items(
+                    items = events,
+                    key = { event -> event.id ?: event.hashCode() }
+                ) { event ->
                     EventItem(
                         event = event,
                         onClick = { onEventClick(event) }
@@ -596,25 +714,39 @@ fun EventItem(
 ) {
     val assignee = EventAssignee.entries.find { it.name == event.assignee } ?: EventAssignee.EVERYONE
 
+    val timeText = remember(event.allDay, event.startTime, event.endTime) {
+        if (!event.allDay && event.startTime != null) {
+            val start = SimpleDateFormat("HH:mm", Locale.getDefault()).format(event.startTime.toDate())
+            val end = event.endTime?.let { SimpleDateFormat("HH:mm", Locale.getDefault()).format(it.toDate()) }
+            if (end != null) "$start - $end" else start
+        } else {
+            "Целодневни догађај"
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(24.dp))
             .clickable { onClick() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(42.dp)
                     .background(
-                        Color(event.color.toColorInt()).copy(alpha = 0.3f),
+                        Color(event.color.toColorInt()).copy(alpha = 0.25f),
                         CircleShape
                     )
                     .border(1.dp, Color(event.color.toColorInt()), CircleShape)
@@ -631,50 +763,43 @@ fun EventItem(
                     painter = painterResource(id = avatarRes),
                     contentDescription = assignee.displayName,
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(32.dp)
                         .clip(CircleShape),
                     contentScale = ContentScale.Crop
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = if (event.isRecurringYearly) "🎂 ${event.title}" else event.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    text = timeText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    fontWeight = FontWeight.Bold
                 )
 
                 Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = if (event.isRecurringYearly) "🎂 ${event.title}" else event.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
                 if (event.location.isNotBlank()) {
                     Text(
                         text = event.location,
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
-
-            if (!event.allDay && event.startTime != null) {
-                Spacer(modifier = Modifier.width(8.dp))
-
-                val timeText = remember(event.startTime) {
-                    val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
-                    formatter.format(event.startTime.toDate())
-                }
-
-                Text(
-                    text = timeText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }

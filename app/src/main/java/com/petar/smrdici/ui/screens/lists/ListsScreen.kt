@@ -146,7 +146,8 @@ fun ListsScreen(
             floatingActionButton = {
                 FloatingActionButton(
                     onClick = { showAddListDialog = true },
-                    containerColor = MaterialTheme.colorScheme.primary
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    shape = CircleShape
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,

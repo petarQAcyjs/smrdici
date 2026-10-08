@@ -513,6 +513,25 @@ class TransactionRepository private constructor() {
         }
     }
 
+    // Dodajte u TransactionRepository.kt
+    fun getTransactionsByDateRangeFlow(startDateStr: String, endDateStr: String): Flow<List<Transaction>> = flow {
+        try {
+            LogUtils.d("TransactionRepository", "Getting Flow transactions between $startDateStr and $endDateStr", "transaction")
+
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            dateFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val startDateObj = dateFormat.parse(startDateStr) ?: java.util.Date()
+            val endDateObj = dateFormat.parse(endDateStr) ?: java.util.Date()
+
+            // Koristimo već postojeću i optimizovanu getTransactionsBetween metodu
+            val transactions = getTransactionsBetween(startDateObj, endDateObj)
+            emit(transactions)
+        } catch (e: Exception) {
+            LogUtils.e("TransactionRepository", "Error getting flow transactions by date range", e, "transaction")
+            emit(emptyList())
+        }
+    }
+
     companion object {
         @Volatile
         private var instance: TransactionRepository? = null

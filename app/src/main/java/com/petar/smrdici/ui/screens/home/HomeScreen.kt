@@ -64,6 +64,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.compose.foundation.layout.heightIn
 import com.petar.smrdici.R
 import com.petar.smrdici.data.model.Event
 import com.petar.smrdici.ui.auth.AuthState
@@ -191,7 +192,7 @@ fun HomeScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(350.dp)
+                            .heightIn(min = 300.dp, max = 360.dp)
                             .padding(vertical = 8.dp)
                     )
 
@@ -505,7 +506,7 @@ fun ExpensePieChartCard(
                                 .weight(1f)
                                 .verticalScroll(rememberScrollState())
                         ) {
-                            val categoriesToShow = if (expandedCategories) expenseData else expenseData.take(5)
+                            val categoriesToShow = if (expandedCategories) expenseData else expenseData.take(7)
 
                             categoriesToShow.forEach { category ->
                                 CompactCategoryLegendItem(
