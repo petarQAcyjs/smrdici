@@ -42,6 +42,7 @@ class FCMService : FirebaseMessagingService() {
         }
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onNewToken(token: String) {
         Log.d(TAG, "New FCM token received: $token")
         sendRegistrationToServer(token)
