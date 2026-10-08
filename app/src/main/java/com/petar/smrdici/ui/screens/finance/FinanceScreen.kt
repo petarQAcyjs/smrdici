@@ -390,15 +390,31 @@ fun FinanceScreen(
                 } else {
                     var categoriesExpanded by remember { mutableStateOf(false) }
 
-                    // 1. Proveravamo da li je izabrano sortiranje po datumu
+                    // 1. Filtriramo transakcije ako je selektovana neka kategorija
+                    val displayedTransactions = remember(state.transactions, state.selectedCategory) {
+                        val selected = state.selectedCategory
+                        if (selected != null) {
+                            state.transactions.filter { transaction ->
+                                val cat = when (transaction) {
+                                    is ExpenseTransaction -> transaction.expense.category
+                                    is IncomeTransaction -> transaction.income.category
+                                }
+                                cat.equals(selected.rawCategory, ignoreCase = true) ||
+                                        cat.equals(selected.categoryName, ignoreCase = true)
+                            }
+                        } else {
+                            state.transactions
+                        }
+                    }
+
+                    // 2. Proveravamo sortiranje po datumu na filtriranim transakcijama
                     val isDateSort = state.sortOption == SortOption.DATE_NEWEST || state.sortOption == SortOption.DATE_OLDEST
 
-                    // 2. Ako jeste sort po datumu, grupisi po datumu. Ako nije, stavi sve u jednu grupu bez zaglavlja (prazan string "")
-                    val groupedTransactions = remember(state.transactions, state.sortOption) {
+                    val groupedTransactions = remember(displayedTransactions, state.sortOption) {
                         if (isDateSort) {
-                            state.transactions.groupBy { it.date }
+                            displayedTransactions.groupBy { it.date }
                         } else {
-                            mapOf("" to state.transactions)
+                            mapOf("" to displayedTransactions)
                         }
                     }
 
@@ -475,6 +491,26 @@ fun FinanceScreen(
                             Spacer(modifier = Modifier.height(2.dp))
                             HorizontalDivider()
                             Spacer(modifier = Modifier.height(8.dp))
+
+                            if (state.selectedCategory != null) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Филтрирано по: ${state.selectedCategory?.categoryName}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    TextButton(onClick = { viewModel.clearSelectedCategory() }) {
+                                        Text("Prikaži sve")
+                                    }
+                                }
+                            }
                         }
 
                         groupedTransactions.forEach { (dateString, transactionsInGroup) ->
@@ -525,6 +561,25 @@ fun FinanceScreen(
                 }
             }
         }
+
+        state.selectedCategory?.let { selectedCat ->
+            val icon = CategoryIcons.findIconByName(selectedCat.iconName)
+                ?: Icons.Default.MoreHoriz
+
+            CategoryDetailsDialog(
+                categoryName = selectedCat.categoryName,
+                icon = icon,
+                backgroundColor = selectedCat.color,
+                transactions = state.categoryTransactions,
+                totalAmount = selectedCat.amount,
+                percentage = selectedCat.percentage,
+                numberFormat = numberFormat,
+                onDismiss = {
+                    viewModel.clearSelectedCategory()
+                }
+            )
+        }
+
         StandardPullRefreshIndicator(
             refreshing = isRefreshing,
             state = pullRefreshState,

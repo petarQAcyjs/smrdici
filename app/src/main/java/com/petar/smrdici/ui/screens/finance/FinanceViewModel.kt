@@ -379,6 +379,13 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         )
     }
 
+    fun clearSelectedCategory() {
+        _state.value = _state.value.copy(
+            selectedCategory = null,
+            categoryTransactions = emptyList()
+        )
+    }
+
     private fun refreshData(silent: Boolean = false) {
         viewModelScope.launch {
             try {
