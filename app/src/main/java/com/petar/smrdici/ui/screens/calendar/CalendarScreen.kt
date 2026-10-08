@@ -265,7 +265,6 @@ fun CalendarScreen(
                         )
                     }
 
-                    // Naslov meseca i "Danas" dugme
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
@@ -276,7 +275,6 @@ fun CalendarScreen(
                             fontWeight = FontWeight.Bold
                         )
 
-                        // Proveravamo da li prikazani mesec/godina odgovaraju DANAŠNJEM mesecu i godini
                         val today = remember { Date() }
                         val isCurrentMonth = remember(selectedDate) {
                             val calSelected = Calendar.getInstance().apply { time = selectedDate }
@@ -285,7 +283,6 @@ fun CalendarScreen(
                                     calSelected.get(Calendar.YEAR) == calToday.get(Calendar.YEAR)
                         }
 
-                        // Prikazujemo dugme samo ako nismo u tekućem mesecu
                         if (!isCurrentMonth) {
                             Spacer(modifier = Modifier.width(8.dp))
                             FilledTonalButton(
@@ -431,21 +428,40 @@ fun CalendarScreen(
 @Composable
 fun DateCell(
     date: Date,
-    isSelected: Boolean,
+    selectedDate: Date,
     hasEvents: Boolean,
     hasBirthday: Boolean,
     onClick: () -> Unit
 ) {
+    val isSelected = isSameDay(selectedDate, date)
+    val isToday = isSameDay(Date(), date)
+
+    val isCurrentMonth = remember(date, selectedDate) {
+        val calDate = Calendar.getInstance().apply { time = date }
+        val calSelected = Calendar.getInstance().apply { time = selectedDate }
+        calDate.get(Calendar.MONTH) == calSelected.get(Calendar.MONTH) &&
+                calDate.get(Calendar.YEAR) == calSelected.get(Calendar.YEAR)
+    }
+
+    val textColor = when {
+        isSelected -> Color.White
+        isToday -> MaterialTheme.colorScheme.primary
+        !isCurrentMonth -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
     Box(
         modifier = Modifier
             .aspectRatio(1f)
             .padding(2.dp)
             .clip(CircleShape)
             .background(
-                when {
-                    isSelected -> MaterialTheme.colorScheme.primary
-                    else -> Color.Transparent
-                }
+                if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+            )
+            .then(
+                if (isToday && !isSelected) {
+                    Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                } else Modifier
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
@@ -456,25 +472,29 @@ fun DateCell(
         ) {
             Text(
                 text = SimpleDateFormat("d", LocalLocale.current.platformLocale).format(date),
-                color = if (isSelected) Color.White else Color.Unspecified,
-                fontSize = 13.sp
+                color = textColor,
+                fontSize = 13.sp,
+                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal
             )
 
             Row(
                 horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .height(14.dp)
+                    .padding(top = 1.dp)
             ) {
                 if (hasBirthday) {
                     Text(
                         text = "🎂",
                         fontSize = 10.sp,
-                        modifier = Modifier.padding(top = 1.dp)
+                        lineHeight = 10.sp
                     )
                 }
                 if (hasEvents) {
+                    if (hasBirthday) Spacer(modifier = Modifier.width(2.dp))
                     Box(
                         modifier = Modifier
-                            .padding(start = if (hasBirthday) 2.dp else 0.dp)
                             .size(4.dp)
                             .clip(CircleShape)
                             .background(
@@ -496,29 +516,51 @@ fun CalendarGrid(
     datesWithBirthdays: Set<Date>,
     onDateSelected: (Date) -> Unit
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(7),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        items(dates) { date ->
-            val calendar = Calendar.getInstance().apply { time = date }
-            val normalizedDate = calendar.apply {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }.time
+    val daysOfWeek = remember { listOf("П", "У", "С", "Ч", "П", "С", "Н") }
 
-            val hasBirthday = datesWithBirthdays.any { isSameDay(it, normalizedDate) }
-            val hasNormalEvents = datesWithEvents.any { isSameDay(it, normalizedDate) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            daysOfWeek.forEach { day ->
+                Text(
+                    text = day,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
 
-            DateCell(
-                date = date,
-                isSelected = isSameDay(selectedDate, date),
-                hasEvents = hasNormalEvents,
-                hasBirthday = hasBirthday,
-                onClick = { onDateSelected(date) }
-            )
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(dates) { date ->
+                val calendar = Calendar.getInstance().apply { time = date }
+                val normalizedDate = calendar.apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
+
+                val hasBirthday = datesWithBirthdays.any { isSameDay(it, normalizedDate) }
+                val hasNormalEvents = datesWithEvents.any { isSameDay(it, normalizedDate) }
+
+                DateCell(
+                    date = date,
+                    selectedDate = selectedDate,
+                    hasEvents = hasNormalEvents,
+                    hasBirthday = hasBirthday,
+                    onClick = { onDateSelected(date) }
+                )
+            }
         }
     }
 }
