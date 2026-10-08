@@ -16,16 +16,17 @@ import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 class AccountRepository private constructor() {
-    
+
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
-    
+
     private val _accounts = MutableStateFlow<List<Account>>(emptyList())
     val accounts: Flow<List<Account>> = _accounts.asStateFlow()
-    
-    private val currentUserId: String
-        get() = auth.currentUser?.uid ?: throw IllegalStateException("No authenticated user")
+
+    // Vraća null ako korisnik nije prijavljen (umesto da baca izuzetak)
+    private val currentUserId: String?
+        get() = auth.currentUser?.uid
 
     // Shared accounts collection
     private val sharedAccountsCollection
@@ -35,27 +36,28 @@ class AccountRepository private constructor() {
         loadAccounts()
         Log.d(TAG, "AccountRepository inicijalizovan - nova verzija!")
     }
-    
+
     fun loadAccounts() {
+        // Ako nema prijavljenog korisnika, ne upućujemo zahtev ka Firestore-u
+        if (currentUserId == null) {
+            Log.d(TAG, "Nema prijavljenog korisnika, preskačem loadAccounts.")
+            _accounts.value = emptyList()
+            return
+        }
+
         sharedAccountsCollection
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e(TAG, "Грешка при учитавању рачуна", error)
-                    
-                    // If there's an error, try to create a default account
-                    coroutineScope.launch {
-                        createDefaultAccountIfNeeded()
-                    }
-                    
+                    _accounts.value = emptyList()
                     return@addSnapshotListener
                 }
-                
+
                 val accountsList = snapshot?.documents?.mapNotNull { doc ->
                     doc.toObject(Account::class.java)?.copy(id = doc.id)
                 } ?: emptyList()
-                
+
                 if (accountsList.isEmpty()) {
-                    // If no accounts were found, try to create a default account
                     coroutineScope.launch {
                         createDefaultAccountIfNeeded()
                     }
@@ -64,20 +66,24 @@ class AccountRepository private constructor() {
                 }
             }
     }
-    
-    // Create a default account if none exist
+
+    // Kreira podrazumevani račun samo ako korisnik postoji
     private suspend fun createDefaultAccountIfNeeded() {
+        val userId = currentUserId ?: run {
+            Log.d(TAG, "Nema ulogovanog korisnika za kreiranje podrazumevanog računa.")
+            return
+        }
+
         try {
             val snapshot = sharedAccountsCollection.get().await()
-            
+
             if (snapshot.isEmpty) {
                 Log.d(TAG, "No accounts found, creating default account")
-                
-                // Create a default account
+
                 val defaultAccountId = UUID.randomUUID().toString()
                 val defaultAccount = Account(
                     id = defaultAccountId,
-                    userId = currentUserId,
+                    userId = userId,
                     name = "Glavni račun",
                     balance = 0.0,
                     currency = Account.DEFAULT_CURRENCY,
@@ -88,12 +94,10 @@ class AccountRepository private constructor() {
                     createdAt = System.currentTimeMillis(),
                     updatedAt = System.currentTimeMillis()
                 )
-                
+
                 addAccount(defaultAccount)
-                
-                // Update the accounts list with the new account
                 _accounts.value = listOf(defaultAccount)
-                
+
                 Log.d(TAG, "Created default account: $defaultAccountId")
             }
         } catch (e: Exception) {
@@ -105,41 +109,28 @@ class AccountRepository private constructor() {
         sharedAccountsCollection.document(account.id).set(account).await()
     }
 
-    /**
-     * Ажурира баланс рачуна након додавања трошка или прихода
-     * @param accountId ID рачуна чији се баланс ажурира
-     * @param amount износ за који се мења баланс (може бити позитиван или негативан)
-     * @return успешно ажурирање или грешка
-     */
     suspend fun updateAccountBalance(accountId: String, amount: Double): Result<Account> {
         return try {
             Log.d(TAG, "Ажурирам баланс рачуна: $accountId за износ: $amount")
-            
-            // Прво добављамо тренутно стање рачуна
+
             val docRef = sharedAccountsCollection.document(accountId)
-            
             val docSnapshot = docRef.get().await()
-            
+
             if (!docSnapshot.exists()) {
                 return Result.failure(NoSuchElementException("Рачун са ID: $accountId није пронађен"))
             }
-            
-            // Конвертујемо у објекат Account
+
             val account = docSnapshot.toObject(Account::class.java)
                 ?: return Result.failure(IllegalStateException("Не могу да конвертујем документ у Account"))
-            
-            // Create a new account with the updated ID and balance
+
             val updatedAccount = account.copy(
                 id = accountId,
                 balance = account.balance + amount
             )
-            
-            // Чувамо назад у Firestore
+
             docRef.set(updatedAccount).await()
-            
-            // Освежавамо локални кеш
             loadAccounts()
-            
+
             Result.success(updatedAccount)
         } catch (e: Exception) {
             Log.e(TAG, "Грешка при ажурирању баланса рачуна", e)
@@ -147,16 +138,12 @@ class AccountRepository private constructor() {
         }
     }
 
-    /**
-     * Retrieves current balances for all accounts
-     * @return Map of account IDs to their current balances
-     */
     suspend fun getAccountBalances(): Map<String, Double> {
         return try {
             val snapshot = sharedAccountsCollection
                 .get()
                 .await()
-            
+
             snapshot.documents.mapNotNull { doc ->
                 val account = doc.toObject(Account::class.java)
                 if (account != null) {
@@ -168,21 +155,13 @@ class AccountRepository private constructor() {
             emptyMap()
         }
     }
-    
+
     companion object {
         private const val TAG = "AccountRepository"
-        
+
         @Volatile
         private var instance: AccountRepository? = null
-        
-        /**
-         * Vraća instancu AccountRepository-ja.
-         * 
-         * @param context Parametar se trenutno ne koristi, ali je zadržan zbog
-         * kompatibilnosti sa postojećim kodom koji očekuje ovu signaturu i zbog
-         * konzistentnosti sa drugim repozitorijumima u aplikaciji.
-         * @return instanca AccountRepository-ja
-         */
+
         @Suppress("UNUSED_PARAMETER")
         fun getInstance(context: Context? = null): AccountRepository {
             return instance ?: synchronized(this) {
@@ -190,4 +169,4 @@ class AccountRepository private constructor() {
             }
         }
     }
-} 
+}

@@ -13,6 +13,7 @@ import com.google.android.gms.auth.api.identity.SignInClient
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -20,12 +21,14 @@ import kotlinx.coroutines.tasks.await
 
 class AuthViewModel : ViewModel() {
     private val auth = FirebaseAuth.getInstance()
+    private val firestore = FirebaseFirestore.getInstance()
+
     private val _authState = MutableStateFlow<AuthState>(AuthState.Initial)
     val authState: StateFlow<AuthState> = _authState
 
     private lateinit var oneTapClient: SignInClient
     private lateinit var signInRequest: BeginSignInRequest
-    
+
     private val tag = "AuthViewModel"
 
     init {
@@ -35,7 +38,7 @@ class AuthViewModel : ViewModel() {
     fun initGoogleSignIn(context: Context) {
         try {
             oneTapClient = Identity.getSignInClient(context)
-            
+
             // Конфигурација захтева за пријаву
             signInRequest = BeginSignInRequest.builder()
                 .setGoogleIdTokenRequestOptions(
@@ -47,7 +50,7 @@ class AuthViewModel : ViewModel() {
                 )
                 .setAutoSelectEnabled(false)
                 .build()
-                
+
             Log.d(tag, "Google Sign-In успешно иницијализован")
         } catch (e: Exception) {
             Log.e(tag, "Грешка при иницијализацији Google Sign-In: ${e.message}", e)
@@ -93,7 +96,31 @@ class AuthViewModel : ViewModel() {
                     // Пријава на Firebase са Google токеном
                     val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
                     val authResult = auth.signInWithCredential(firebaseCredential).await()
-                    _authState.value = AuthState.Authenticated(authResult.user!!)
+                    val user = authResult.user
+
+                    if (user != null) {
+                        val userDoc = firestore.collection("users").document(user.uid).get().await()
+
+                        if (!userDoc.exists()) {
+                            // Прва пријава преко Google-а — креирамо "pending" статус
+                            val userMap = hashMapOf(
+                                "email" to (user.email ?: ""),
+                                "status" to "pending",
+                                "createdAt" to System.currentTimeMillis()
+                            )
+                            firestore.collection("users").document(user.uid).set(userMap).await()
+
+                            auth.signOut()
+                            if (::oneTapClient.isInitialized) {
+                                try { oneTapClient.signOut().await() } catch (_: Exception) {}
+                            }
+                            _authState.value = AuthState.PendingApproval
+                        } else {
+                            checkUserApprovalStatus(user)
+                        }
+                    } else {
+                        _authState.value = AuthState.Error("Корисник није пронађен.")
+                    }
                 } else {
                     _authState.value = AuthState.Error("Недостаје ID токен")
                 }
@@ -109,7 +136,13 @@ class AuthViewModel : ViewModel() {
             try {
                 _authState.value = AuthState.Loading
                 val result = auth.signInWithEmailAndPassword(email, password).await()
-                _authState.value = AuthState.Authenticated(result.user!!)
+                val user = result.user
+
+                if (user != null) {
+                    checkUserApprovalStatus(user)
+                } else {
+                    _authState.value = AuthState.Error("Корисник није пронађен.")
+                }
             } catch (e: Exception) {
                 _authState.value = AuthState.Error(e.message ?: "Грешка приликом пријаве")
             }
@@ -121,10 +154,47 @@ class AuthViewModel : ViewModel() {
             try {
                 _authState.value = AuthState.Loading
                 val result = auth.createUserWithEmailAndPassword(email, password).await()
-                _authState.value = AuthState.Authenticated(result.user!!)
+                val user = result.user
+
+                if (user != null) {
+                    val userMap = hashMapOf(
+                        "email" to email,
+                        "status" to "pending",
+                        "createdAt" to System.currentTimeMillis()
+                    )
+
+                    // Упис у "users" колекцију
+                    firestore.collection("users").document(user.uid).set(userMap).await()
+
+                    // Одма га одјављујемо док га admin не одобри
+                    auth.signOut()
+                    _authState.value = AuthState.PendingApproval
+                } else {
+                    _authState.value = AuthState.Error("Грешка при креирању корисника.")
+                }
             } catch (e: Exception) {
                 _authState.value = AuthState.Error(e.message ?: "Грешка приликом регистрације")
             }
+        }
+    }
+
+    private suspend fun checkUserApprovalStatus(user: FirebaseUser) {
+        try {
+            val doc = firestore.collection("users").document(user.uid).get().await()
+            val status = doc.getString("status")
+
+            if (status == "approved") {
+                _authState.value = AuthState.Authenticated(user)
+            } else {
+                auth.signOut()
+                if (::oneTapClient.isInitialized) {
+                    try { oneTapClient.signOut().await() } catch (_: Exception) {}
+                }
+                _authState.value = AuthState.PendingApproval
+            }
+        } catch (e: Exception) {
+            auth.signOut()
+            _authState.value = AuthState.Error("Грешка при провери статуса налога: ${e.message}")
         }
     }
 
@@ -163,8 +233,10 @@ class AuthViewModel : ViewModel() {
         Log.d(tag, "Проверавам тренутног корисника...")
         val currentUser = auth.currentUser
         if (currentUser != null) {
-            Log.d(tag, "Корисник је пријављен: ${currentUser.email}")
-            _authState.value = AuthState.Authenticated(currentUser)
+            Log.d(tag, "Корисник је пријављен: ${currentUser.email}, проверавам статус...")
+            viewModelScope.launch {
+                checkUserApprovalStatus(currentUser)
+            }
         } else {
             Log.d(tag, "Није пронађен пријављени корисник")
             _authState.value = AuthState.NotAuthenticated
@@ -177,6 +249,7 @@ sealed class AuthState {
     data object Initial : AuthState()
     data object Loading : AuthState()
     data object NotAuthenticated : AuthState()
+    data object PendingApproval : AuthState()
     data class Authenticated(val user: FirebaseUser) : AuthState()
     data class Error(val message: String) : AuthState()
 }

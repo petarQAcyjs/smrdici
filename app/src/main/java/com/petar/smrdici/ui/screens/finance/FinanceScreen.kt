@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
@@ -79,7 +80,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,7 +91,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import com.petar.smrdici.data.model.CategoryIcons
-import com.petar.smrdici.data.model.CategoryManager
 import com.petar.smrdici.ui.components.StandardPullRefreshIndicator
 import com.petar.smrdici.ui.navigation.Screen
 import com.petar.smrdici.utils.LogUtils
@@ -102,7 +101,6 @@ import org.threeten.bp.format.DateTimeFormatter
 import org.threeten.bp.temporal.ChronoUnit
 import java.text.NumberFormat
 import java.util.Locale
-import androidx.compose.foundation.shape.CircleShape
 
 @SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterialApi::class)

@@ -76,3 +76,13 @@
 
 # Androidx Navigation
 -keep class androidx.navigation.** { *; }
+
+# Remove all Log calls in production builds
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** e(...);
+    public static *** i(...);
+    public static *** v(...);
+    public static *** w(...);
+    public static *** wtf(...);
+}

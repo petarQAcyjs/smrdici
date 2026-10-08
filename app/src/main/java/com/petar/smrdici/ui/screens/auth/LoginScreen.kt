@@ -253,6 +253,15 @@ fun LoginScreen(
                 )
             }
 
+            if (authState is AuthState.PendingApproval) {
+                Text(
+                    text = "Vaš nalog je uspešno kreiran i čeka odobrenje administratora. Molimo sačekajte da administrator odobri vaš pristup.",
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
+
             // Prikaz učitavanja
             if (authState is AuthState.Loading) {
                 CircularProgressIndicator(
