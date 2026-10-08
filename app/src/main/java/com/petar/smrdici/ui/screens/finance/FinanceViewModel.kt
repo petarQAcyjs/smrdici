@@ -340,17 +340,25 @@ class FinanceViewModel(private val settingsRepository: SettingsRepository) : Vie
         refreshData(silent = false)
     }
 
-    fun setSortOption(sortOption: SortOption) {
-        LogUtils.i("FinanceViewModel", "Setting sort option to: $sortOption", category = "finance")
+    fun setSortOption(sortOption: SortOption, isCategoriesExpanded: Boolean) {
+        LogUtils.i("FinanceViewModel", "Setting sort option: $sortOption, categoriesExpanded: $isCategoriesExpanded", category = "finance")
         val currentState = _state.value
-        val sortedTransactions = sortTransactions(currentState.transactions, sortOption)
-        val updatedSummaries = calculateCategorySummaries(sortedTransactions, sortOption)
 
-        _state.value = currentState.copy(
-            sortOption = sortOption,
-            transactions = sortedTransactions,
-            categorySummaries = updatedSummaries
-        )
+        if (isCategoriesExpanded) {
+            // Kada su kategorije OTVORENE: sortiramo SAMO kategorije
+            val updatedSummaries = calculateCategorySummaries(currentState.transactions, sortOption)
+            _state.value = currentState.copy(
+                sortOption = sortOption,
+                categorySummaries = updatedSummaries
+            )
+        } else {
+            // Kada su kategorije ZATVORENE: sortiramo SAMO transakcije
+            val sortedTransactions = sortTransactions(currentState.transactions, sortOption)
+            _state.value = currentState.copy(
+                sortOption = sortOption,
+                transactions = sortedTransactions
+            )
+        }
     }
 
     fun selectCategory(category: CategorySummary) {

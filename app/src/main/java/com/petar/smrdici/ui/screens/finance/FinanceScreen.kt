@@ -402,7 +402,7 @@ fun FinanceScreen(
                             CombinedHeaderWithSort(
                                 categoriesExpanded = categoriesExpanded,
                                 onToggleCategories = { categoriesExpanded = !categoriesExpanded },
-                                onSortSelected = { viewModel.setSortOption(it) },
+                                onSortSelected = { viewModel.setSortOption(it, isCategoriesExpanded = categoriesExpanded) },
                                 isSmall = windowInfo.isSmallWidth
                             )
                         }
