@@ -913,7 +913,16 @@ fun CombinedHeaderWithSort(
                 expanded = showSortDropdown,
                 onDismissRequest = { showSortDropdown = false }
             ) {
-                SortOption.entries.forEach { option ->
+                // Ako su kategorije otvorene, filtriramo opcije sa datumom
+                val availableOptions = if (categoriesExpanded) {
+                    SortOption.entries.filter {
+                        it != SortOption.DATE_NEWEST && it != SortOption.DATE_OLDEST
+                    }
+                } else {
+                    SortOption.entries
+                }
+
+                availableOptions.forEach { option ->
                     DropdownMenuItem(
                         text = {
                             Text(
